@@ -32,7 +32,7 @@ setup(
     'Development Status :: 3 - Alpha', # "3 - Alpha", "4 - Beta" or "5 - Production/Stable" as the current state of the package
     'Intended Audience :: Developers',
     'Topic :: Software Development',
-    'License :: OSI Approved :: Apache Software License 2.0',
+    'License :: OSI Approved :: Apache Software License',
     'Programming Language :: Python :: 3',
   ],
   install_requires=all_requires,
