@@ -1,0 +1,11 @@
+# Compiled bytecode
+__pycache__/
+*.py[cod]
+# Personal IDE settings
+.idea/
+# Generated virtualenv
+env*/
+# Coverage output
+.coverage
+
+
