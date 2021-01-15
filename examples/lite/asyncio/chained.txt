@@ -1,0 +1,5 @@
+LiteLayer2 notes for examples/pubsub/asyncio/chained.py
+
+LiteLayer2 is missing required features:
+- Asyncio parity layer (Task/Future, gather, timeout, cancellation)
+- PubSub-backed process/future integration required by dssim.pubsub.parity.asyncio

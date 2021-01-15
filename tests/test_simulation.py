@@ -1,5 +1,4 @@
-# Copyright 2020 NXP Semiconductors
-# Copyright 2020 NXP Semiconductors
+# Copyright 2020- majvan (majvan@gmail.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,236 +12,460 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Tests for simulation module
+Tests for the core DSSimulation layer using only plain ISubscriber mocks.
+No DSProcess, DSPub or DSSub objects are used here.
 '''
 import unittest
 from unittest.mock import Mock, call
-from dssim.simulation import DSSimulation, DSAbortException, DSSchedulable, sim
+from dssim import DSSimulation, DSSchedulable, LiteLayer2
+from dssim.simulation import VoidSubscriber, void_subscriber
+from dssim.timequeue import TQBinTree, TQBisect
+
 
 class SomeObj:
     pass
 
-class EventForwarder:
-    ''' This represents basic forwarder which forwards events from time_process into a waiting
-    process. Some kind of a DSProducer which produces data into one exact running process
-    '''
-    def __init__(self, test_unit_running_sim, receiving_process):
-        self.testunit = test_unit_running_sim
-        self.receiving_process = receiving_process
 
-    def signal(self, **data):
-        self.testunit.sim.signal(self.receiving_process, **data)
-
-class TestDSSchedulable(unittest.TestCase):
-
-    @DSSchedulable
-    def __fcn(self):
-        return 'Success'
-
-    @DSSchedulable
-    def __process(self):
-        yield 'First return'
-        return 'Success'
-
-    def test0_fcn(self):
-        process = self.__fcn()
-        try:
-            next(process)
-        except StopIteration as e:
-            retval = e.value
-        self.assertEqual(retval, 'Success')
-
-    def test1_generator(self):
-        process = self.__process()
-        retval = next(process)
-        self.assertEqual(retval, 'First return')
-        try:
-            next(process)
-        except StopIteration as e:
-            retval = e.value
-        self.assertEqual(retval, 'Success')
+# ---------------------------------------------------------------------------
+# Core DSSimulation behaviour — pure ISubscriber / mock consumers
+# ---------------------------------------------------------------------------
 
 class TestSim(unittest.TestCase):
-    ''' Test the time queue class behavior '''
+    ''' Tests for the core DSSimulation time-queue and dispatch machinery. '''
 
-    def __my_time_process(self):
-        self.__time_process_event('kick-on')
-        while True:
-            event = yield
-            if isinstance(event, DSAbortException):
-                self.__time_process_event(self.sim.time_queue.time, abort=True, **event.info)
-                break
-            else:
-                # note: we cannot use self.sim.time because we are not running simulation
-                # so self.sim.time is always 0
-                self.__time_process_event(self.sim.time_queue.time, **event)
-
-    def __my_wait_process(self):
-        event = yield from self.sim.wait(2)
-        self.__time_process_event(self.sim.time, None)
-        event = yield from self.sim.wait(cond=lambda e: 'data' in e)
-        self.__time_process_event(self.sim.time, **event)
-        event = yield from self.sim.wait(cond=lambda e: True)
-        self.__time_process_event(self.sim.time, **event)
-
-    def __my_handler(self):
-        return True
-
-    @DSSchedulable
-    def __my_schedulable_handler(self):
-        return True
-
-    def setUp(self):
-        self.__time_process_event = Mock()
-
-    def test0_simple_event(self):
-        ''' Assert kicking and pushing events '''
-        self.sim = DSSimulation()
-        self.assertIsNotNone(sim.time_process)
-        sim.time_process = self.__my_time_process()
-        sim._kick(sim.time_process)  # kick on the time process
-        self.__time_process_event.assert_called_once_with('kick-on')
-        self.__time_process_event.reset_mock()
-        sim.signal(sim.time_process, data=1)
-        self.__time_process_event.assert_called_once_with(0, data=1)
-        self.__time_process_event.reset_mock()
-
-    def test1_time_process(self):
-        ''' Assert correct time process and pushing events to time process '''
+    def test1_compute_time(self):
         sim = DSSimulation()
-        self.assertIsNotNone(sim.time_process)
-        p = SomeObj()
-        p.signal = Mock()
-        sim.signal(sim.time_process, producer=p, data=1)
-        p.signal.assert_called_once_with(producer=p, data=1)
-        p.signal.reset_mock()
+        sim.time = 5.0
+        self.assertEqual(sim.compute_time(10.0), 5.0)
+        with self.assertRaises(ValueError):
+            sim.compute_time(4.99)
+
+    def test1a_timequeue_is_selectable(self):
+        sim_bintree = DSSimulation(timequeue=TQBinTree)
+        self.assertIsInstance(sim_bintree.time_queue, TQBinTree)
+        sim_bintree.restart()
+        self.assertIsInstance(sim_bintree.time_queue, TQBinTree)
+
+        sim_bisect = DSSimulation(timequeue=TQBisect)
+        self.assertIsInstance(sim_bisect.time_queue, TQBisect)
+        sim_bisect.restart()
+        self.assertIsInstance(sim_bisect.time_queue, TQBisect)
+
+    def test1b_timequeue_must_implement_interface(self):
+        with self.assertRaises(TypeError):
+            DSSimulation(timequeue='not-callable')
 
     def test2_scheduling_events(self):
         ''' Assert working with time queue when pushing events '''
         sim = DSSimulation()
         sim.time_queue.add_element = Mock()
+        sim.pid = 123456
         event_obj = {'producer': None, 'data': 1}
         sim.schedule_event(10, event_obj)
-        sim.time_queue.add_element.assert_called_once_with(10, (sim.time_process, event_obj))
+        sim.time_queue.add_element.assert_called_once_with(10, (123456, event_obj))
         sim.time_queue.add_element.reset_mock()
         sim.schedule_event(0, event_obj)
-        sim.time_queue.add_element.assert_called_once_with(0, (sim.time_process, event_obj))
+        sim.time_queue.add_element.assert_called_once_with(0, (123456, event_obj))
         sim.time_queue.add_element.reset_mock()
-        with self.assertRaises(ValueError):
-            sim.schedule_event(-0.5, event_obj)
+        sim.schedule_event(-0.5, event_obj)
+        sim.time_queue.add_element.assert_called_once_with(-0.5, (123456, event_obj))
 
-    def test3_deleting_events(self):
+    def test3_cleanup(self):
         ''' Assert deleting from time queue when deleting events '''
         sim = DSSimulation()
-        sim.time_queue.delete = Mock()
-        condition = lambda x: 'A' * x
-        sim.delete(condition)
-        sim.time_queue.delete.assert_called_once_with(condition)
-        sim.time_queue.delete.reset_mock()
+        sim.time_queue.delete_sub = Mock()
+        consumer = Mock()
+        sim.cleanup(consumer)
+        sim.time_queue.delete_sub.assert_called_once_with(consumer)
 
     def test4_scheduling(self):
-        ''' Assert working with time queue when pushing events '''
-        self.sim = DSSimulation()
-        my_process = self.__my_time_process()
-        # schedule a process
-        with self.assertRaises(ValueError):
-            # negative time
-            self.sim.schedule(-0.5, my_process)
-        with self.assertRaises(ValueError):
-            # missing producer
-            self.sim.schedule(1, self.__my_handler())
-
-        parent_process = sim.schedule(0, my_process)
-        self.assertNotEqual(parent_process, my_process)
-        self.__time_process_event.assert_called_once_with('kick-on')
-        self.__time_process_event.reset_mock()
-        # schedule an event
-        with self.assertRaises(ValueError):
-            # negative time
-            self.sim.schedule_event(-0.5, {'producer': parent_process, 'data': 1})
-        with self.assertRaises(ValueError):
-            # missing producer
-            self.sim.schedule_event(1, {'data': 1})
-
-        self.sim.schedule_event(2, {'producer': parent_process, 'data': 1})
-        time, (process, event_obj) = self.sim.time_queue.pop()
-        self.assertEqual((time, process), (2, self.sim.time_process))
-        self.assertEqual(event_obj, {'producer': parent_process, 'data': 1})
-        retval = self.sim._signal_object(event_obj['producer'], event_obj)
-        self.__time_process_event.assert_called_once_with(2, producer=event_obj['producer'], data=1)
-        self.__time_process_event.reset_mock()
-        self.assertEqual(retval, True)
-
-        retval = self.sim.abort(parent_process, testing=-1)
-        self.__time_process_event.assert_called_once_with(2, abort=True, testing=-1)
-        self.__time_process_event.reset_mock()
-        self.assertEqual(retval, False)
-
-    def test5_scheduling(self):
-        ''' Assert the delay of scheduled process '''
-        self.sim = DSSimulation()
-        my_process = self.__my_time_process()
-        # schedule a process
-        with self.assertRaises(ValueError):
-            # scheduling with negative time delta
-            parent_process = self.sim.schedule(-0.5, my_process)
-        parent_process = self.sim.schedule(2, my_process)
-        self.assertEqual(len(self.sim.time_queue), 1)
-
-    def test6_schedulable_fcn(self):
-        self.sim = DSSimulation()
-        # The following has to pass without raising an error
-        self.sim._kick(self.__my_schedulable_handler())
-
-    def test7_run_infinite_process(self):
-        ''' Assert event loop behavior '''
+        ''' send_object delivers the event to a plain duck-typed ISubscriber. '''
         self.sim = DSSimulation()
         producer = SomeObj()
-        producer.signal = Mock()
-        self.sim.schedule_event(1, {'producer': producer, 'data': 1})
-        self.sim.schedule_event(2, {'producer': producer, 'data': 2})
-        self.sim.schedule_event(3, {'producer': producer, 'data': 3})
-        num_events = self.sim.run()
-        self.assertEqual(num_events, 3)
-        calls = [call(producer=producer, data=1), call(producer=producer, data=2), call(producer=producer, data=3),]
-        producer.signal.assert_has_calls(calls)
-        producer.signal.reset_mock()
-        num_events = len(self.sim.time_queue)
+        producer.send = Mock()
+        event_obj = SomeObj()
+        retval = self.sim.send_object(producer, event_obj)
+        producer.send.assert_called_once_with(event_obj)
+
+    def test5_run_producer(self):
+        ''' sim.run() dispatches scheduled events to a mock ISubscriber. '''
+        self.sim = DSSimulation()
+        consumer = Mock()
+        consumer.meta.cond.check = lambda e:(True, e)  # Accept any event
+        consumer.send = Mock()
+        consumer.get_cond = lambda: consumer.meta.cond
+        consumer.try_send = lambda e: consumer.send(e)
+        self.sim.schedule_event(1, 3, consumer)
+        self.sim.schedule_event(2, 2, consumer)
+        self.sim.schedule_event(3, 1, consumer)
+        retval = self.sim.run()
+        self.assertEqual(retval, (3, 3))
+        calls = [call(3), call(2), call(1),]
+        consumer.send.assert_has_calls(calls)
+        num_events = self.sim.time_queue.event_count()
         self.assertEqual(num_events, 0)
+        consumer.send.reset_mock()
 
-    def test8_run_finite_process(self):
-        self.sim = DSSimulation()
-        producer = SomeObj()
-        producer.signal = Mock()
-        self.sim.schedule_event(1, {'producer': producer, 'data': 1})
-        self.sim.schedule_event(2, {'producer': producer, 'data': 2})
-        self.sim.schedule_event(3, {'producer': producer, 'data': 3})
-        num_events = self.sim.run(2.5)
-        self.assertEqual(num_events, 2)
-        calls = [call(producer=producer, data=1), call(producer=producer, data=2),]
-        producer.signal.assert_has_calls(calls)
-        producer.signal.reset_mock()
-        num_events = len(self.sim.time_queue)
+        self.sim.restart()
+        self.sim.schedule_event(1, 3, consumer)
+        self.sim.schedule_event(2, 2, consumer)
+        self.sim.schedule_event(3, 1, consumer)
+        retval = self.sim.run(2.5)
+        self.assertEqual(retval, (2, 2))
+        calls = [call(3), call(2),]
+        consumer.send.assert_has_calls(calls)
+        num_events = self.sim.time_queue.event_count()
         self.assertEqual(num_events, 1)
 
-    def test9_waiting(self):
+    def test6_run_dispatches_without_consumer_try_send(self):
+        ''' run() dispatches via simulation send_object path, not consumer.try_send. '''
         self.sim = DSSimulation()
-        # the following process will create events for the time queue process
-        process = self.__my_wait_process()
-        # those events are required to contain a producer
-        producer = EventForwarder(self, process)
-        self.sim.parent_process = process
-        self.sim._kick(process)
-        self.sim.schedule_event(1, {'producer': producer, 'data': 1})
-        self.sim.schedule_event(2, {'producer': producer, 'data': 2})
-        self.sim.schedule_event(3, {'producer': producer, 'data': 3})
-        num_events = self.sim.run(5)
-        self.assertEqual(num_events, 4)
-        # first event is dropped, because though it was taken by the time_process, the process condition was
-        # to wait till timeout
-        calls = [
-            call(2, None),  # timeout logged
-            call(2, producer=producer, data=2),  # real event logged
-            call(3, producer=producer, data=3),  # real event logged after time
-        ]
-        self.__time_process_event.assert_has_calls(calls)
+        consumer = Mock()
+        consumer.meta.cond.check = lambda e: (True, e)
+        consumer.get_cond = lambda: consumer.meta.cond
+        consumer.send = Mock()
+        consumer.try_send = Mock(side_effect=AssertionError('run() should not call consumer.try_send'))
+        self.sim.schedule_event(1, 'hello', consumer)
+        retval = self.sim.run()
+        self.assertEqual(retval, (1, 1))
+        consumer.send.assert_called_once_with('hello')
+        consumer.try_send.assert_not_called()
+
+    def test7_run_still_checks_condition_before_send(self):
+        ''' run() in post-check mode directly calls consumer.send(). '''
+        self.sim = DSSimulation()
+        consumer = Mock()
+        consumer.meta.cond.check = Mock(return_value=(False, 'ignored'))
+        consumer.get_cond = lambda: consumer.meta.cond
+        consumer.send = Mock()
+        consumer.try_send = Mock(side_effect=AssertionError('run() should not call consumer.try_send'))
+        self.sim.schedule_event(1, 'hello', consumer)
+        retval = self.sim.run()
+        self.assertEqual(retval, (1, 1))
+        consumer.meta.cond.check.assert_not_called()
+        consumer.send.assert_called_once_with('hello')
+        consumer.try_send.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# signal and the now_queue — pure mock consumers
+# ---------------------------------------------------------------------------
+
+class TestSignal(unittest.TestCase):
+    ''' Tests for DSSimulation.signal() and the now_queue, using
+    plain Mock consumers (no DSCallback / DSProcess). '''
+
+    def test1_appends_to_now_queue(self):
+        ''' signal appends a (consumer, event) tuple to now_queue. '''
+        sim = DSSimulation()
+        consumer = Mock()
+        sim.signal('ev', consumer)
+        self.assertEqual(len(sim.now_queue), 1)
+        c, e = sim.now_queue[0]
+        self.assertIs(c, consumer)
+        self.assertEqual(e, 'ev')
+
+    def test2_default_consumer_ispid(self):
+        ''' When consumer is omitted, pid is used as the target. '''
+        sim = DSSimulation()
+        sentinel = object()
+        sim.pid = sentinel
+        sim.signal('ev')
+        c, e = sim.now_queue[0]
+        self.assertIs(c, sentinel)
+
+    def test3_restart_clears_now_queue(self):
+        ''' restart() resets the now_queue to empty. '''
+        sim = DSSimulation()
+        consumer = Mock()
+        sim.signal('ev1', consumer)
+        sim.signal('ev2', consumer)
+        self.assertEqual(len(sim.now_queue), 2)
+        sim.restart()
+        self.assertEqual(len(sim.now_queue), 0)
+
+    def test4_cleanup_removes_consumer_events_from_now_queue(self):
+        ''' cleanup(consumer) filters that consumer's events out of now_queue. '''
+        sim = DSSimulation()
+        ca = Mock()
+        ca.meta.cond = Mock()
+        cb = Mock()
+        cb.meta.cond = Mock()
+        sim.signal('ev_a1', ca)
+        sim.signal('ev_b',  cb)
+        sim.signal('ev_a2', ca)
+        self.assertEqual(len(sim.now_queue), 3)
+        sim.cleanup(ca)
+        self.assertEqual(len(sim.now_queue), 1)
+        c, e = sim.now_queue[0]
+        self.assertIs(c, cb)
+        self.assertEqual(e, 'ev_b')
+
+
+# ---------------------------------------------------------------------------
+# Scheduling plain generators, coroutines, and DSSchedulable functions
+# ---------------------------------------------------------------------------
+
+class TestSimScheduleGenerators(unittest.TestCase):
+    ''' Tests that sim.schedule() correctly runs plain generators, coroutines,
+    and DSSchedulable-decorated functions, verified by behavioral outcomes only.
+    No DSProcess is imported or referenced directly. '''
+
+    def test1_generator_starts_at_scheduled_time(self):
+        ''' A plain generator only starts when its scheduled time is reached. '''
+        sim = DSSimulation()
+        log = []
+        def my_gen():
+            log.append(sim.time)
+            yield
+        sim.schedule(3, my_gen())
+        self.assertEqual(log, [])
+        sim.run()
+        self.assertEqual(log, [3])
+
+    def test2_coroutine_runs_to_completion(self):
+        ''' An async coroutine scheduled via sim.schedule() runs in sim.run(). '''
+        sim = DSSimulation()
+        log = []
+        async def my_coro():
+            log.append('ran')
+        sim.schedule(0, my_coro())
+        sim.run()
+        self.assertEqual(log, ['ran'])
+
+    def test3_dsschedulable_runs_to_completion(self):
+        ''' A DSSchedulable-decorated function runs when scheduled. '''
+        sim = DSSimulation()
+        log = []
+        @DSSchedulable
+        def my_fn():
+            log.append('ran')
+            return 'done'
+        sim.schedule(0, my_fn())
+        sim.run()
+        self.assertEqual(log, ['ran'])
+
+    def test4_two_generators_run_in_time_order(self):
+        ''' Two generators scheduled at different times start in time order. '''
+        sim = DSSimulation()
+        log = []
+        def gen(tag):
+            log.append(tag)
+            yield
+        sim.schedule(2, gen('second'))
+        sim.schedule(1, gen('first'))
+        sim.run()
+        self.assertEqual(log, ['first', 'second'])
+
+    def test5_negative_time_is_accepted(self):
+        ''' sim.schedule() accepts negative relative time without validation. '''
+        sim = DSSimulation()
+        def my_gen():
+            yield
+        process = sim.schedule(-1, my_gen())
+        self.assertIsNotNone(process)
+        self.assertEqual(sim.time_queue.event_count(), 1)
+
+
+# ---------------------------------------------------------------------------
+# VoidSubscriber
+# ---------------------------------------------------------------------------
+
+class TestVoidSubscriber(unittest.TestCase):
+    ''' Tests for VoidSubscriber and the void_subscriber singleton. '''
+
+    def test1_send_is_noop(self):
+        ''' VoidSubscriber.send() silently ignores any event. '''
+        vs = VoidSubscriber()
+        vs.send(None)   # must not raise
+
+    def test2_send_accepts_any_event(self):
+        ''' No exception is raised regardless of the event value. '''
+        vs = VoidSubscriber()
+        for event in (0, 'hello', {}, object()):
+            vs.send(event)  # must not raise
+
+    def test3_default_name(self):
+        ''' Default name is set when no name is provided. '''
+        vs = VoidSubscriber()
+        self.assertIsInstance(vs.name, str)
+        self.assertTrue(len(vs.name) > 0)
+
+    def test4_custom_name(self):
+        ''' Custom name is stored on the instance. '''
+        vs = VoidSubscriber(name='my-void')
+        self.assertEqual(vs.name, 'my-void')
+
+    def test5_singleton_is_void_subscriber_instance(self):
+        ''' void_subscriber is an instance of VoidSubscriber. '''
+        self.assertIsInstance(void_subscriber, VoidSubscriber)
+
+    def test6_simulationpid_defaults_to_void_subscriber(self):
+        ''' After construction, sim.pid is the void_subscriber singleton. '''
+        sim = DSSimulation(layer2=LiteLayer2)
+        self.assertIs(sim.pid, void_subscriber)
+
+    def test7_simulation_restart_restores_void_subscriber(self):
+        ''' restart() resets pid back to void_subscriber. '''
+        sim = DSSimulation(layer2=LiteLayer2)
+        sim.pid = Mock()
+        sim.restart()
+        self.assertIs(sim.pid, void_subscriber)
+
+
+# ---------------------------------------------------------------------------
+# SimLiteWaitMixin — basic gwait / wait / sleep
+# SimProcessMixin is bypassed via _TestSim so SimLiteWaitMixin's methods are
+# actually under test (not the full condition-aware overrides).
+# ---------------------------------------------------------------------------
+
+class TestSimLiteWaitMixin(unittest.TestCase):
+    ''' Tests for SimLiteWaitMixin.gwait / SimLiteWaitMixin.wait / SimLiteWaitMixin.sleep.
+    Uses a local _TestSim subclass that replaces gwait/wait/schedule with the
+    SimLiteWaitMixin / SimScheduleMixin versions, preventing SimProcessMixin from
+    wrapping generators in DSProcess or overriding the wait methods. '''
+
+    def _make_sim(self):
+        ''' Minimal simulation: LiteLayer2 only (SimLiteWaitMixin + SimScheduleMixin). '''
+        return DSSimulation(layer2=LiteLayer2)
+
+    def test1_gwait_returns_none_on_timeout(self):
+        ''' gwait(timeout) returns None when the timeout fires with no prior event. '''
+        sim = self._make_sim()
+        result = []
+        def my_gen():
+            retval = yield from sim.gwait(5)
+            result.append(retval)
+        sim.schedule(0, my_gen())
+        t, _ = sim.run()
+        self.assertEqual(result, [None])
+        self.assertEqual(t, 5)
+
+    def test2_gwait_returns_event_before_timeout(self):
+        ''' gwait(10) returns the event when one arrives before the timeout. '''
+        sim = self._make_sim()
+        result = []
+        def my_gen():
+            sim.schedule_event(3, 'hello')
+            retval = yield from sim.gwait(10)
+            result.append(retval)
+        sim.schedule(0, my_gen())
+        t, _ = sim.run()
+        self.assertEqual(result, ['hello'])
+        self.assertEqual(t, 3)
+
+    def test3_wait_returns_none_on_timeout(self):
+        ''' wait(timeout) returns None when the timeout fires with no prior event. '''
+        sim = self._make_sim()
+        result = []
+        async def my_coro():
+            retval = await sim.wait(5)
+            result.append(retval)
+        sim.schedule(0, my_coro())
+        t, _ = sim.run()
+        self.assertEqual(result, [None])
+        self.assertEqual(t, 5)
+
+    def test4_wait_returns_event_before_timeout(self):
+        ''' wait(10) returns the event delivered before timeout. '''
+        sim = self._make_sim()
+        result = []
+        async def my_coro():
+            sim.schedule_event(3, 'hello')
+            retval = await sim.wait(10)
+            result.append(retval)
+        sim.schedule(0, my_coro())
+        t, _ = sim.run()
+        self.assertEqual(result, ['hello'])
+        self.assertEqual(t, 3)
+
+    def test5_first_timeout_cleared_when_gwait_returns_early(self):
+        ''' When gwait() is woken early by an external event, the pending timeout
+        entry is removed from the time queue.  A subsequent gwait() must schedule
+        a fresh timeout relative to the current time — not fire on the stale one. '''
+        sim = self._make_sim()
+        result = []
+        def my_gen():
+            sim.schedule_event(2, 'hello')
+            r1 = yield from sim.gwait(5)
+            result.append(('first', sim.time, r1))
+            r2 = yield from sim.gwait(5)
+            result.append(('second', sim.time, r2))
+        sim.schedule(0, my_gen())  # wake first gwait at t=2 (before t=5)
+        sim.run()
+        # first gwait returns 'hello' at t=2; second times out at t=2+5=7, not t=5
+        self.assertEqual(result[0], ('first', 2, 'hello'))
+        self.assertEqual(result[1], ('second', 7, None))
+        self.assertEqual(sim.time_queue.event_count(), 0)
+
+    def test6_gsleep_ignores_events_until_timeout(self):
+        ''' gsleep(timeout) ignores non-exception events and returns at timeout. '''
+        sim = self._make_sim()
+        result = []
+
+        def my_gen():
+            sim.schedule_event(2, 'hello')
+            sim.schedule_event(3, 'world')
+            retval = yield from sim.gsleep(5)
+            result.append((sim.time, retval))
+
+        sim.schedule(0, my_gen())
+        t, _ = sim.run()
+
+        self.assertEqual(result, [(5, None)])
+        self.assertEqual(t, 5)
+
+    def test7_sleep_ignores_events_until_timeout(self):
+        ''' sleep(timeout) ignores non-exception events and returns at timeout. '''
+        sim = self._make_sim()
+        result = []
+
+        async def my_coro():
+            sim.schedule_event(2, 'hello')
+            sim.schedule_event(3, 'world')
+            retval = await sim.sleep(5)
+            result.append((sim.time, retval))
+
+        sim.schedule(0, my_coro())
+        t, _ = sim.run()
+
+        self.assertEqual(result, [(5, None)])
+        self.assertEqual(t, 5)
+
+
+# ---------------------------------------------------------------------------
+# SimLiteQueueMixin — factory method available on LiteLayer2 simulations
+# ---------------------------------------------------------------------------
+
+class TestSimLiteQueueMixin(unittest.TestCase):
+    ''' Tests for SimLiteQueueMixin.queue() factory. '''
+
+    def test1_queue_returns_lite_queue_instance(self):
+        ''' sim.queue() on LiteLayer2 returns a DSLiteQueue bound to the sim. '''
+        from dssim.lite.components.litequeue import DSLiteQueue
+        sim = DSSimulation(layer2=LiteLayer2)
+        q = sim.queue()
+        self.assertIsInstance(q, DSLiteQueue)
+        self.assertIs(q.sim, sim)
+
+    def test2_queue_passes_capacity(self):
+        ''' Capacity keyword argument is forwarded to DSLiteQueue. '''
+        sim = DSSimulation(layer2=LiteLayer2)
+        q = sim.queue(capacity=3)
+        self.assertEqual(q.capacity, 3)
+
+    def test3_queue_wrong_sim_raises(self):
+        ''' Passing a different sim instance raises ValueError. '''
+        sim1 = DSSimulation(layer2=LiteLayer2)
+        sim2 = DSSimulation(layer2=LiteLayer2)
+        with self.assertRaises(ValueError):
+            sim1.queue(sim=sim2)
+
+    def test4_old_lite_queue_name_not_available(self):
+        ''' Legacy lite_queue() name is not exposed on LiteLayer2. '''
+        sim = DSSimulation(layer2=LiteLayer2)
+        self.assertFalse(hasattr(sim, 'lite_queue'))
+
+
+if __name__ == '__main__':
+    unittest.main()

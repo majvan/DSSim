@@ -1,4 +1,4 @@
-# Copyright 2020 NXP Semiconductors
+# Copyright 2026- majvan (majvan@gmail.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,8 @@
 Tests for instance module
 '''
 import unittest
-from dssim.simulation import DSComponent
+from unittest.mock import Mock
+from dssim import DSComponent
 
 class MyComponent(DSComponent):
     pass
@@ -23,12 +24,13 @@ class MyComponent(DSComponent):
 class TestInterface(unittest.TestCase):
     ''' Test the time queue class behavior '''
 
-    def test0_simple_event(self):
-        ''' Assert kicking and pushing events '''
-        i0 = MyComponent()
-        name = list(MyComponent._names.keys())[0]
+    def test1_simple_interface(self):
+        sim = Mock()
+        sim.names = {}
+        i0 = MyComponent(sim=sim)
+        name = list(sim.names.keys())[0]
         with self.assertRaises(ValueError):
-            i1 = MyComponent(name=name)
-        i2 = MyComponent(name='xyz')
+            i1 = MyComponent(name=name, sim=sim)
+        i2 = MyComponent(name='xyz', sim=sim)
         self.assertEqual(str(i2), 'xyz')
 

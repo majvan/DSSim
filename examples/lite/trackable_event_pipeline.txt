@@ -1,0 +1,6 @@
+LiteLayer2 notes for examples/pubsub/trackable_event_pipeline.py
+
+LiteLayer2 is missing required features:
+- PubSub endpoint tiers (`PRE` / `CONSUME` / `POST_*`) needed for multi-observer + first-consumer routing
+- PubSub endpoint factories (`sim.publisher`, `sim.callback`) used by the pipeline example
+- Automatic trackable-event hop logging through `DSPub`/`DSSub` dispatch path

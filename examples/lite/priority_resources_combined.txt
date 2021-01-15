@@ -1,0 +1,6 @@
+LiteLayer2 notes for examples/pubsub/priority_resources_combined.py
+
+LiteLayer2 is missing required features:
+- get_cond(...) endpoint API on resources
+- DSFilter / DSCircuit condition algebra
+- condition-native waiting helpers (e.g. circuit.check_and_wait(...)) used in this example

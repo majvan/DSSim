@@ -1,0 +1,36 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700&display=swap');
+
+/* Darker red override */
+:root,
+[data-md-color-scheme="default"],
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color:        #9b1414;
+  --md-primary-fg-color--light: #c0392b;
+  --md-primary-fg-color--dark:  #7a0f0f;
+  --md-accent-fg-color:         #e53935;
+}
+
+/* Rounded font for the site title */
+.md-header__topic:first-child .md-ellipsis {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 700;
+  font-size: 1.6rem;
+  letter-spacing: 0.02em;
+}
+
+/* Benchmark performance cell colours */
+.perf-hi { color: #2e7d32; font-weight: 600; }
+.perf-lo { color: #b71c1c; }
+
+[data-md-color-scheme="slate"] .perf-hi { color: #a5d6a7; font-weight: 600; }
+[data-md-color-scheme="slate"] .perf-lo { color: #ef9a9a; }
+
+/* Make the nav logo larger with a bright background */
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  height: 48px;
+  width: auto;
+  background: #ffffff;
+  border-radius: 6px;
+  padding: 3px;
+}

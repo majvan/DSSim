@@ -1,0 +1,82 @@
+site_name: DSSim
+site_description: Discrete system simulation framework for event-driven modeling.
+site_url: https://majvan.github.io/DSSim/
+repo_url: https://github.com/majvan/DSSim
+repo_name: majvan/DSSim
+
+theme:
+  name: material
+  logo: assets/images/logo.png
+  favicon: assets/images/favicon.png
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: red
+      accent: red
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: red
+      accent: red
+
+extra_css:
+  - assets/css/extra.css
+
+plugins:
+  - search
+  - mermaid2
+  - glightbox
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+            members_order: source
+            show_root_heading: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:mermaid2.fence_mermaid_custom
+  - pymdownx.highlight
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - User Guide:
+      - Overview: user-guide/index.md
+      - Glossary: user-guide/glossary.md
+      - 1. About DSSim: user-guide/01-about-dssim.md
+      - 2. Core Design Concepts: user-guide/02-core-concepts.md
+      - 3. Publisher-Subscriber Principle: user-guide/03-pubsub-layer2.md
+      - 4. Condition Filtering: user-guide/04-condition-filtering.md
+      - 5. Processes: user-guide/05-processes.md
+      - 6. Basic Generic Components: user-guide/06-components.md
+      - 7. HW Components: user-guide/07-hw-components.md
+      - 8. Probes, Tracing, and Debugging: user-guide/08-probes.md
+      - 9. Shim Layers: user-guide/09-shims.md
+      - 10. Feature Comparison: user-guide/10-feature-comparison.md
+      - 11. Benchmarks: user-guide/11-benchmarks.md
+  - Getting Started:
+      - Install: getting-started/install.md
+      - First Simulation: getting-started/first-sim.md
+      - Designing a Larger System: getting-started/design-approach.md
+      - 'Case Study: Traffic Lights': getting-started/case-study.md
+      - 'Case Study: CPU Memory Hierarchy': getting-started/case-study-cpu-cache.md
+  - Parity:
+      - SimPy: parity/simpy.md
+      - Salabim: parity/salabim.md
