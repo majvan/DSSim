@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from distutils.core import setup
 from setuptools import setup, find_packages
 
 with open('requirements.txt', 'r') as req_lines:
@@ -19,7 +18,7 @@ with open('requirements.txt', 'r') as req_lines:
 
 setup(
   name='dssim',
-  version='0.1',  # Before going to 1.0, we need public review
+  version='0.2',  # Before going to 1.0, we need public review
   license ='apache-2.0',  # The keyword taken from here: https://help.github.com/articles/licensing-a-repository
   description='Discrete System Simulation framework',
   long_description='A simulation framework to simulate time-based discrete '
