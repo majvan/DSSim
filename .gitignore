@@ -1,10 +1,16 @@
 # Compiled bytecode
 __pycache__/
+# Built package
+build/
+dist/
 *.py[cod]
 # Personal IDE settings
 .idea/
 # Generated virtualenv
 env*/
+venv*/
+.env*/
+.venv*/
 # Coverage output
 .coverage
 
