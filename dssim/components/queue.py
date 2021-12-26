@@ -41,7 +41,7 @@ class Queue(DSComponent):
             return self.queue.pop(0)
         self.waiting_tasks.append(self.sim.parent_process)
         try:
-            obj = yield from self.sim.wait(timeout, cond=True)
+            obj = yield from self.sim.wait(timeout, cond=lambda c:True)
         finally:
             waiting_task = self.waiting_tasks.pop(0)
         return obj
