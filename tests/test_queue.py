@@ -47,7 +47,6 @@ class TestQueue(unittest.TestCase):
     ''' Test Queue '''
 
     def setUp(self):
-        self.consumer_called = []
         self.sim = SimMock()
         self.sim.signal = Mock(return_value=True)  # always returns true
         self.sim.schedule = Mock(return_value=1000)  # new process id retval
@@ -80,9 +79,11 @@ class TestQueue(unittest.TestCase):
         obj1 = SomeObj()
         q.put(o=obj1)
         self.assertEqual(len(q.queue), 2)
+        self.assertEqual(len(q), 2)
         objR = get_object(q.get())
         self.assertEqual({'o': obj0}, objR)
         self.assertEqual(len(q.queue), 1)
+        self.assertEqual(len(q), 1)
 
     @unittest.skip('The following test is not a supported use case')
     def test3_queue_get_wait(self):
@@ -125,9 +126,11 @@ class TestQueue(unittest.TestCase):
         objR = get_object(get_generator)
         self.sim.signal.assert_not_called()
         self.assertEqual(objR, 'WaitMockDummyReturn')
+        self.assertEqual(len(q.waiting_tasks), 1)
         obj0 = SomeObj()
         q.put(o=obj0)
-        self.sim.signal.assert_called_once()
+        self.sim.signal.assert_called_once_with('parent_process', o=obj0)
         objR = get_object(get_generator)
         self.assertEqual(objR, 'WaitMockReturn2')
+        self.assertEqual(len(q.waiting_tasks), 0)
         

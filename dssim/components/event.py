@@ -12,39 +12,40 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-A queue of events with runtime flexibility of put / get events.
+An event which can unblock many waiting tasks upon its signal.
 '''
 from dssim.simulation import DSSchedulable, DSComponent
 
-class Queue(DSComponent):
-    ''' The (FIFO) queue of events is a SW component which can dynamically
-    be used to put an event in and get (or wait for- if the queue is empty)
-    a queued event.
-    Queue does not use any routing of signals.
+class Event(DSComponent):
+    ''' A software event with binary state (set/clear).
+    A task can be blocked by waiting for the state to be set.
     '''
+
     def __init__(self, *args, **kwargs):
-        ''' Init Queue component. No special arguments here. '''
+        ''' Init Event component. An event set unblocks tasks waiting for the event.
+        If the event is signalled, a task going to wait is unblocked immediately.
+        '''
         super().__init__(*args, **kwargs)
-        self.queue = []
+        self.signalled = False
         self.waiting_tasks = []
 
-    def put(self, **event):
-        ''' Put an event into queue. The event can be consumed anytime in the future. '''
-        if not self.waiting_tasks:
-            self.queue.append(event)
-        else:
-            self.sim.signal(self.waiting_tasks[0], **event)
+    def signal(self):
+        ''' Set the event and unblocks all the tasks waiting for it '''
+        self.signalled = True
+        for t in self.waiting_tasks:
+            self.sim.signal(t, signalled=True)
 
-    def get(self, timeout=float('inf')):
+    def clear(self):
+        ''' Clear the event '''
+        self.signalled = False
+
+    def wait(self, timeout=float('inf')):
         ''' Get an event from queue. If the queue is empty, wait for the closest event. '''
-        if len(self.queue) > 0:
-            return self.queue.pop(0)
+        if self.signalled:
+            return True
         self.waiting_tasks.append(self.sim.parent_process)
         try:
             obj = yield from self.sim.wait(timeout, cond=lambda c:True)
         finally:
             waiting_task = self.waiting_tasks.remove(self.sim.parent_process)
         return obj
-
-    def __len__(self):
-        return len(self.queue)
