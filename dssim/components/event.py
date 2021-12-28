@@ -17,12 +17,13 @@ An event which can unblock many waiting tasks upon its signal.
 from dssim.simulation import DSSchedulable, DSComponent
 
 class Event(DSComponent):
-    ''' A software event with binary state (set/clear).
-    A task can be blocked by waiting for the state to be set.
+    ''' A software event with binary state (signalled / clear).
+    A task can be blocked by waiting for the event signalled state.
     '''
 
     def __init__(self, *args, **kwargs):
-        ''' Init Event component. An event set unblocks tasks waiting for the event.
+        ''' Init Event component. An event being signalled unblocks tasks waiting
+        for the event.
         If the event is signalled, a task going to wait is unblocked immediately.
         '''
         super().__init__(*args, **kwargs)
@@ -30,7 +31,7 @@ class Event(DSComponent):
         self.waiting_tasks = []
 
     def signal(self):
-        ''' Set the event and unblocks all the tasks waiting for it '''
+        ''' Signal the event and unblocks all the tasks waiting for it. '''
         self.signalled = True
         for t in self.waiting_tasks:
             self.sim.signal(t, signalled=True)
@@ -40,7 +41,7 @@ class Event(DSComponent):
         self.signalled = False
 
     def wait(self, timeout=float('inf')):
-        ''' Get an event from queue. If the queue is empty, wait for the closest event. '''
+        ''' Wait till event is signalled. If the event is already signalled, return immediately. '''
         if self.signalled:
             return True
         self.waiting_tasks.append(self.sim.parent_process)
