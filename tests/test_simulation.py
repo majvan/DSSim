@@ -42,6 +42,7 @@ class TestDSSchedulable(unittest.TestCase):
     @DSSchedulable
     def __process(self):
         yield 'First return'
+        yield 'Second return'
         return 'Success'
 
     def test0_fcn(self):
@@ -57,8 +58,23 @@ class TestDSSchedulable(unittest.TestCase):
         process = self.__process()
         retval = next(process)
         self.assertEqual(retval, 'First return')
+        retval = next(process)
+        self.assertEqual(retval, 'Second return')
         try:
             next(process)
+        except StopIteration as e:
+            retval = e.value
+        self.assertEqual(retval, 'Success')
+        self.assertEqual(process.value, 'Success')
+
+    def test2_generator(self):
+        process = self.__process()
+        retval = next(process)
+        self.assertEqual(retval, 'First return')
+        retval = process.send('anything0')
+        self.assertEqual(retval, 'Second return')
+        try:
+            process.send('anything1')
         except StopIteration as e:
             retval = e.value
         self.assertEqual(retval, 'Success')

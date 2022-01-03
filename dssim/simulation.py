@@ -37,7 +37,12 @@ class ExtendedGenerator:
         return self.value
 
     def send(self, event):
-        self.generator.send(event)
+        try:
+            self.value = self.generator.send(event)
+        except StopIteration as e:
+            self.value = e.value
+            raise
+        return self.value
 
 def DSSchedulable(api_func):
     ''' Decorator for schedulable functions / methods '''
