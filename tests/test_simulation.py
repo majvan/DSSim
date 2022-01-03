@@ -51,6 +51,7 @@ class TestDSSchedulable(unittest.TestCase):
         except StopIteration as e:
             retval = e.value
         self.assertEqual(retval, 'Success')
+        self.assertEqual(process.value, 'Success')
 
     def test1_generator(self):
         process = self.__process()
@@ -61,6 +62,7 @@ class TestDSSchedulable(unittest.TestCase):
         except StopIteration as e:
             retval = e.value
         self.assertEqual(retval, 'Success')
+        self.assertEqual(process.value, 'Success')
 
 class TestSim(unittest.TestCase):
     ''' Test the time queue class behavior '''

@@ -16,20 +16,46 @@ The file provides basic logic to run the simulation and supported methods.
 '''
 import types
 from functools import wraps
+from collections.abc import Iterable
 from inspect import isgeneratorfunction
 from dssim.timequeue import TimeQueue
 
+class ExtendedGenerator:
+    def __init__(self, generator=None):
+        self.generator = generator
+        self.value = None
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        try:
+            self.value = next(self.generator)
+        except StopIteration as e:
+            self.value = e.value
+            raise
+        return self.value
+
+    def send(self, event):
+        self.generator.send(event)
 
 def DSSchedulable(api_func):
     ''' Decorator for schedulable functions / methods '''
 
     @wraps(api_func)
+    def fcn_in_generator(*args, **kwargs):
+        if False:
+            yield None  # dummy yield to make this to be generator
+        return api_func(*args, **kwargs)
+
+    @wraps(api_func)
     def scheduled_func(*args, **kwargs):
         if isgeneratorfunction(api_func):
-            gen = api_func(*args, **kwargs)
-            retval = yield from gen
-            return retval
-        return api_func(*args, **kwargs)
+            extended_gen = ExtendedGenerator(api_func(*args, **kwargs))
+        else:
+            gen = fcn_in_generator(*args, **kwargs)
+            extended_gen = ExtendedGenerator(gen)
+        return extended_gen
 
     return scheduled_func
 
@@ -93,7 +119,7 @@ class DSSimulation:
 
     def schedule(self, time, schedulable):
         ''' Schedules the start of a (new) process. '''
-        if not isinstance(schedulable, types.GeneratorType):
+        if not isinstance(schedulable, Iterable):
             raise ValueError('The provided function is probably missing @DSSchedulable decorator')
         if time < 0:
             raise ValueError('The time is relative from now and cannot be negative')
