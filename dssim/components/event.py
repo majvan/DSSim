@@ -48,5 +48,8 @@ class Event(DSComponent):
         try:
             obj = yield from self.sim.wait(timeout, cond=lambda c:True)
         finally:
-            waiting_task = self.waiting_tasks.remove(self.sim.parent_process)
+            try:
+                waiting_task = self.waiting_tasks.remove(self.sim.parent_process)
+            except ValueError as e:
+                pass
         return obj
