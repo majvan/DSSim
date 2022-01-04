@@ -97,13 +97,19 @@ class DSSimulation:
     ''' The simulation is a which schedules the nearest (in time) events. '''
 
     def __init__(self):
-        self.time_queue = TimeQueue()
         ''' The simulation holds the list of producers which share the same time queue.
         The list is only for the application informational purpose to be able to identify
         all the producers which belong to the same simulation entity.
         '''
+        self._restart(time=0)
+
+    def restart(self, time=0):
+        self._restart(time=time)
+
+    def _restart(self, time):
+        self.time_queue = TimeQueue()
         self.num_events = 0
-        self.time = 0
+        self.time = time
         self.parent_process = None
         self.time_process = self._time_process()
         self._kick(self.time_process)

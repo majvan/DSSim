@@ -138,7 +138,25 @@ class TestSim(unittest.TestCase):
     def setUp(self):
         self.__time_process_event = Mock()
 
-    def test0_simple_event(self):
+    def test0_init_reset(self):
+        sim = DSSimulation()
+        self.assertIsNotNone(sim.time_process)
+        self.assertEqual(sim.parent_process, None)
+        self.assertEqual(len(sim.time_queue), 0)
+        self.assertEqual(sim.time, 0)
+        sim.schedule(0.5, self.__my_wait_process())
+        sim.schedule(1.5, self.__my_wait_process())
+        self.assertEqual(len(sim.time_queue), 2)
+        sim.run(1)
+        self.assertEqual(sim.time, 0.5)
+        self.assertEqual(len(sim.time_queue), 1)
+        sim.restart(0.9)
+        self.assertIsNotNone(sim.time_process)
+        self.assertEqual(sim.parent_process, None)
+        self.assertEqual(len(sim.time_queue), 0)
+        self.assertEqual(sim.time, 0.9)
+
+    def test1_simple_event(self):
         ''' Assert kicking and pushing events '''
         self.sim = DSSimulation()
         self.assertIsNotNone(sim.time_process)
@@ -150,7 +168,7 @@ class TestSim(unittest.TestCase):
         self.__time_process_event.assert_called_once_with(0, data=1)
         self.__time_process_event.reset_mock()
 
-    def test1_time_process(self):
+    def test2_time_process(self):
         ''' Assert correct time process and pushing events to time process '''
         sim = DSSimulation()
         self.assertIsNotNone(sim.time_process)
@@ -160,7 +178,7 @@ class TestSim(unittest.TestCase):
         p.signal.assert_called_once_with(producer=p, data=1)
         p.signal.reset_mock()
 
-    def test2_scheduling_events(self):
+    def test3_scheduling_events(self):
         ''' Assert working with time queue when pushing events '''
         sim = DSSimulation()
         sim.time_queue.add_element = Mock()
@@ -174,7 +192,7 @@ class TestSim(unittest.TestCase):
         with self.assertRaises(ValueError):
             sim.schedule_event(-0.5, event_obj)
 
-    def test3_deleting_events(self):
+    def test4_deleting_events(self):
         ''' Assert deleting from time queue when deleting events '''
         sim = DSSimulation()
         sim.time_queue.delete = Mock()
@@ -183,7 +201,7 @@ class TestSim(unittest.TestCase):
         sim.time_queue.delete.assert_called_once_with(condition)
         sim.time_queue.delete.reset_mock()
 
-    def test4_scheduling(self):
+    def test5_scheduling(self):
         ''' Assert working with time queue when pushing events '''
         self.sim = DSSimulation()
         my_process = self.__my_time_process()
@@ -221,7 +239,7 @@ class TestSim(unittest.TestCase):
         self.__time_process_event.reset_mock()
         self.assertEqual(retval, False)
 
-    def test5_scheduling(self):
+    def test6_scheduling(self):
         ''' Assert the delay of scheduled process '''
         self.sim = DSSimulation()
         my_process = self.__my_time_process()
@@ -232,12 +250,12 @@ class TestSim(unittest.TestCase):
         parent_process = self.sim.schedule(2, my_process)
         self.assertEqual(len(self.sim.time_queue), 1)
 
-    def test6_schedulable_fcn(self):
+    def test7_schedulable_fcn(self):
         self.sim = DSSimulation()
         # The following has to pass without raising an error
         self.sim._kick(self.__my_schedulable_handler())
 
-    def test7_run_infinite_process(self):
+    def test8_run_infinite_process(self):
         ''' Assert event loop behavior '''
         self.sim = DSSimulation()
         producer = SomeObj()
@@ -253,7 +271,7 @@ class TestSim(unittest.TestCase):
         num_events = len(self.sim.time_queue)
         self.assertEqual(num_events, 0)
 
-    def test8_run_finite_process(self):
+    def test9_run_finite_process(self):
         self.sim = DSSimulation()
         producer = SomeObj()
         producer.signal = Mock()
@@ -268,7 +286,7 @@ class TestSim(unittest.TestCase):
         num_events = len(self.sim.time_queue)
         self.assertEqual(num_events, 1)
 
-    def test9_waiting(self):
+    def test10_waiting(self):
         self.sim = DSSimulation()
         # the following process will create events for the time queue process
         process = self.__my_wait_process()
@@ -290,7 +308,7 @@ class TestSim(unittest.TestCase):
         ]
         self.__time_process_event.assert_has_calls(calls)
 
-    def test10_abort(self):
+    def test11_abort(self):
         self.sim = DSSimulation()
         # the following process will create events for the time queue process
         process = self.__my_wait_process()
