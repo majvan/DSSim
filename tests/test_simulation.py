@@ -45,6 +45,12 @@ class TestDSSchedulable(unittest.TestCase):
         yield 'Second return'
         return 'Success'
 
+    @DSSchedulable
+    def __loopback_process(self):
+        data = yield
+        while True:
+            data = yield data
+
     def test0_fcn(self):
         process = self.__fcn()
         try:
@@ -86,6 +92,15 @@ class TestDSSchedulable(unittest.TestCase):
             retval2 = e.value
         self.assertEqual(retval2, None)
         self.assertEqual(process.value, None)
+
+    def test3_generator(self):
+        process = self.__loopback_process()
+        retval = next(process)
+        retval = process.send('from_test0')
+        self.assertEqual(retval, 'from_test0')
+        retval = process.abort('some_data')
+        self.assertTrue(isinstance(retval, DSAbortException))
+        self.assertTrue(isinstance(process.value, DSAbortException))
 
 class TestSim(unittest.TestCase):
     ''' Test the time queue class behavior '''

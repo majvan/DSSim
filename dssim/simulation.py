@@ -20,15 +20,25 @@ from collections.abc import Iterable
 from inspect import isgeneratorfunction
 from dssim.timequeue import TimeQueue
 
-class ExtendedGenerator:
+class DSTask:
+    ''' Typical task used in the simulations.
+    This class "extends" generator function for additional info.
+    The best practise is to write a function and decorate it with
+    @DSSchedulable. DSSchedulable converts the function into
+    DSTask.
+    '''
     def __init__(self, generator=None):
+        ''' Initializes DSTask. The input has to be a geneator function. '''
         self.generator = generator
+        # We store the latest value. Useful to check the status after finish.
         self.value = None
 
     def __iter__(self):
+        ''' Required to use the class to get events from it. '''
         return self
 
     def __next__(self):
+        ''' Gets next state, without pushing any particular event. '''
         try:
             self.value = next(self.generator)
         except StopIteration as e:
@@ -37,11 +47,20 @@ class ExtendedGenerator:
         return self.value
 
     def send(self, event):
+        ''' Pushes an event to the task and gets new state. '''
         try:
             self.value = self.generator.send(event)
         except StopIteration as e:
             self.value = e.value
             raise
+        return self.value
+
+    def abort(self, producer=None, **info):
+        ''' Aborts a task. Additional reasoning info can be provided. '''
+        try:
+            self.value = self.send(DSAbortException(producer, **info))
+        except StopIteration as e:
+            pass
         return self.value
 
 def DSSchedulable(api_func):
@@ -56,10 +75,10 @@ def DSSchedulable(api_func):
     @wraps(api_func)
     def scheduled_func(*args, **kwargs):
         if isgeneratorfunction(api_func):
-            extended_gen = ExtendedGenerator(api_func(*args, **kwargs))
+            extended_gen = DSTask(api_func(*args, **kwargs))
         else:
             gen = fcn_in_generator(*args, **kwargs)
-            extended_gen = ExtendedGenerator(gen)
+            extended_gen = DSTask(gen)
         return extended_gen
 
     return scheduled_func
