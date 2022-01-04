@@ -18,7 +18,7 @@ with open('requirements.txt', 'r') as req_lines:
 
 setup(
   name='dssim',
-  version='0.5.1',  # Before going to 1.0, we need public review
+  version='0.5.2',  # Before going to 1.0, we need public review
   license ='apache-2.0',  # The keyword taken from here: https://help.github.com/articles/licensing-a-repository
   description='Discrete System Simulation framework',
   long_description='A simulation framework to simulate time-based discrete '

@@ -196,7 +196,12 @@ class DSSimulation:
         # another timeout for this process.
         schedulable = self.parent_process
         self.schedule_timeout(timeout, schedulable)
-        event = yield from self._wait_for_event(abs_time, cond)
+        try:
+            event = yield from self._wait_for_event(abs_time, cond)
+        except Exception as exc:
+            # If we got any exception, we will never use the timeout anymore
+            self.delete(lambda e: e[0] is schedulable)
+            raise
         if event is not None:
             # If we terminated before timeout, then the timeout event is on time queue- remove it
             self.delete(lambda e: e[0] is schedulable)
@@ -216,7 +221,7 @@ class DSSimulation:
         '''
         while True:
             event = yield
-            if event is None:
+            if event is None:  # timeout received
                 return event
             if isinstance(event, Exception):
                 raise event

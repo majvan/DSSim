@@ -31,6 +31,13 @@ def get_object(generator):
         obj = e.value  # Python internal: a value returned by generator
     return obj
 
+def send_abort(generator):
+    try:
+        retval = generator.send(Exception())
+    except StopIteration as e:
+        retval = e.value
+    return retval
+
 def wait_mock(self, timeout=float('inf'), cond=True):
     if False:
         yield something  # this is to make it generator
@@ -40,6 +47,14 @@ def wait_mock_with_one_dummy(self, timeout=float('inf'), cond=True):
     yield "WaitMockDummyReturn"  # this is dummy one call. It is needed to keep get() still not return with value
     return "WaitMockReturn2"
 
+def wait_mock_loop(self, timeout=float('inf'), cond=True):
+    try:
+        while True:
+            event = yield
+            if isinstance(event, Exception):
+                raise e
+    except Exception as e:
+        pass
 
 __all__ = ['TestQueue']
 
@@ -132,5 +147,17 @@ class TestQueue(unittest.TestCase):
         self.sim.signal.assert_called_once_with('parent_process', o=obj0)
         objR = get_object(get_generator)
         self.assertEqual(objR, 'WaitMockReturn2')
+        self.assertEqual(len(q.waiting_tasks), 0)
+
+    def test5_queue_abort_wait(self):
+        q = Queue(sim=self.sim)
+        self.sim.signal = Mock()
+        self.sim.wait = wait_mock_loop
+        get_generator = q.get()
+        self.sim.parent_process = get_generator
+        objR = get_object(get_generator)
+        self.sim.signal.assert_not_called()
+        self.assertEqual(len(q.waiting_tasks), 1)
+        send_abort(q.waiting_tasks[0])
         self.assertEqual(len(q.waiting_tasks), 0)
         

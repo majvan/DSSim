@@ -74,11 +74,18 @@ class TestDSSchedulable(unittest.TestCase):
         retval = process.send('anything0')
         self.assertEqual(retval, 'Second return')
         try:
-            process.send('anything1')
+            retval = process.send('anything1')
         except StopIteration as e:
-            retval = e.value
-        self.assertEqual(retval, 'Success')
+            retval2 = e.value
+        self.assertEqual(retval2, 'Success')
         self.assertEqual(process.value, 'Success')
+
+        try:
+            retval = process.send('anything2')
+        except StopIteration as e:
+            retval2 = e.value
+        self.assertEqual(retval2, None)
+        self.assertEqual(process.value, None)
 
 class TestSim(unittest.TestCase):
     ''' Test the time queue class behavior '''
@@ -96,12 +103,15 @@ class TestSim(unittest.TestCase):
                 self.__time_process_event(self.sim.time_queue.time, **event)
 
     def __my_wait_process(self):
-        event = yield from self.sim.wait(2)
-        self.__time_process_event(self.sim.time, None)
-        event = yield from self.sim.wait(cond=lambda e: 'data' in e)
-        self.__time_process_event(self.sim.time, **event)
-        event = yield from self.sim.wait(cond=lambda e: True)
-        self.__time_process_event(self.sim.time, **event)
+        try:
+            event = yield from self.sim.wait(2)
+            self.__time_process_event(self.sim.time, None)
+            event = yield from self.sim.wait(cond=lambda e: 'data' in e)
+            self.__time_process_event(self.sim.time, **event)
+            event = yield from self.sim.wait(cond=lambda e: True)
+            self.__time_process_event(self.sim.time, **event)
+        except Exception as e:
+            return e
 
     def __my_handler(self):
         return True
@@ -264,3 +274,23 @@ class TestSim(unittest.TestCase):
             call(3, producer=producer, data=3),  # real event logged after time
         ]
         self.__time_process_event.assert_has_calls(calls)
+
+    def test10_abort(self):
+        self.sim = DSSimulation()
+        # the following process will create events for the time queue process
+        process = self.__my_wait_process()
+        # those events are required to contain a producer
+        producer = EventForwarder(self, process)
+        self.sim.parent_process = process
+        self.sim._kick(process)
+        self.sim.schedule_event(1, {'producer': producer, 'data': 1})
+        num_events = self.sim.run(2.5)
+        # first event is dropped, because though it was taken by the time_process, the process condition was
+        # to wait till timeout
+        calls = [
+            call(2, None),  # timeout logged
+        ]
+        self.__time_process_event.assert_has_calls(calls)
+        self.assertEqual(len(self.sim.time_queue), 1)  # there are still timeout event left from process
+        self.sim.abort(process, testing=-1),  # abort after time
+        self.assertEqual(len(self.sim.time_queue), 0)  # test is the timeout event was removed after abort
