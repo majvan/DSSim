@@ -14,7 +14,7 @@
 '''
 An event which can unblock many waiting tasks upon its signal.
 '''
-from dssim.simulation import DSSchedulable, DSComponent
+from dssim.simulation import DSComponent
 
 class Event(DSComponent):
     ''' A software event with binary state (signalled / clear).

@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dssim.components.queue import Queue
-from dssim.simulation import DSSchedulable, sim
+from dssim.simulation import sim
 
 q_ab, q_ba = Queue(), Queue()
 
-@DSSchedulable
 def do_somethingA():
     # The following will be run in a time t=10 sec (see below schedule_future)
     print('A0 Time:', sim.time)
@@ -40,7 +39,6 @@ def do_somethingA():
     print('A4 Got message from B', msg)
     print('A4 Finish')
 
-@DSSchedulable
 def do_somethingB():
     # The following will be run in a time t=10 sec (see below schedule_future)
     print('B0 Time:', sim.time)

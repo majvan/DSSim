@@ -68,21 +68,21 @@ class TestProcessConsumer(unittest.TestCase):
 
     def test0_process_consumer(self):
         c = DSProcessConsumer(self.process, start=True, sim=self.sim)
-        self.sim.schedule.assert_called_once_with(0, self.process)
+        self.sim.schedule.assert_called_once_with(0, c)
         self.sim.schedule.reset_mock()
         c.notify(data=1)
-        self.sim.signal.assert_called_once_with(1000, data=1)
+        self.sim.signal.assert_called_once_with(c, data=1)
         self.sim.signal.reset_mock()
         c.notify(data=0)
-        self.sim.signal.assert_called_once_with(1000, data=0)
+        self.sim.signal.assert_called_once_with(c, data=0)
         self.sim.signal.reset_mock()
 
     def test1_process_consumer(self):
         c = DSProcessConsumer(self.process, start=True, delay=5, sim=self.sim)
-        self.sim.schedule.assert_called_once_with(5, self.process)
+        self.sim.schedule.assert_called_once_with(5, c)
         self.sim.schedule.reset_mock()
         c.notify(data=1)
-        self.sim.signal.assert_called_once_with(1000, data=1)
+        self.sim.signal.assert_called_once_with(c, data=1)
         self.sim.signal.reset_mock()
 
     @unittest.skip('Check this behavior: notifying a ProcessConsumer which has not started yet')
@@ -118,7 +118,7 @@ class TestProducer(unittest.TestCase):
         p.add_consumer(c)
         self.assertEqual(p.get_consumers(), [c,])
         p.signal(data=1)
-        self.sim.signal.assert_called_once_with(1000, data=1)
+        self.sim.signal.assert_called_once_with(c, data=1)
         self.sim.signal.reset_mock()
 
     def test1_producer_more_consumers(self):
@@ -159,5 +159,5 @@ class TestProducer(unittest.TestCase):
         self.assertEqual(p.get_consumers(), [c,])
         self.sim.schedule.assert_not_called()
         p.schedule(0.5, data=1)
-        self.sim.schedule_event.assert_called_once_with(0.5, {'data':1}, process)
+        self.sim.schedule_event.assert_called_once_with(0.5, {'data':1}, c)
         self.sim.schedule_event.reset_mock()

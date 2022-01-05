@@ -14,7 +14,7 @@
 '''
 A queue of events with runtime flexibility of put / get events.
 '''
-from dssim.simulation import DSSchedulable, DSComponent
+from dssim.simulation import DSComponent
 
 class Queue(DSComponent):
     ''' The (FIFO) queue of events is a SW component which can dynamically

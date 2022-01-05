@@ -20,70 +20,6 @@ from collections.abc import Iterable
 from inspect import isgeneratorfunction
 from dssim.timequeue import TimeQueue
 
-class DSTask:
-    ''' Typical task used in the simulations.
-    This class "extends" generator function for additional info.
-    The best practise is to write a function and decorate it with
-    @DSSchedulable. DSSchedulable converts the function into
-    DSTask.
-    '''
-    def __init__(self, generator=None):
-        ''' Initializes DSTask. The input has to be a geneator function. '''
-        self.generator = generator
-        # We store the latest value. Useful to check the status after finish.
-        self.value = None
-
-    def __iter__(self):
-        ''' Required to use the class to get events from it. '''
-        return self
-
-    def __next__(self):
-        ''' Gets next state, without pushing any particular event. '''
-        try:
-            self.value = next(self.generator)
-        except StopIteration as e:
-            self.value = e.value
-            raise
-        return self.value
-
-    def send(self, event):
-        ''' Pushes an event to the task and gets new state. '''
-        try:
-            self.value = self.generator.send(event)
-        except StopIteration as e:
-            self.value = e.value
-            raise
-        return self.value
-
-    def abort(self, producer=None, **info):
-        ''' Aborts a task. Additional reasoning info can be provided. '''
-        try:
-            self.value = self.send(DSAbortException(producer, **info))
-        except StopIteration as e:
-            pass
-        return self.value
-
-def DSSchedulable(api_func):
-    ''' Decorator for schedulable functions / methods '''
-
-    @wraps(api_func)
-    def fcn_in_generator(*args, **kwargs):
-        if False:
-            yield None  # dummy yield to make this to be generator
-        return api_func(*args, **kwargs)
-
-    @wraps(api_func)
-    def scheduled_func(*args, **kwargs):
-        if isgeneratorfunction(api_func):
-            extended_gen = DSTask(api_func(*args, **kwargs))
-        else:
-            gen = fcn_in_generator(*args, **kwargs)
-            extended_gen = DSTask(gen)
-        return extended_gen
-
-    return scheduled_func
-
-
 class DSAbortException(Exception):
     ''' Exception used to abort waiting process '''
 
@@ -158,7 +94,11 @@ class DSSimulation:
         # This method was probably called by another scheduled process.
         # However to kick a new process, we just setup a new process ID to the simulation,
         # kick the process and then set back for the simulation the previous process ID.
-        old_process, new_process = self.parent_process, self._scheduled_fcn(time, schedulable)
+        old_process = self.parent_process
+        if hasattr(schedulable, '_schedule'):
+            new_process = schedulable._schedule(time)
+        else:
+            new_process = self._scheduled_fcn(time, schedulable)
         self.parent_process = new_process
         self._kick(new_process)
         self.parent_process = old_process
@@ -310,3 +250,106 @@ class DSComponent(DSInterface):
     ''' An interface for a component of DSSim. So far DSInteface specification is good enough
     to define a component interface of DSSim. Extension in the future is possible.
     '''
+    pass
+
+def DSSchedulable(api_func):
+    ''' Decorator for schedulable functions / methods.
+    DSSchedulable converts a function into a generator so it could be scheduled or
+    used in DSProcess initializer.
+    '''
+    def _fcn_in_generator(*args, **kwargs):
+        if False:
+            yield None  # dummy yield to make this to be generator
+        return api_func(*args, **kwargs)
+    
+    @wraps(api_func)
+    def scheduled_func(*args, **kwargs):
+        if isgeneratorfunction(api_func):
+            extended_gen = api_func(*args, **kwargs)
+        else:
+            extended_gen = _fcn_in_generator(*args, **kwargs)
+        return extended_gen
+    
+    return scheduled_func
+
+
+class DSProcess(DSComponent):
+    ''' Typical task used in the simulations.
+    This class "extends" generator function for additional info.
+    The best practise is to use DSProcess instead of generators.
+    '''
+    def __init__(self, generator=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        ''' Initializes DSProcess. The input has to be a geneator function. '''
+        self.generator = generator
+        self.scheduled_generator = generator
+        # We store the latest value. Useful to check the status after finish.
+        self.value = None
+        self.finished = False
+        self.waiting_tasks = []  # taks waiting to finish this task
+
+    def __iter__(self):
+        ''' Required to use the class to get events from it. '''
+        return self
+
+    def __next__(self):
+        ''' Gets next state, without pushing any particular event. '''
+        try:
+            self.value = next(self.scheduled_generator)
+        except StopIteration as e:
+            self.value = e.value
+            self._finish()
+            raise
+        return self.value
+
+    def send(self, event):
+        ''' Pushes an event to the task and gets new state. '''
+        try:
+            self.value = self.scheduled_generator.send(event)
+        except StopIteration as e:
+            self.value = e.value
+            self._finish()
+            raise
+        return self.value
+
+    def abort(self, producer=None, **info):
+        ''' Aborts a task. Additional reasoning info can be provided. '''
+        try:
+            self.value = self.send(DSAbortException(producer, **info))
+        except StopIteration as e:
+            self._finish()
+        return self.value
+
+    def _scheduled_fcn(self, time):
+        ''' Start a schedulable process with possible delay '''
+        if time:
+            yield from self.sim.wait(time)
+        retval = yield from self.generator
+        return retval
+
+    def _schedule(self, time):
+        ''' This api is used with sim.schedule(...) '''
+        self.scheduled_generator = self._scheduled_fcn(time)
+        return self
+
+    def schedule(self, time):
+        ''' This api is to schedule directly task.schedule(3) '''
+        self.sim.schedule(time, self)
+
+    def _finish(self):
+        self.finished = True
+        for task in self.waiting_tasks:
+            self.sim.signal(task, finished=True)  # push the blocked task
+
+    def join(self, timeout=float('inf')):
+        if self.finished:
+            return 
+        try:
+            self.waiting_tasks.append(self.sim.parent_process)
+            obj = yield from sim.wait(timeout, cond=lambda c:True)
+        finally:
+            try:
+                waiting_task = self.waiting_tasks.remove(self.sim.parent_process)
+            except ValueError as e:
+                pass
+        return obj

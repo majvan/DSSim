@@ -16,7 +16,7 @@ This file defines producers (publishers) and consumers (subscribers)
 '''
 from abc import abstractmethod
 from inspect import isgeneratorfunction
-from dssim.simulation import DSInterface
+from dssim.simulation import DSInterface, DSProcess
 
 class DSAbstractConsumer(DSInterface):
     ''' An interface for a consumer '''
@@ -42,22 +42,22 @@ class DSConsumer(DSAbstractConsumer):
         if self.cond(data):
             self.forward_method(self.forward_obj, **data)
 
-class DSProcessConsumer(DSAbstractConsumer):
+class DSProcessConsumer(DSAbstractConsumer, DSProcess):
     ''' A consumer which can consume events in a schedulable process.
     '''
     def __init__(self, process, start=False, delay=0, **kwargs):
-        super().__init__(**kwargs)
+        DSProcess.__init__(self, generator=process, **kwargs)
+        assert self.generator == process
         if start:
-            process = self.sim.schedule(delay, process) # update the process with parent decorator
+            process = self.schedule(delay) # update the process with parent decorator
         elif delay != 0:
             raise ValueError('The process can be delayed only if started at initialization')
-        self.process = process
 
     def notify(self, **data):
         ''' Interface which can pass event into a waiting process.
         Note that a notification to a not yet started process will start it
         '''
-        self.sim.signal(self.process, **data)
+        self.sim.signal(self, **data)
 
 class DSAbstractProducer(DSInterface):
     ''' Provides base abstract class for producers '''
@@ -109,7 +109,7 @@ class DSProducer(DSAbstractProducer):
         self._single_process_consumer = False
 
     def add_consumer(self, consumer):
-        if isinstance(consumer, DSProcessConsumer):
+        if isinstance(consumer, DSProcess):
             self.process_consumers.append(consumer)
         else:
             self.consumers.append(consumer)
@@ -131,22 +131,22 @@ class DSProducer(DSAbstractProducer):
         for consumer in self.process_consumers:
             # To reduce cycles, for the DSProcessConsumer we could already schedule against
             # their process.
-            # 1. Producer -> schedule(event, time_process)
+            # 1. Producer -> schedule_event(event, time_process) (and returns)
             # 2. Simulator -> _signal_object(time_process, encapsulated_event)
-            # 3. _signal_object -> send(time_process, encapsulated_event)
-            # 4. time_process -> get the encapsulated producer
-            # and in the case of the only DSProcessConsumer attached, this would be continue
-            # 5. Producer -> notify(DSProcessConsumer, event)
-            # 6. DSProcessConsumer -> signal(event) = send(process, event)
+            # 3.   _signal_object -> send(time_process, encapsulated_event)
+            # 4.     time_process -> get the encapsulated producer
+            # and in the case of the only DSProcessConsumer attached, following would happen:
+            # 5.         Producer -> notify(DSProcessConsumer, event)
+            # 6.           DSProcessConsumer -> signal(event) = send(process, event)
             # With this shortcut, we change the this flow to:
-            # 1. Producer -> schedule(event, time_process)
+            # 1. Producer -> schedule_event(event, time_process) (and returns)
             # 2. Simulator -> _signal_object(process, event)
-            # 3. _signal_object -> send(time_process, event)
+            # 3.   _signal_object -> send(time_process, event)
             # That means performance improvement.
             # The drawback of this solution is that the number of consumers is evaluated
             # in the time of scheduling the event, not in the time when event occurs. This
             # is typically not an issue.
-            super().schedule(time_delta, consumer.process, **event_data)
+            super().schedule(time_delta, consumer, **event_data)
         if self.consumers:
             # Before scheduling of the event, check if it will be consumed.
             # If not- useless schedule => ignore

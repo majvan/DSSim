@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.simulation import DSComponent, DSSchedulable, sim
+from dssim.simulation import DSComponent, DSProcess, sim
 from dssim.pubsub import DSSingleProducer, DSConsumer
 from dssim.components.limiter import Limiter
 
@@ -19,18 +19,17 @@ from dssim.components.limiter import Limiter
 class MCU(DSComponent):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._producer = DSSingleProducer(name=self.name + '.(internal) generator')
         self.limiter = Limiter(0, name=self.name + '.(internal) limiter0')
+        self._producer = DSSingleProducer(name=self.name + '.(internal) event producer')
         self._producer.add_consumer(self.limiter.rx)
         consumer = DSConsumer(self, MCU._on_output, name=self.name + '.(internal) output')
         self.limiter.tx.add_consumer(consumer)
 
     def boot(self):
         ''' This function has to be called after producers are registered '''
-        self.sim.schedule(0, self.generator(20))
-        self.sim.schedule(0, self.limit_controller())
+        self.sim.schedule(0, DSProcess(self.generator(20), name=self.name + '.(internal) generator process'))
+        self.sim.schedule(0, DSProcess(self.limit_controller(), name=self.name + '.(internal) control process'))
 
-    @DSSchedulable
     def limit_controller(self):
         self.limiter.set_throughput(10)  # 0 sec
         yield from self.sim.wait(1)
@@ -48,7 +47,6 @@ class MCU(DSComponent):
         yield from self.sim.wait(1)
         self.limiter.set_throughput(0)  # 7 sec
 
-    @DSSchedulable
     def generator(self, rate):
         n = 0
         delay = 1 / rate
@@ -58,7 +56,7 @@ class MCU(DSComponent):
             n += 1
             # print('Event', n, 'produced @', self.sim.time)
             time = self.sim.time
-            self._producer.signal(n=n)  # some event
+            self._producer.signal(n=n)  # feed the producer with some event
 
     def _on_output(self, n, **others):
         print('Event', n, 'came @', self.sim.time)

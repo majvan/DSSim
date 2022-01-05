@@ -17,7 +17,7 @@ Tests for simulation module
 '''
 import unittest
 from unittest.mock import Mock, call
-from dssim.simulation import DSSimulation, DSAbortException, DSSchedulable, sim
+from dssim.simulation import DSSimulation, DSAbortException, DSSchedulable, DSProcess, sim
 
 class SomeObj:
     pass
@@ -39,20 +39,32 @@ class TestDSSchedulable(unittest.TestCase):
     def __fcn(self):
         return 'Success'
 
-    @DSSchedulable
-    def __process(self):
+    def __generator(self):
         yield 'First return'
         yield 'Second return'
         return 'Success'
 
-    @DSSchedulable
-    def __loopback_process(self):
+    def __loopback_generator(self):
         data = yield
         while True:
             data = yield data
 
-    def test0_fcn(self):
+    @DSSchedulable
+    def __waiting_for_join(self, process):
+        yield from process.join()
+        yield "After process finished"
+
+
+    def test0_schedulable_fcn(self):
         process = self.__fcn()
+        try:
+            next(process)
+        except StopIteration as e:
+            retval = e.value
+        self.assertEqual(retval, 'Success')
+
+    def test1_schedulable_fcn_as_process(self):
+        process = DSProcess(self.__fcn())
         try:
             next(process)
         except StopIteration as e:
@@ -60,8 +72,20 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertEqual(retval, 'Success')
         self.assertEqual(process.value, 'Success')
 
-    def test1_generator(self):
-        process = self.__process()
+    def test2_generator(self):
+        process = self.__generator()
+        retval = next(process)
+        self.assertEqual(retval, 'First return')
+        retval = next(process)
+        self.assertEqual(retval, 'Second return')
+        try:
+            next(process)
+        except StopIteration as e:
+            retval = e.value
+        self.assertEqual(retval, 'Success')
+
+    def test3_process(self):
+        process = DSProcess(self.__generator())
         retval = next(process)
         self.assertEqual(retval, 'First return')
         retval = next(process)
@@ -73,8 +97,26 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertEqual(retval, 'Success')
         self.assertEqual(process.value, 'Success')
 
-    def test2_generator(self):
-        process = self.__process()
+    def test4_generator(self):
+        process = self.__generator()
+        retval = next(process)
+        self.assertEqual(retval, 'First return')
+        retval = process.send('anything0')
+        self.assertEqual(retval, 'Second return')
+        try:
+            retval = process.send('anything1')
+        except StopIteration as e:
+            retval2 = e.value
+        self.assertEqual(retval2, 'Success')
+
+        try:
+            retval = process.send('anything2')
+        except StopIteration as e:
+            retval2 = e.value
+        self.assertEqual(retval2, None)
+
+    def test5_process(self):
+        process = DSProcess(self.__generator())
         retval = next(process)
         self.assertEqual(retval, 'First return')
         retval = process.send('anything0')
@@ -93,14 +135,41 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertEqual(retval2, None)
         self.assertEqual(process.value, None)
 
-    def test3_generator(self):
-        process = self.__loopback_process()
+    def test6_generator(self):
+        process = self.__loopback_generator()
+        retval = next(process)
+        retval = process.send('from_test0')
+        self.assertEqual(retval, 'from_test0')
+        retval = process.send(DSAbortException(producer='test'))
+        self.assertTrue(isinstance(retval, DSAbortException))
+
+    def test7_process(self):
+        process = DSProcess(self.__loopback_generator())
         retval = next(process)
         retval = process.send('from_test0')
         self.assertEqual(retval, 'from_test0')
         retval = process.abort('some_data')
         self.assertTrue(isinstance(retval, DSAbortException))
         self.assertTrue(isinstance(process.value, DSAbortException))
+
+    def test8_process(self):
+        process = DSProcess(self.__generator())
+        process_waiting = DSProcess(self.__waiting_for_join(process))
+        retval = next(process)
+        self.assertEqual(retval, 'First return')
+        self.assertEqual(process.value, 'First return')
+        sim.parent_process = process_waiting
+        retval = next(process_waiting)
+        self.assertEqual(process.value, 'First return')  # process not changed
+        self.assertEqual(process_waiting.value, None)
+        retval = next(process)
+        self.assertEqual(process.value, 'Second return')
+        self.assertEqual(process_waiting.value, None)
+        with self.assertRaises(StopIteration):
+            retval = next(process)
+        self.assertEqual(process.value, 'Success')
+        self.assertEqual(process_waiting.value, 'After process finished')
+
 
 class TestSim(unittest.TestCase):
     ''' Test the time queue class behavior '''
