@@ -275,7 +275,7 @@ class DSProcess(DSComponent):
     This class "extends" generator function for additional info.
     The best practise is to use DSProcess instead of generators.
     '''
-    def __init__(self, generator=None, *args, **kwargs):
+    def __init__(self, generator, *args, **kwargs):
         super().__init__(*args, **kwargs)
         ''' Initializes DSProcess. The input has to be a geneator function. '''
         self.generator = generator
