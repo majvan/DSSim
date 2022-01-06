@@ -18,6 +18,7 @@ Tests for simulation module
 import unittest
 from unittest.mock import Mock, call
 from dssim.simulation import DSSimulation, DSAbortException, DSSchedulable, DSProcess, sim
+from dssim.pubsub import DSTimeProcess
 
 class SomeObj:
     pass
@@ -209,10 +210,12 @@ class TestSim(unittest.TestCase):
 
     def test0_init_reset(self):
         sim = DSSimulation()
-        self.assertIsNotNone(sim.time_process)
+        self.assertIsNone(sim.time_process)
         self.assertEqual(sim.parent_process, None)
         self.assertEqual(len(sim.time_queue), 0)
         self.assertEqual(sim.time, 0)
+        DSTimeProcess(name='Time process', sim=sim)
+        self.assertIsNotNone(sim.time_process)
         sim.schedule(0.5, self.__my_wait_process())
         sim.schedule(1.5, self.__my_wait_process())
         self.assertEqual(len(sim.time_queue), 2)
@@ -240,7 +243,8 @@ class TestSim(unittest.TestCase):
     def test2_time_process(self):
         ''' Assert correct time process and pushing events to time process '''
         sim = DSSimulation()
-        self.assertIsNotNone(sim.time_process)
+        self.assertIsNone(sim.time_process)
+        DSTimeProcess(sim=sim)
         p = SomeObj()
         p.signal = Mock()
         sim.signal(sim.time_process, producer=p, data=1)
@@ -327,6 +331,7 @@ class TestSim(unittest.TestCase):
     def test8_run_infinite_process(self):
         ''' Assert event loop behavior '''
         self.sim = DSSimulation()
+        DSTimeProcess(name='Time process', sim=self.sim)
         producer = SomeObj()
         producer.signal = Mock()
         self.sim.schedule_event(1, {'producer': producer, 'data': 1})
@@ -342,6 +347,7 @@ class TestSim(unittest.TestCase):
 
     def test9_run_finite_process(self):
         self.sim = DSSimulation()
+        DSTimeProcess(name='Time process', sim=self.sim)
         producer = SomeObj()
         producer.signal = Mock()
         self.sim.schedule_event(1, {'producer': producer, 'data': 1})
@@ -357,6 +363,7 @@ class TestSim(unittest.TestCase):
 
     def test10_waiting(self):
         self.sim = DSSimulation()
+        DSTimeProcess(name='Time process', sim=self.sim)
         # the following process will create events for the time queue process
         process = self.__my_wait_process()
         # those events are required to contain a producer
@@ -379,6 +386,7 @@ class TestSim(unittest.TestCase):
 
     def test11_abort(self):
         self.sim = DSSimulation()
+        DSTimeProcess(name='Time process', sim=self.sim)
         # the following process will create events for the time queue process
         process = self.__my_wait_process()
         # those events are required to contain a producer

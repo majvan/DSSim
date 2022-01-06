@@ -20,6 +20,8 @@ from collections.abc import Iterable
 from inspect import isgeneratorfunction
 from dssim.timequeue import TimeQueue
 
+sim = object()
+
 class DSAbortException(Exception):
     ''' Exception used to abort waiting process '''
 
@@ -37,6 +39,7 @@ class DSSimulation:
         The list is only for the application informational purpose to be able to identify
         all the producers which belong to the same simulation entity.
         '''
+        self.time_process = None
         self._restart(time=0)
 
     def restart(self, time=0):
@@ -47,17 +50,6 @@ class DSSimulation:
         self.num_events = 0
         self.time = time
         self.parent_process = None
-        self.time_process = self._time_process()
-        self._kick(self.time_process)
-
-    def _time_process(self):
-        ''' For the events which were produced with a non-process producer, we run
-        additional process which signals them in the scheduled time.
-        '''
-        while True:
-            event = yield from self._wait_for_event(float('inf'), cond=lambda e: True)
-            # Get producer which really produced the event and signal to associated consumers
-            event['producer'].signal(**event)
 
     def schedule_event(self, time, event, process=None):
         ''' Schedules an event object into timequeue '''
@@ -68,7 +60,7 @@ class DSSimulation:
             raise ValueError('The event, if processed by time_process, is missing '
                              'encapsulation of producer. '
                              'Use DSProducer to schedule an event on time_process.')
-        producer = process or self.time_process  # However, it will be picked by time_process
+        producer = process or self.time_process
         self.time_queue.add_element(time, (producer, event))
 
     def delete(self, cond):
@@ -252,6 +244,7 @@ class DSComponent(DSInterface):
     '''
     pass
 
+
 def DSSchedulable(api_func):
     ''' Decorator for schedulable functions / methods.
     DSSchedulable converts a function into a generator so it could be scheduled or
@@ -278,7 +271,7 @@ class DSProcess(DSComponent):
     This class "extends" generator function for additional info.
     The best practise is to use DSProcess instead of generators.
     '''
-    def __init__(self, generator=None, *args, **kwargs):
+    def __init__(self, generator, *args, **kwargs):
         super().__init__(*args, **kwargs)
         ''' Initializes DSProcess. The input has to be a geneator function. '''
         self.generator = generator

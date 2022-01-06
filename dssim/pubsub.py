@@ -16,7 +16,7 @@ This file defines producers (publishers) and consumers (subscribers)
 '''
 from abc import abstractmethod
 from inspect import isgeneratorfunction
-from dssim.simulation import DSInterface, DSProcess
+from dssim.simulation import DSInterface, DSProcess, sim
 
 class DSAbstractConsumer(DSInterface):
     ''' An interface for a consumer '''
@@ -131,7 +131,7 @@ class DSProducer(DSAbstractProducer):
         for consumer in self.process_consumers:
             # To reduce cycles, for the DSProcessConsumer we could already schedule against
             # their process.
-            # 1. Producer -> schedule_event(event, time_process) (and returns)
+            # 1. Producer -> TimeProcess.schedule(event) (and returns)
             # 2. Simulator -> _signal_object(time_process, encapsulated_event)
             # 3.   _signal_object -> send(time_process, encapsulated_event)
             # 4.     time_process -> get the encapsulated producer
@@ -156,3 +156,22 @@ class DSSingleProducer(DSProducer):
     ''' A producer which has only single consumer is removed for simplicity.
     The more generic DSProducer logic is used instead.
     '''
+
+
+class DSTimeProcess(DSProcess):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self._time_process(), *args, **kwargs)
+        self.schedule(0)  # start
+        self.sim.time_process = self
+
+    def _time_process(self):
+        ''' For the events which were produced with a non-process producer, we run
+        additional process which signals them in the scheduled time.
+        '''
+        while True:
+            event = yield from self.sim._wait_for_event(float('inf'), cond=lambda e: True)
+            # Get producer which really produced the event and signal to associated consumers
+            event['producer'].signal(**event)
+
+
+DSTimeProcess(name='Time process', sim=sim)  # create an instance of time process in sim
