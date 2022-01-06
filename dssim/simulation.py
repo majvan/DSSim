@@ -68,7 +68,7 @@ class DSSimulation:
             raise ValueError('The event, if processed by time_process, is missing '
                              'encapsulation of producer. '
                              'Use DSProducer to schedule an event on time_process.')
-        producer = process or self.time_process  # However, it will be picked by time_process
+        producer = process or self.time_process
         self.time_queue.add_element(time, (producer, event))
 
     def delete(self, cond):
