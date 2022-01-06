@@ -15,10 +15,12 @@
 The file provides basic logic to run the simulation and supported methods.
 '''
 import types
+import sys
 from functools import wraps
 from collections.abc import Iterable
 from inspect import isgeneratorfunction
 from dssim.timequeue import TimeQueue
+
 
 class DSAbortException(Exception):
     ''' Exception used to abort waiting process '''
@@ -124,6 +126,12 @@ class DSSimulation:
         except StopIteration as exc:
             # There is nothing more, the schedulable has finished
             retval = False
+        except ValueError as exc:
+            global _exiting
+            if 'generator already executing' in str(exc) and not _exiting:
+                _exiting = True
+                print_cyclic_signal_exception(exc)
+            raise
         self.parent_process = pid
         return retval  # always successful
 
@@ -249,6 +257,7 @@ class DSComponent(DSInterface):
     '''
     pass
 
+
 def DSSchedulable(api_func):
     ''' Decorator for schedulable functions / methods.
     DSSchedulable converts a function into a generator so it could be scheduled or
@@ -350,3 +359,68 @@ class DSProcess(DSComponent):
             except ValueError as e:
                 pass
         return obj
+
+
+_exiting = False  # global var to prevent repeating nested exception frames
+
+def print_cyclic_signal_exception(exc):
+    ''' The function prints out detailed information about frame stack related
+    to the simulation process, filtering out unnecessary info.
+    '''
+    exc_type, exc_value, exc_traceback = sys.exc_info()
+    print('Error:', exc)
+    print('\nAn already running schedulable (DSProcess / generator) was\n'
+          'signalled and therefore Python cannot handle such state.\n'
+          'There are two possible solutions for this issue:\n'
+          '1. You rewrite the code to remove cyclic signalling of processes.\n'
+          '   This is recommended at least to try because this issue might\n'
+          '   signify a real design flaw in the simulation / implementation.\n'
+          '2. Instead of calling sim.signal(process, **event)\n'
+          '   you schedule the event into the queue with zero delta time.\n'
+          '   Example of the modification:\n'
+          '   Previous code:\n'
+          '   sim.signal(process, status="Ok")\n'
+          '   New code:\n'
+          '   sim.schedule_event(0, {"status": "Ok"}, process)\n\n'
+          'Signal stack:')
+    while True:
+        if not exc_traceback.tb_next:
+            break
+        exc_traceback = exc_traceback.tb_next
+    stack, process_stack = [], []
+    f = exc_traceback.tb_frame
+    while f:
+        stack.append(f)
+        f = f.f_back
+    stack.reverse()
+    for frame in stack:
+        if frame.f_code.co_filename != __file__:
+            method = frame.f_code.co_name
+            line = frame.f_lineno
+            filename = frame.f_code.co_filename
+        elif frame.f_code.co_name == '_signal_object':
+            from_process = frame.f_locals['pid']
+            to_process = frame.f_locals['schedulable']
+            event = frame.f_locals['event']
+            d = [method, line, filename, from_process, to_process, event, False, False]
+            process_stack.append(d)
+    # search for the processes to highlight (highlight the loop conflict)
+    conflicting_process = to_process
+    for frame in reversed(process_stack):
+        if frame[3] == conflicting_process:
+            frame[-2] = True  # mark the last from_process which needs to be highlighted
+            break
+    process_stack[-1][-1] = True # mark the last to_process which needs to be highlighted
+    for frame in process_stack:
+           method, line, filename, from_process, to_process, event, from_c, to_c = frame
+           print(f'{method} in {filename}:{line}')
+           if from_c:
+               print(f'  From:  \033[0;31m{from_process}\033[0m')
+           else:
+               print(f'  From:  {from_process}')
+           if to_c:
+               print(f'  To:    \033[0;31m{to_process}\033[0m')
+           else:
+               print(f'  To:    {to_process}')
+           print(f'  Event: {event}')
+    print()

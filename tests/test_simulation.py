@@ -171,6 +171,65 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertEqual(process_waiting.value, 'After process finished')
 
 
+class TestException(unittest.TestCase):
+
+    def __my_buggy_code(self):
+        yield 'First is ok'
+        a = 10 / 0
+        return 'Second unreachable'
+
+    def __first_cyclic(self):
+        yield 'Kick-on first'
+        self.sim.signal(self.process2, data='Signal from first process')
+        yield 'After signalling first'
+        return 'Done first'
+
+    def __second_cyclic(self):
+        yield 'Kick-on second'
+        self.sim.signal(self.process1, data='Signal from second process')
+        yield 'After signalling second'
+        return 'Done second'
+
+    def setUp(self):
+        self.sim = DSSimulation()
+        self.__time_process_event = Mock()
+
+    def test0_exception_usercode_generator(self):
+        process = self.__my_buggy_code()
+        self.sim._kick(process)
+        exc_to_check = None
+        try:
+            self.sim.signal(process, data='My data')
+            # we should not get here, exception is expected
+            self.assertTrue(1 == 2)
+        except ZeroDivisionError as exc:
+            self.assertTrue('generator already executing' not in str(exc))
+
+    def test1_exception_usercode_generators(self):
+        self.process1 = self.__first_cyclic()
+        self.process2 = self.__second_cyclic()
+        sim._kick(self.process1)
+        sim._kick(self.process2)
+        try:
+            self.sim.signal(self.process1, data='My data')
+            # we should not get here, exception is expected
+            self.assertTrue(1 == 2)
+        except ValueError as exc:
+            self.assertTrue('generator already executing' in str(exc))
+
+    def test2_exception_usercode_process(self):
+        self.process1 = DSProcess(self.__first_cyclic(), name="First cyclic", sim=self.sim)
+        self.process2 = DSProcess(self.__second_cyclic(), name="Second cyclic", sim=self.sim)
+        sim._kick(self.process1)
+        sim._kick(self.process2)
+        try:
+            self.sim.signal(self.process1, data='My data')
+            # we should not get here, exception is expected
+            self.assertTrue(1 == 2)
+        except ValueError as exc:
+            self.assertTrue('generator already executing' in str(exc))
+
+
 class TestSim(unittest.TestCase):
     ''' Test the time queue class behavior '''
 
