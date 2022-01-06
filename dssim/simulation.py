@@ -207,9 +207,6 @@ class DSSimulation:
             self.num_events += 1
             self.time = tevent
             self.time_queue.pop()
-
-            # Store current process ID into parent_process variable
-            self.parent_process = producer
             self._signal_object(producer, event_obj)
 
         return self.num_events
