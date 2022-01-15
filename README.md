@@ -37,13 +37,32 @@ There are several types of functions which could be executed by the framework:
 * DSProcess
 
 ### Event handler ###
-These are handlers (hooks) which are executed through a specific internal process called `time_queue`. The `time queue` creates an application framework layer for Producers and Consumers (see below).  
-Event handler takes event as in the function parameter.
+These are handlers (hooks) which are invoked by a specific internal process called `time_queue`. The `time queue` creates an application framework layer for Producers and Consumers (see below).  
+Event handler takes the event as the function parameter.
 
 ### Schedulable function ###
-It is a typical function, which can be run in the future. Such function should be decorated with `@DSSchedulable` decorator.  
-The decorator is converting python function to python generator. Such decorated function is meant to be executed in the future as one-shot.  
-Schedulable function does not handle any event- it may only produce events.
+It is a typical python function, which can be executed in the future. Such function should be decorated with `@DSSchedulable` decorator.  
+Schedulable function does not handle any event- it may only produce events.  
+The scheduled function is meant to be executed in the future as one-shot, i.e. as a normal function.
+The components often define 2 APIs- first for normal call, next for deferred (lazy) call:  
+```
+def send(data):
+    pass
+
+@DSSchedulable  `
+def send_lazy(data):  `
+    send(data)
+```
+
+Meaning that, you cannot create a function X in your simulation and schedule it for later execution without the decorator. At the same time, such decorated function is not callable directly.
+```
+sim.schedule(5, send_lazy(data))  # This will schedule function in 5 seconds
+sim.schedule(5, send(data))       # This won't schedule the send function
+send(data)                        # This will immediately call the function
+send_lazy(data)                   # This won't call the function
+```
+
+Internally, the decorator is converting python function to python generator.
 
 ### Generator ###
 See [python generator](https://wiki.python.org/moin/Generators) for your reference.  
@@ -59,14 +78,14 @@ The difference between DSProcess and a  generator is that DSPRocess adds another
 Following table can be used for your reference in order to decide what type of code in your simulation:
 
 | ↓ Characteristics / Type of code → | Event handler | Schedulable function | Python generator | DSProcess | Remark / Explanation |
-| ------------------------------   | ------------- | -------------------- | ---------------- | --------- | -------------------- |
-| Can send immediate signals       | True          | True                 | True             | True      | Signals are events which are emitted immediately |
-| Can schedule events              | True          | True                 | True             | True      |                      |
-| Can receive events               | True          | False                | True             | True      |                      |
-| Schedulable by sim.schedule()    | False         | True                 | True             | True      | A event handler can be indirectly scheduled by scheduling an event which it handles |
-| Waitable for event by sim.wait() | False         | False                | True             | True      | If False, it must return without `yield`-ing |
-| Keeps last value + return value  | False         | False                | False            | True      | The (return) value can be retrieved from `process.value` |
-| Can be waited until finish       | False         | False                | False            | True      | A wait for process by `yield from process.join()` |
+| ------------------------------    | ------------- | -------------------- | ---------------- | --------- | -------------------- |
+| Can send immediate signals        | True          | True                 | True             | True      | Signals are events which are emitted immediately |
+| Can schedule events               | True          | True                 | True             | True      |                      |
+| Can receive events                | True          | False                | True             | True      |                      |
+| Schedulable by `sim.schedule()`   | False         | True                 | True             | True      | A event handler can be indirectly scheduled by scheduling an event which it handles |
+| Waitable for event by `yield from sim.wait()`| False         | False                | True             | True      | If not waitable, it must not `yield` anywehere in the code body |
+| Keeps last value + return value   | False         | False                | False            | True      | The (return) value can be retrieved from `process.value` |
+| Can be waited until finish        | False         | False                | False            | True      | A wait for process by `yield from process.join()` |
 
 The simplification rule to decide what type of code to use:
 * If you want to create an easy event handler with no intermediate states, use Event Handler 
