@@ -3,9 +3,9 @@
 
 The Digital System Simulator is a Python framework to simulate deterministic event driven (digital) systems. It simulates time-based behavior of digital components and interaction between them.
 # Main goal
-The main goal of this simulator is to be able to quickly write a simulation application. The application should be easy to read and understand by anyone who wants to contribute.
-The application typically describes everything you do when you want to perform such simulation with hardware.
-For instance, if you create an embedded system and communication of a peripheral of an MCU:
+The main goal of this simulator is to be able to quickly write a simulation application. The application should be easy to read and understand by anyone who wants to contribute.  
+The application typically describes everything you do when you want to perform such simulation with hardware.  
+For instance, if you create an embedded system and communication of a peripheral of an MCU:  
 1. You design a layer of the components
 2. You implement logic of the components of MCU including its peripherals.
 3. You connect the components (the external interfaces) on the appropriate level, like you do e.g. with wires and signals on PCB.
@@ -24,33 +24,71 @@ Typically, an application creates only one instance of simulator, which has dedi
 
 The Simulator also holds the actual time of the simulation.
 
-## Schedulable function calls
-Application can define Schedulable function call. Such Schedulable function is scheduled to be run in the future as a process.
-We can use two types of the Schedulable:
-* A function calling `yield from sim.wait(...)` API: such Schedulable is meant to wait for events or to sleep for defined time
-* A normal python function  decorated with `@DSSchedulable` decorator: such function is meant to be executed in the future as one-shot
+## Events
+The Event object is a Python dictionary (dict) containing information. The reason to choose a dictionary type for an Event class was the flexibility of Python language to use them directly in keyword arguments of the handlers.
+* When an Event handler is used, it can specify (by using `DSConsumer`) filter function for the events to be delivered
+* When a code `yield sim.wait(...)` for an event, it can specify filter function for the events to be delivered in the `sim.wait(...)` call
+
+## Code executable by the framework
+There are several types of functions which could be executed by the framework:
+* Event handlers
+* Schedulable functions
+* Generators
+* DSProcess
+
+### Event handler ###
+These are handlers (hooks) which are executed through a specific internal process called `time_queue`. The `time queue` creates an application framework layer for Producers and Consumers (see below).  
+Event handler takes event as in the function parameter.
+
+### Schedulable function ###
+It is a typical function, which can be run in the future. Such function should be decorated with `@DSSchedulable` decorator.  
+The decorator is converting python function to python generator. Such decorated function is meant to be executed in the future as one-shot.  
+Schedulable function does not handle any event- it may only produce events.
+
+### Generator ###
+See [python generator](https://wiki.python.org/moin/Generators) for your reference.  
+Here we specifically use such generators, which wait for events from other processes by calling `yield from sim.wait(...)` API.  
+Generator is considered to be light-weight `DSProcess`.  
+Recommendation is to use DSProcess instead.  
+
+### DSProcess ###
+A DSProcess can be created from instantiatized generator by calling `DSProcess(generator(), ...)` constructor.  
+The difference between DSProcess and a  generator is that DSPRocess adds another properties which can be used in other APIs.
+
+### Overview ###
+Following table can be used for your reference in order to decide what type of code in your simulation:
+
+| ↓ Characteristics / Type of code → | Event handler | Schedulable function | Python generator | DSProcess | Remark / Explanation |
+| ------------------------------   | ------------- | -------------------- | ---------------- | --------- | -------------------- |
+| Can send immediate signals       | True          | True                 | True             | True      | Signals are events which are emitted immediately |
+| Can schedule events              | True          | True                 | True             | True      |                      |
+| Can receive events               | True          | False                | True             | True      |                      |
+| Schedulable by sim.schedule()    | False         | True                 | True             | True      | A event handler can be indirectly scheduled by scheduling an event which it handles |
+| Waitable for event by sim.wait() | False         | False                | True             | True      | If False, it must return without `yield`-ing |
+| Keeps last value + return value  | False         | False                | False            | True      | The (return) value can be retrieved from `process.value` |
+| Can be waited until finish       | False         | False                | False            | True      | A wait for process by `yield from process.join()` |
+
+The simplification rule to decide what type of code to use:
+* If you want to create an easy event handler with no intermediate states, use Event Handler 
+* Use DSProcess otherwise
 
 ## Producers and Consumers
-Another approach, typically used in the simulation, is to schedule events. An event is an object containing information about even in the specific time. This approach is built on top of the process scheduling.
-Specifically, a special process called `time_process` is created and all the Producers encapsulate the event data and schedule the run of the `time_process`. The `time_process`, when scheduled, takes the event, unpacks it and then handles the event object itself.
+The easier approach used in the simulation is to schedule events and handle them in the event handlers.  
+An event is an object containing information about even in the specific time.  
+Specifically, a special internal process called `time_process` is created. A `DSProducer` interface defines API to generate event in the future (or now).  
+The event is taken by `time_process` and is distributed to all connected `DSConsumer`, which have associated function handler.  
 
-Before the simulation, the application registers the "Producer to Consumer" (Publisher and Subscriber terms are also used) interconnections.
-One Producer can produce events to N Consumers (1:N), where N is from 0 to infinity.
-The interconnection information is stored in the Producer objects (i.e. which Consumers are connected).
+The association between `DSProducer` and `DSConsumer` is typically initialized before the simulation. The simulation application registers the "Producer to Consumer" (Publisher and Subscriber terms are also used) interconnections.  
+One Producer can produce events to N Consumers (1:N), where N is from 0 to infinity.  
+The interconnection information is stored in the Producer objects (i.e. which Consumers are connected).  
 
-An application creates Producers and Consumers, typically when defining a Component.
-Every Producer is associated during initialization with Simulator instance.
+An application creates Producers and Consumers, typically when defining a Component. Every Producer is associated during initialization with Simulator instance.
 
 The DSSIM application defines two types of Consumers:
 * A Consumer Handler which runs an event handler function
 Such type of consumer handles the event in a function and then returns.
 * A Consumer Process
-Such type of consumer runs typically in an infinite loop and calls some of the sim.wait(...) function to be fed by incoming event. When scheduling an event which is to be signalled into a consumer process, the event is directly put onto process time queue.
-
-## Events
-The Event object is a Python dictionary (dict) containing information. The reason to choose a dictionary type for an Event class was the flexibility of Python language to use them directly in keyword arguments of the handlers.
-* When a Consumer Handler is constructed, it can specify filter function for the events to be delivered.
-* When a Consumer Process waits for an event, it can specify filter function for the events to be waited for.
+It is a `DSProcess` type of code running typically in an infinite loop. In the loop it `yield sim.wait(...)` for an incoming event. Events are fed by the associated Producer. 
 
 ## Components
 A Component is intended to implement a logic which describes the discrete system. Typically, it can describe physical behavior of a hardware component in the Python language. 
@@ -59,7 +97,7 @@ The component such consists of three main parts:
 * Output Interfaces: Producers, which generate Events
 * Logic: python code which transfers Events on the input to Events on the output
 
-Both input and output Interfaces are provided either as *private* Producers and Consumers and *public* Producers and Consumers.
+Both input and output Interfaces are provided either as *private* Producers and Consumers and *public* Producers and Consumers.  
 > Public endpoints are meant to be used by application to create its own logic on top of them. As an example, an UART component exports TX IRQ and RX IRQ Producer and as well TX Producer and RX Consumer.
 
 The DSSIM framework provides its own pre-programmed Components with logic for basic typical functionality, like UART, etc.
@@ -88,25 +126,11 @@ If the architecture and behavior of the component is very important to the lowes
 The layers correspond to the ISO/OSI communication stack. Every layer has its own Producers and Consumers.
 To understand the principle, let's focus first on the ISO/OSI stack.
 
-In the ISO/OSI stack, the receiver of an information communicates (virtually) with the transmitter of that information in the same level. For instance, a Link Layer of component A
-communicates with the Link layer of its counterpart.
+In the ISO/OSI stack, the receiver of an information communicates (virtually) with the transmitter of that information in the same level. For instance, a Link Layer of component A communicates with the Link layer of its counterpart.
 The virtual communication could be often provided by a Component itself (depends on implementation).
 
-Some Components provide underlying layers. Using the underlying layer (typically specifying it in the Component constructor) a caller can use the typical ISO/OSI stack down to the lowest layer defined.
+Some Components provide underlying layers. Using the underlying layer (typically specifying it in the Component constructor) a caller can use the typical ISO/OSI stack down to the lowest layer defined.  
 With such approach you specify the behavior of peripheral to the lowest detail. The downside is that the performance of the simulation decreases (see Known issues).
-
-# Rules for Schedulable functions
-The concept of Schedulable functions is equivalent to the Async functions in Python's asyncio.
-1. Schedulable function should be declared with with `@Schedulable` decorator.
-2. When any function wants to call a Schedulable function, it should declare itself to be `@Schedulable`.
-3. A Schedulable generator is prohibited. That means, the Schedulable must not use its own `yield [value | call(...)]>`.
-4. Calling a Schedulable function from Schedulable function is done through `yield from [schedulable_call(...)]>`. It is equivalent of `await` of asyncio Python.
-5. If a caller wants to schedule a Schedulable function call from regular event handler, the caller should use `sim.schedule(time_delta, schedulable_call(...))`.
-
-Components export many Schedulable functions.
-The DSSIM core exports one Schedulable: `sim.wait(time_delta)`.
-
-This Schedulable is the primitive to build other Schedulables.
 
 # Known issues
 The most noticeable downside of DSSIM is its performance (the execution time) . It is caused by the language and the penalty from the language flexibility.
