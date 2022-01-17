@@ -66,12 +66,13 @@ class DSSimulation:
         if time < 0:
             raise ValueError('The time is relative from now and cannot be negative')
         # producer = event['producer']  # Encapsulation of real producer done in the producer.
-        if not process and 'producer' not in event:
+        if (process == self.time_process) and 'producer' not in event:
             raise ValueError('The event, if processed by time_process, is missing '
                              'encapsulation of producer. '
                              'Use DSProducer to schedule an event on time_process.')
-        producer = process or self.time_process
-        self.time_queue.add_element(time, (producer, event))
+        consumer = process or self.parent_process  # schedule to a process or to itself
+        self.time_queue.add_element(time, (consumer, event))
+        return event
 
     def delete(self, cond):
         ''' An interface method to delete events on the queue '''
@@ -186,7 +187,6 @@ class DSSimulation:
         except StopIteration as exp:
             pass
 
-    # @DSSchedulable - not needed, removed to reduce code complexity
     def _wait_for_event(self, cond):
         ''' Provides a backend for the wait() method.
         Handles the reception of the event / an exception.
@@ -195,9 +195,11 @@ class DSSimulation:
             event = yield
             if event is None:  # timeout received
                 return event
-            if isinstance(event, Exception):
+            if isinstance(event, Exception):  # any excpetion raised, including TimeoutException
                 raise event
-            if cond(event):
+            if callable(cond) and cond(event):  # there was a filter condition function set and the conditions is met
+                return event
+            if cond == event:  # we are expecting exact event and it came
                 return event
 
     def run(self, up_to=None):
@@ -208,13 +210,13 @@ class DSSimulation:
             up_to = float('inf')
         while len(self.time_queue) > 0:
             # Get the first event on the queue
-            tevent, (producer, event_obj) = self.time_queue.get0()
+            tevent, (process, event_obj) = self.time_queue.get0()
             if tevent >= up_to:
                 break
             self.num_events += 1
             self.time = tevent
             self.time_queue.pop()
-            self._signal_object(producer, event_obj)
+            self._signal_object(process, event_obj)
 
         return self.num_events
 

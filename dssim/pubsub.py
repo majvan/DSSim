@@ -79,10 +79,10 @@ class DSAbstractProducer(DSInterface):
     def schedule(self, time_delta, consumer_process=None, **event_data):
         ''' Schedule future event with parametrized event '''
         if consumer_process:
-            dsevent = event_data
+            self.sim.schedule_event(time_delta, event_data, consumer_process)
         else:
             dsevent = self.encapsulate_data_to_transport(**event_data)
-        self.sim.schedule_event(time_delta, dsevent, consumer_process)
+            self.sim.schedule_event(time_delta, dsevent, self.sim.time_process)
 
     @abstractmethod
     def add_consumer(self, consumer):

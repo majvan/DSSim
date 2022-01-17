@@ -107,6 +107,7 @@ class TestProducer(unittest.TestCase):
     def setUp(self):
         self.consumer_called = []
         self.sim = SimMock()
+        self.sim.time_process = SimMock()
         self.sim.signal = Mock(return_value=True) # always returns true
         self.sim.schedule = Mock(return_value=1000) # new process id retval
         self.sim.schedule_event = Mock()
@@ -145,7 +146,7 @@ class TestProducer(unittest.TestCase):
         self.assertEqual(p.get_consumers(), [c,])
         self.sim.schedule.assert_not_called()
         p.schedule(0.5, data=1)
-        self.sim.schedule_event.assert_called_once_with(0.5, {'producer':p, 'data':1}, None)
+        self.sim.schedule_event.assert_called_once_with(0.5, {'producer':p, 'data':1}, self.sim.time_process)
         self.sim.schedule_event.reset_mock()
 
     def test3_producer_with_scheduled_event_single_process(self):

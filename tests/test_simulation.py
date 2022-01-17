@@ -310,12 +310,13 @@ class TestSim(unittest.TestCase):
         ''' Assert working with time queue when pushing events '''
         sim = DSSimulation()
         sim.time_queue.add_element = Mock()
+        sim.parent_process = 123456
         event_obj = {'producer': None, 'data': 1}
         sim.schedule_event(10, event_obj)
-        sim.time_queue.add_element.assert_called_once_with(10, (sim.time_process, event_obj))
+        sim.time_queue.add_element.assert_called_once_with(10, (123456, event_obj))
         sim.time_queue.add_element.reset_mock()
         sim.schedule_event(0, event_obj)
-        sim.time_queue.add_element.assert_called_once_with(0, (sim.time_process, event_obj))
+        sim.time_queue.add_element.assert_called_once_with(0, (123456, event_obj))
         sim.time_queue.add_element.reset_mock()
         with self.assertRaises(ValueError):
             sim.schedule_event(-0.5, event_obj)
@@ -351,9 +352,9 @@ class TestSim(unittest.TestCase):
             self.sim.schedule_event(-0.5, {'producer': parent_process, 'data': 1})
         with self.assertRaises(ValueError):
             # missing producer
-            self.sim.schedule_event(1, {'data': 1})
+            self.sim.schedule_event(1, {'data': 1}, self.sim.time_process)
 
-        self.sim.schedule_event(2, {'producer': parent_process, 'data': 1})
+        self.sim.schedule_event(2, {'producer': parent_process, 'data': 1}, self.sim.time_process)
         time, (process, event_obj) = self.sim.time_queue.pop()
         self.assertEqual((time, process), (2, self.sim.time_process))
         self.assertEqual(event_obj, {'producer': parent_process, 'data': 1})
@@ -388,12 +389,16 @@ class TestSim(unittest.TestCase):
         self.sim = DSSimulation()
         producer = SomeObj()
         producer.signal = Mock()
-        self.sim.schedule_event(1, {'producer': producer, 'data': 1})
-        self.sim.schedule_event(2, {'producer': producer, 'data': 2})
-        self.sim.schedule_event(3, {'producer': producer, 'data': 3})
+        self.sim.parent_process = Mock()
+        self.sim.schedule_event(1, {'producer': producer, 'data': 1}, self.sim.time_process)
+        self.sim.schedule_event(2, {'producer': producer, 'data': 2}, self.sim.time_process)
+        self.sim.schedule_event(3, {'producer': producer, 'data': 3}, self.sim.time_process)
         num_events = self.sim.run()
         self.assertEqual(num_events, 3)
-        calls = [call(producer=producer, data=1), call(producer=producer, data=2), call(producer=producer, data=3),]
+        calls = [
+            call(producer=producer, data=1),
+            call(producer=producer, data=2),
+            call(producer=producer, data=3),]
         producer.signal.assert_has_calls(calls)
         producer.signal.reset_mock()
         num_events = len(self.sim.time_queue)
@@ -403,12 +408,14 @@ class TestSim(unittest.TestCase):
         self.sim = DSSimulation()
         producer = SomeObj()
         producer.signal = Mock()
-        self.sim.schedule_event(1, {'producer': producer, 'data': 1})
-        self.sim.schedule_event(2, {'producer': producer, 'data': 2})
-        self.sim.schedule_event(3, {'producer': producer, 'data': 3})
+        self.sim.schedule_event(1, {'producer': producer, 'data': 1}, self.sim.time_process)
+        self.sim.schedule_event(2, {'producer': producer, 'data': 2}, self.sim.time_process)
+        self.sim.schedule_event(3, {'producer': producer, 'data': 3}, self.sim.time_process)
         num_events = self.sim.run(2.5)
         self.assertEqual(num_events, 2)
-        calls = [call(producer=producer, data=1), call(producer=producer, data=2),]
+        calls = [
+            call(producer=producer, data=1),
+            call(producer=producer, data=2),]
         producer.signal.assert_has_calls(calls)
         producer.signal.reset_mock()
         num_events = len(self.sim.time_queue)
@@ -422,9 +429,9 @@ class TestSim(unittest.TestCase):
         producer = EventForwarder(self, process)
         self.sim.parent_process = process
         self.sim._kick(process)
-        self.sim.schedule_event(1, {'producer': producer, 'data': 1})
-        self.sim.schedule_event(2, {'producer': producer, 'data': 2})
-        self.sim.schedule_event(3, {'producer': producer, 'data': 3})
+        self.sim.schedule_event(1, {'producer': producer, 'data': 1}, self.sim.time_process)
+        self.sim.schedule_event(2, {'producer': producer, 'data': 2}, self.sim.time_process)
+        self.sim.schedule_event(3, {'producer': producer, 'data': 3}, self.sim.time_process)
         num_events = self.sim.run(5)
         self.assertEqual(num_events, 4)
         # first event is dropped, because though it was taken by the time_process, the process condition was
