@@ -276,7 +276,7 @@ class TestSim(unittest.TestCase):
         sim.schedule(1.5, self.__my_wait_process())
         self.assertEqual(len(sim.time_queue), 2)
         sim.run(1)
-        self.assertEqual(sim.time, 0.5)
+        self.assertEqual(sim.time, 1)
         self.assertEqual(len(sim.time_queue), 1)
         sim.restart(0.9)
         self.assertIsNotNone(sim.time_process)
@@ -288,11 +288,11 @@ class TestSim(unittest.TestCase):
         ''' Assert kicking and pushing events '''
         self.sim = DSSimulation()
         self.assertIsNotNone(sim.time_process)
-        sim.time_process = self.__my_time_process()
-        sim._kick(sim.time_process)  # kick on the time process
+        self.sim.time_process = self.__my_time_process()
+        self.sim._kick(self.sim.time_process)  # kick on the time process
         self.__time_process_event.assert_called_once_with('kick-on')
         self.__time_process_event.reset_mock()
-        sim.signal(sim.time_process, data=1)
+        self.sim.signal(self.sim.time_process, data=1)
         self.__time_process_event.assert_called_once_with(0, data=1)
         self.__time_process_event.reset_mock()
 
@@ -342,9 +342,11 @@ class TestSim(unittest.TestCase):
             # missing producer
             self.sim.schedule(1, self.__my_handler())
 
-        parent_process = sim.schedule(0, my_process)
+        parent_process = self.sim.schedule(0, my_process)
         self.assertNotEqual(parent_process, my_process)
-        self.__time_process_event.assert_called_once_with('kick-on')
+        self.__time_process_event.assert_not_called()
+        self.sim.run(0.5)
+        self.__time_process_event.called_once_with('kick-on')
         self.__time_process_event.reset_mock()
         # schedule an event
         with self.assertRaises(ValueError):
@@ -358,15 +360,14 @@ class TestSim(unittest.TestCase):
         time, (process, event_obj) = self.sim.time_queue.pop()
         self.assertEqual((time, process), (2, self.sim.time_process))
         self.assertEqual(event_obj, {'producer': parent_process, 'data': 1})
-        retval = self.sim._signal_object(event_obj['producer'], event_obj)
+        #self.sim.run(2.5)
+        retval = self.sim.signal_object(event_obj['producer'], event_obj)
         self.__time_process_event.assert_called_once_with(2, producer=event_obj['producer'], data=1)
         self.__time_process_event.reset_mock()
-        self.assertEqual(retval, True)
 
         retval = self.sim.abort(parent_process, testing=-1)
         self.__time_process_event.assert_called_once_with(2, abort=True, testing=-1)
         self.__time_process_event.reset_mock()
-        self.assertEqual(retval, False)
 
     def test6_scheduling(self):
         ''' Assert the delay of scheduled process '''

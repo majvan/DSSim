@@ -16,6 +16,7 @@ The file provides basic logic to run the simulation and supported methods.
 '''
 import types
 import sys
+import inspect
 from functools import wraps
 from collections.abc import Iterable
 from inspect import isgeneratorfunction
@@ -107,13 +108,53 @@ class DSSimulation:
         self.parent_process = old_process
         return new_process
 
-    def _signal_object(self, schedulable, event):
+    def _check_cond(self, cond, event):
+        ''' Returns pair of info ("event passing", "value of event") '''
+        if event is None:  # timeout received
+            return True, None
+        if isinstance(event, Exception):  # any exception raised
+            return True, event
+        if callable(cond) and cond(event):  # there was a filter function set and the condition is met
+            return True, event
+        elif cond == event:  # we are expecting exact event and it came
+            return True, event
+        else:  # the event does not match our condition and hence will be ignored
+            return False, None
+
+    def _get_condition(self, schedulable):
+        ''' This is a helper to get 'cond' variable from the stack of process / generator waiting in wait '''
+
+        # The variable we get from schedulable by inspecting its stack. It is the only possibility how
+        # to do it for generators. However for DSProcess there is another way- to set condition info
+        # into process attribute before going to wait and read it directly here.
+        # For now we get DSProcess's generator and use the same method as for generator/
+        sched = schedulable.generator if isinstance(schedulable, DSProcess) else schedulable
+        while True:
+            variables = dict(inspect.getmembers(sched))
+            fcn = variables.get('__qualname__', None)
+            if not fcn:
+                 # the generator is not waiting in our wait, so we return a condition which accepts
+                 # every event
+                 return lambda c: True
+            if 'DSSimulation.wait' in fcn:  # search for the wait function
+                frame = variables['gi_frame']
+                cond = frame.f_locals['cond']  # get the local variable 'cond'
+                return cond
+            sched = variables['gi_yieldfrom']  # get next frame of the stack
+
+    def check_condition(self, schedulable, event):
+        cond = self._get_condition(schedulable)
+        retval, event = self._check_cond(cond, event)
+        return retval
+
+    def signal_object(self, schedulable, event):
         ''' Send an event object to a schedulable consumer '''
-        retval = True
+
         # We want to kick from this process to another process (see below). However, after
         # returning back to this process, we want to renew our process ID back to be used.
         # We do that by remembering the pid here and restoring at the end.
         pid = self.parent_process
+
         try:
             # We want to kick from this process another 'schedulable' process. So we will change
             # the process ID (we call it self.parent_process). This is needed because if the new
@@ -125,33 +166,63 @@ class DSSimulation:
             self.parent_process = schedulable
             schedulable.send(event)
         except StopIteration as exc:
-            # There is nothing more, the schedulable has finished
-            retval = False
+            # There is nothing more, the schedulable has finished and is not waiting anymore
+            pass
         except ValueError as exc:
             global _exiting
             if 'generator already executing' in str(exc) and not _exiting:
                 _exiting = True
                 print_cyclic_signal_exception(exc)
             raise
-        self.parent_process = pid
-        return retval  # always successful
+        finally:
+            self.parent_process = pid
 
     def signal(self, schedulable, **event):
         ''' Send an event object to a consumer process. Convert event from parameters to object. '''
-        return self._signal_object(schedulable, event)
+
+        # We will be sending signal (event) to a schedulable, which has some condition set
+        # upon waiting for a pattern event.
+        # We do it early in order to know if the schedulable is going to reject the event or
+        # not. The information from accepting / rejecting the event gives us valuable info.
+        # pre_check means that the check of condition for the schedulable was already done
+        if not self.check_condition(schedulable, event):
+            return False  # not signalled
+        self.signal_object(schedulable, event)
+        return True
 
     def abort(self, schedulable, **info):
         ''' Send abort exception to a consumer process. Convert event from parameters to object. '''
-        return self._signal_object(schedulable, DSAbortException(self.parent_process, **info))
+        self.signal_object(schedulable, DSAbortException(self.parent_process, **info))
 
     def _scheduled_fcn(self, time, schedulable):
         ''' Start a schedulable process with possible delay '''
-        if time:
+        try:
             yield from self.wait(time)
+        except DSAbortException as exc:
+            return
         retval = yield from schedulable
         return retval
 
-    # @DSSchedulable - not needed, removed to reduce code complexity
+    def _wait_for_event(self, cond):
+        try:
+            # Wait for next event
+            event = yield
+	    # We received an event. In the lazy evaluation case, we would be now calling
+            # _check_cond and returning or raising an event only if the condition matches,
+            # otherwise we would be waiting in an infinite loop here.
+            # However we do an early evaluation of conditions- they are checked upon
+            # calling signal_object and we know that the conditions to return / raise an
+            # exceptions are satisfied. See the code there for more info.
+
+            # Convert exception signal to a real exception
+            if isinstance(event, Exception):
+                raise event
+        except Exception as exc:
+            # If we got any exception, we will not use the other events anymore
+            self.delete(lambda e: e[0] is self.parent_process)
+            raise
+        return event
+
     def wait(self, timeout=float('inf'), cond=lambda c: False):
         ''' Wait for an event from producer for max. timeout time. The criteria which events to be
         accepted is given by cond. An accepted event returns from the wait function. An event which
@@ -167,14 +238,11 @@ class DSSimulation:
         # just ended and disappeared in scheduler. But we need that the scheduler is said to plan
         # another timeout for this process.
         schedulable = self.parent_process
-        # Put myself (my process) on the queue
+        # Put myself (my process) on the queue. Next line may be skipped if timeout is inf.
         self.schedule_timeout(timeout, schedulable)
-        try:
-            event = yield from self._wait_for_event(cond)
-        except Exception as exc:
-            # If we got any exception, we will never use the timeout anymore
-            self.delete(lambda e: e[0] is schedulable)
-            raise
+
+        event = yield from self._wait_for_event(cond)
+
         if event is not None:
             # If we terminated before timeout, then the timeout event is on time queue- remove it
             self.delete(lambda e: e[0] is schedulable)
@@ -186,21 +254,6 @@ class DSSimulation:
             next(schedulable)
         except StopIteration as exp:
             pass
-
-    def _wait_for_event(self, cond):
-        ''' Provides a backend for the wait() method.
-        Handles the reception of the event / an exception.
-        '''
-        while True:
-            event = yield
-            if event is None:  # timeout received
-                return event
-            if isinstance(event, Exception):  # any excpetion raised, including TimeoutException
-                raise event
-            if callable(cond) and cond(event):  # there was a filter condition function set and the conditions is met
-                return event
-            if cond == event:  # we are expecting exact event and it came
-                return event
 
     def run(self, up_to=None):
         ''' This is the simulation machine. In a loop it takes first event and process it.
@@ -216,8 +269,10 @@ class DSSimulation:
             self.num_events += 1
             self.time = tevent
             self.time_queue.pop()
-            self._signal_object(process, event_obj)
+            if self.check_condition(process, event_obj):
+                self.signal_object(process, event_obj)
 
+        self.time = up_to
         return self.num_events
 
 
@@ -399,7 +454,7 @@ def print_cyclic_signal_exception(exc):
             method = frame.f_code.co_name
             line = frame.f_lineno
             filename = frame.f_code.co_filename
-        elif frame.f_code.co_name == '_signal_object':
+        elif frame.f_code.co_name == 'signal_object':
             from_process = frame.f_locals['pid']
             to_process = frame.f_locals['schedulable']
             event = frame.f_locals['event']

@@ -132,16 +132,16 @@ class DSProducer(DSAbstractProducer):
             # To reduce cycles, for the DSProcessConsumer we could already schedule against
             # their process.
             # 1. Producer -> schedule_event(event, time_process) (and returns)
-            # 2. Simulator -> _signal_object(time_process, encapsulated_event)
-            # 3.   _signal_object -> send(time_process, encapsulated_event)
+            # 2. Simulator -> signal_object(time_process, encapsulated_event)
+            # 3.   signal_object -> send(time_process, encapsulated_event)
             # 4.     time_process -> get the encapsulated producer
             # and in the case of the only DSProcessConsumer attached, following would happen:
             # 5.         Producer -> notify(DSProcessConsumer, event)
             # 6.           DSProcessConsumer -> signal(event) = send(process, event)
             # With this shortcut, we change the this flow to:
             # 1. Producer -> schedule_event(event, time_process) (and returns)
-            # 2. Simulator -> _signal_object(process, event)
-            # 3.   _signal_object -> send(time_process, event)
+            # 2. Simulator -> signal_object(process, event)
+            # 3.   signal_object -> send(time_process, event)
             # That means performance improvement.
             # The drawback of this solution is that the number of consumers is evaluated
             # in the time of scheduling the event, not in the time when event occurs. This
