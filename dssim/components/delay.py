@@ -15,8 +15,7 @@
 Easy propagation delay component. The original producer is preserved at the
 producer output.
 '''
-from dssim.simulation import DSComponent
-from dssim.pubsub import DSConsumer, DSProducer
+from dssim import DSComponent, DSCallback, DSProducer
 
 
 class Delay(DSComponent):
@@ -24,9 +23,8 @@ class Delay(DSComponent):
     def __init__(self, delay=None, name='delay', **kwargs):
         super().__init__(**kwargs)
         self.set_delay(delay)
-
-        self.iif = DSConsumer(self, Delay._on_event, name=self.name + '.in', sim=self.sim)
-        self.oif = DSProducer(name=self.name + '.out', sim=self.sim)
+        self.rx = DSCallback(self._on_event, name=self.name + '.rx', sim=self.sim)
+        self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
 
     def set_delay(self, delay):
         ''' Set the delay '''
@@ -34,5 +32,4 @@ class Delay(DSComponent):
 
     def _on_event(self, producer, **event):
         ''' Consumer which feeds the output after the programmed delay '''
-        producer = self.oif
-        self.oif.schedule(self.delay, producer=producer, **event)
+        self.tx.schedule_kw_event(self.delay, producer=self.rx, **event)

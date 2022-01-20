@@ -14,40 +14,113 @@
 '''
 A queue of events with runtime flexibility of put / get events.
 '''
-from dssim.simulation import DSComponent
+from dssim.base import SignalMixin
+from dssim.pubsub import DSConsumer, DSProducer
 
-class Queue(DSComponent):
+
+class Queue(DSConsumer, SignalMixin):
     ''' The (FIFO) queue of events is a SW component which can dynamically
     be used to put an event in and get (or wait for- if the queue is empty)
     a queued event.
     Queue does not use any routing of signals.
     '''
-    def __init__(self, *args, **kwargs):
+    def __init__(self, capacity=float('inf'), *args, **kwargs):
         ''' Init Queue component. No special arguments here. '''
         super().__init__(*args, **kwargs)
+        self.tx_changed = DSProducer(name=self.name+'.tx', sim=self.sim)
+        self.capacity = capacity
         self.queue = []
-        self.waiting_tasks = []
 
-    def put(self, **event):
+    def send(self, event):
+        return self.put_nowait(event) is not None
+
+    def put_nowait(self, *obj):
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
-        if not self.waiting_tasks:
-            self.queue.append(event)
+        if len(self) + len(obj) <= self.capacity:
+            self.queue += list(obj)
+            self.tx_changed.schedule_event(0, 'queue changed')
+            retval = obj
         else:
-            self.sim.signal(self.waiting_tasks[0], **event)
+            retval = None
+        return retval
 
-    def get(self, timeout=float('inf')):
+    async def put(self, timeout=float('inf'), *obj):
+        ''' Put an event into queue. The event can be consumed anytime in the future. '''
+        with self.sim.consume(self.tx_changed):
+            retval = await self.sim.check_and_wait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)  # wait while first element does not match the cond
+        if retval is not None:
+            self.queue += list(obj)
+            self.tx_changed.schedule_event(0, 'queue changed')
+        return retval
+
+    def gput(self, timeout=float('inf'), *obj):
+        ''' Put an event into queue. The event can be consumed anytime in the future. '''
+        with self.sim.consume(self.tx_changed):
+            retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)  # wait while first element does not match the cond
+        if retval is not None:
+            self.queue += list(obj)
+            self.tx_changed.schedule_event(0, 'queue changed')
+        return retval
+
+    def get_nowait(self, amount=1, cond=lambda e: True):
+        if len(self) >= amount and cond(self.queue[:amount]):
+            retval = self.queue[:amount]
+            self.queue = self.queue[amount + 1:]
+            self.tx_changed.schedule_event(0, 'queue changed')
+        else:
+            retval = None
+        return retval
+
+    async def get(self, timeout=float('inf'), amount=1, cond=lambda e: True):
         ''' Get an event from queue. If the queue is empty, wait for the closest event. '''
-        if len(self.queue) > 0:
-            return self.queue.pop(0)
-        self.waiting_tasks.append(self.sim.parent_process)
-        try:
-            obj = yield from self.sim.wait(timeout, cond=lambda c:True)
-        finally:
+        with self.sim.consume(self.tx_changed):
+            retval = await self.sim.check_and_wait(timeout, cond=lambda e:len(self) >= amount and cond(self.queue[0]))  # wait while first element does not match the cond
+        if retval is not None:
+            retval = self.queue[:amount]
+            self.queue = self.queue[amount:]
+            self.tx_changed.schedule_event(0, 'queue changed')
+        return retval
+
+    def gget(self, timeout=float('inf'), amount=1, cond=lambda e: True):
+        ''' Get an event from queue. If the queue is empty, wait for the closest event. '''
+        with self.sim.consume(self.tx_changed):
+            retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e:len(self) >= amount and cond(self.queue[0]))  # wait while first element does not match the cond
+        if retval is not None:
+            retval = self.queue[:amount]
+            self.queue = self.queue[amount:]
+            self.tx_changed.schedule_event(0, 'queue changed')
+        return retval
+
+    def pop(self, index=0, default=None):
+        retval = None
+        if len(self.queue) > index:
             try:
-                waiting_task = self.waiting_tasks.remove(self.sim.parent_process)
-            except ValueError as e:
-                pass
-        return obj
+                retval = self.queue.pop(index)
+                self.tx_changed.schedule_event(0, 'queue changed')
+            except IndexError as e:
+                retval = default
+        return retval
+
+    def remove(self, cond):
+        ''' Removes event(s) from queue '''
+        # Get list of elements to be removed
+        length = len(self.queue)
+        if length > 0:
+            # Remove all others except the first one
+            self.queue = [e for e in self.queue if not ((callable(cond) and cond(e) or (cond == e)))]
+            # now find what we may emit: "queue changed"
+            if length != len(self.queue):
+                self.tx_changed.schedule_event(0, 'queue changed')
 
     def __len__(self):
         return len(self.queue)
+
+    def __getitem__(self, index):
+        return self.queue[index]
+
+    def __setitem__(self, index, data):
+        self.queue[index] = data
+        self.tx_changed.schedule_event(0, 'queue changed')
+
+    def __iter__(self):
+        return iter(self.queue)

@@ -1,3 +1,4 @@
+# Copyright 2020- majvan (majvan@gmail.com)
 # Copyright 2020 NXP Semiconductors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.simulation import DSComponent, sim
-from dssim.pubsub import DSProducer, DSProcessConsumer
+from dssim import DSComponent, DSProcess, DSSimulation
 from random import randint
 
 
@@ -34,54 +34,62 @@ class MyComponent(DSComponent):
     def __init__(self, name, **kwargs):
         super().__init__(**kwargs)
         self.stat = {'errors': 0, 'success': 0, 'tries': 0}
-        self.sm = DSProcessConsumer(self.locker_state_machine(), start=True, name=self.name+'.rx_sm')
+        self.sm = DSProcess(self.locker_state_machine(), name=self.name+'.rx_sm', sim=self.sim).schedule(0)
 
     def boot(self):
-        self.sim.schedule(0, obj0.attacker1())
+        DSProcess(obj0.attacker1(), name=self.name+'.attacker', sim=self.sim).schedule(0)
 
     def attacker1(self):
         ''' Attacker provides random numbers to try to break the locker machine '''
         while True:
             code = randint(0, 100)
-            self.sm.notify(code=code)
+            self.sm.signal(code)
             self.stat['tries'] += 1
             # 2 ms to generate the code, send it and check the status of unlock
-            yield from self.sim.wait(0.002)
+            yield from self.sim.gwait(0.002)
 
     def attacker2(self):
-        ''' Attacker can provide only constant code 1-1-1-1 '''
+        ''' Attacker tries to guess that the code once becomes 1-1-1-1 '''
         while True:
-            sim.signal(self.sm, code=1)
+            self.sm.signal(1)
             self.stat['tries'] += 1
             # 500 us to generate the code, send it and check the status of unlock
-            yield from self.sim.wait(0.0005)
+            yield from self.sim.gwait(0.0005)
 
     def locker_state_machine(self):
         while True:
             lock_code = [randint(0, 100), randint(0, 100), randint(0, 100), randint(0, 100)]
             while True:
-                rv = yield from self.sim.wait(0.01, cond=lambda e: e['code'] == lock_code[0])
-                if not rv:
+                rv = yield from self.sim.gwait(0.01, cond=lambda e: e == lock_code[0])
+                if rv is None:
                     break
-                rv = yield from self.sim.wait(0.01, cond=lambda e: e['code'] == lock_code[1])
-                if not rv:
+                rv = yield from self.sim.gwait(0.01, cond=lambda e: e == lock_code[1])
+                if rv is None:
                     break
-                rv = yield from self.sim.wait(0.01, cond=lambda e: e['code'] == lock_code[2])
-                if not rv:
+                rv = yield from self.sim.gwait(0.01, cond=lambda e: e == lock_code[2])
+                if rv is None:
                     break
-                rv = yield from self.sim.wait(0.01, cond=lambda e: e['code'] == lock_code[3])
-                if not rv:
+                rv = yield from self.sim.gwait(0.01, cond=lambda e: e == lock_code[3])
+                if rv is None:
                     break
                 self.stat['success'] += 1
             # Locker closed, the number was not guessed
             self.stat['errors'] += 1
 
 if __name__ == '__main__':
-    obj0 = MyComponent(name='obj0')
+    sim = DSSimulation()
+    obj0 = MyComponent(name='obj0', sim=sim)
     obj0.boot()
     print('Running...')
-    sim.run(3600)
+
+    import cProfile
+    cProfile.run('sim.run(3600)')
     print('Done.')
-    print(obj0.stat['success'])
-    print(obj0.stat['errors'])
-    print(obj0.stat['tries'])
+    print(f'Successful attempts: {obj0.stat["success"]}')
+    print(f'Unsuccessful attempts: {obj0.stat["errors"]}')
+    print(f'Attempts: {obj0.stat["tries"]}')
+    print(f'Simulation events: {sim.num_events}')
+    assert obj0.stat["success"] <= 5  # high probability to pass
+    assert obj0.stat["tries"] == 1800001
+    # assert sim.num_events == obj0.stat["tries"] + obj0.stat["errors"] + 1
+    assert 3948000 <= sim.num_events <= 3952000  # high probability to pass

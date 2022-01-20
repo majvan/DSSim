@@ -14,8 +14,9 @@
 '''
 Simple controllable bottleneck components
 '''
-from dssim.simulation import DSComponent
-from dssim.pubsub import DSConsumer, DSProducer, DSProcessConsumer
+from dssim.base import DSComponent
+from dssim.pubsub import DSCallback, DSProducer
+from dssim.process import DSProcess
 
 
 class IntegralLimiter(DSComponent):
@@ -31,22 +32,21 @@ class IntegralLimiter(DSComponent):
         self.accumulated_rate = 0
         self.accumulated_report = accumulated_report
         self.sim.start(self.push())
-        self.rx = DSConsumer(
-            self,
-            IntegralLimiter._on_event,
+        self.rx = DSCallback(
+            self._on_event,
             name=self.name + '.rx',
             sim=self.sim,
         )
         self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
 
-    def _on_event(self, producer, **event):
+    def _on_event(self, event):
         ''' Feed consumer handler '''
         self.buffer.append(event)
 
-    def push(self):
+    async def push(self):
         ''' Push another event after events accumlated over time '''
         while True:
-            yield from self.sim.wait(self.report_period)
+            await self.sim.wait(self.report_period)
             self.accumulated_rate += self.report_period * self.throughput
             limited_num = int(self.accumulated_rate)
             self.accumulated_rate -= limited_num
@@ -55,9 +55,9 @@ class IntegralLimiter(DSComponent):
             self.buffer = self.buffer[limited_num:]
             if not self.accumulated_report:
                 for event in events:
-                    self.tx.schedule(0, **event)
+                    self.tx.schedule_event(0, event)
             else:
-                self.tx.schedule(0, num=limited_num)
+                self.tx.schedule_kw_event(0, num=limited_num)
 
 class Limiter(DSComponent):
     ''' Limiter which passes events with max. limited throughput.
@@ -70,13 +70,13 @@ class Limiter(DSComponent):
         self.buffer = []
         self.report_period = self._compute_period(throughput)
         self._update_period = self.report_period
-        self.pusher = DSProcessConsumer(
+        self.pusher = DSProcess(
             self._push(),
-            start=True,
             name=self.name + '.rx_push',
             sim=self.sim,
         )
-        self.rx = DSConsumer(self, Limiter._on_event, name=self.name + '.rx', sim=self.sim)
+        self.pusher.schedule(0)
+        self.rx = DSCallback(self._on_event, name=self.name + '.rx', sim=self.sim)
         self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
 
     def _compute_period(self, throughput):
@@ -88,32 +88,33 @@ class Limiter(DSComponent):
         self._update_period = self._compute_period(throughput)
         if self.report_period == self._update_period:
             return
-        self.pusher.notify(period_update=True)
+        self.pusher.signal(True)
 
-    def _on_event(self, producer=None, **event):
+    def _on_event(self, event):
         ''' Feed consumer handler '''
         if self.buffer:
             self.buffer.append(event)
         else:
             self.buffer.append(event)
-            self.pusher.notify(**event)
+            self.pusher.signal(True)
 
-    def _push(self):
+    async def _push(self):
         ''' Push another event after computed throughtput time '''
+        previous_time = float('-inf')
         while True:
-            wait_next = self.report_period
-            while self.buffer:
-                previous_time = self.sim.time
-                yield from self.sim.wait(wait_next, cond=lambda e: 'period_update' in e)
-                if self._update_period != self.report_period:
-                    elapsed = self.sim.time - previous_time
-                    required = self._update_period - self.report_period
-                    required -= elapsed
-                    self.report_period = self._update_period
-                    if required > 0:  # there is still some time to wait
-                        wait_next = required
-                        continue
-                event = self.buffer.pop(0)
-                self.tx.schedule(0, **event)
-                wait_next = self.report_period
-            yield from self.sim.wait(cond=lambda e: True)
+            # State 1: waiting for first event
+            while len(self.buffer) <= 0:
+                await self.sim.wait(cond=lambda e: True)
+                self.report_period = self._update_period
+            # State 2: waiting while having something in the buffer
+            next_time = self.sim.time
+            while len(self.buffer) > 0:
+                if self.sim.time >= next_time:
+                    event = self.buffer.pop(0)
+                    self.tx.schedule_event(0, event)
+                    previous_time = self.sim.time
+                    next_time = previous_time + self.report_period
+                wait_next = next_time - self.sim.time
+                await self.sim.wait(wait_next, cond=lambda e: True)
+                self.report_period = self._update_period
+                next_time = previous_time + self.report_period

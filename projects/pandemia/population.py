@@ -18,9 +18,9 @@ class Population(DSComponent):
 
         self.step = 0
 
-        self.infection_tx = DSProducer(name=self.name + ".infection tx")
-        self.population_tx = DSProducer(name=self.name + ".population tx")
-        self.status_tx = DSProducer(name=self.name + ".status tx")
+        self.infection_tx = DSProducer(name=self.name + ".infection tx", sim=self.sim)
+        self.population_tx = DSProducer(name=self.name + ".population tx", sim=self.sim)
+        self.status_tx = DSProducer(name=self.name + ".status tx", sim=self.sim)
         delay = 1 + int(sim.time) - sim.time
         sim.schedule(delay, self.process())  # schedule at the beginning of time
 
@@ -66,7 +66,7 @@ class Population(DSComponent):
         self.new_diagnosed = min(self.population, self.new_diagnosed)
         new_state = int(self.new_diagnosed)
         if new_state >= 1:
-            self.population_tx.schedule(0.2, source=self, new_diagnosed=new_state, day_after_infected=self.day)
+            self.population_tx.schedule_kw_event(0.2, source=self, new_diagnosed=new_state, day_after_infected=self.day)
             self.population -= new_state
         self.new_diagnosed -= new_state
 
@@ -74,7 +74,7 @@ class Population(DSComponent):
         self.new_infected = min(self.population, self.new_infected)
         new_state = int(self.new_infected)
         if new_state >= 1:
-            self.population_tx.schedule(0.2, source=self, new_infected=new_state)
+            self.population_tx.schedule_kw_event(0.2, source=self, new_infected=new_state)
             self.population -= new_state
         self.new_infected -= new_state
 
@@ -82,7 +82,7 @@ class Population(DSComponent):
         self.new_dead = min(self.population, self.new_dead)
         new_state = int(self.new_dead)
         if new_state >= 1:
-            self.population_tx.schedule(0.2, source=self, new_dead=new_state, day_after_infected=self.day)
+            self.population_tx.schedule_kw_event(0.2, source=self, new_dead=new_state, day_after_infected=self.day)
             self.population -= new_state
         self.new_dead -= new_state
 
@@ -90,7 +90,7 @@ class Population(DSComponent):
         self.new_recovered = min(self.population, self.new_recovered)
         new_state = int(self.new_recovered)
         if new_state >= 1:
-            self.population_tx.schedule(0.2, source=self, new_recovered=new_state, day_after_infected=self.day)
+            self.population_tx.schedule_kw_event(0.2, source=self, new_recovered=new_state, day_after_infected=self.day)
             self.population -= new_state
         self.new_recovered -= new_state
         yield from self.sim.wait(0.5)
@@ -110,10 +110,10 @@ class InfectedPopulation(Population):
     def __init__(self, population, **kwargs):
         super().__init__(population, **kwargs)
 
-        self.infection_tx = DSProducer(name=self.name+".infection tx")
-        self.population_tx = DSProducer(name=self.name+".population tx")
-        self.status_tx = DSProducer(name=self.name+".status tx")
-        self.infection_rx = DSConsumer(self, InfectedPopulation.accept_infection, name=self.name+".infection rx")
+        self.infection_tx = DSProducer(name=self.name+".infection tx", sim=self.sim)
+        self.population_tx = DSProducer(name=self.name+".population tx", sim=self.sim)
+        self.status_tx = DSProducer(name=self.name+".status tx", sim=self.sim)
+        self.infection_rx = DSConsumer(self.accept_infection, name=self.name+".infection rx", sim=self.sim)
 
     def accept_infection(self, population, **kwargs):
         pass  # we are already infected
