@@ -57,7 +57,7 @@ class DSSimulation:
         additional process which signals them in the scheduled time.
         '''
         while True:
-            event = yield from self._wait_for_event(float('inf'), cond=lambda e: True)
+            event = yield from self._wait_for_event(cond=lambda e: True)
             # Get producer which really produced the event and signal to associated consumers
             event['producer'].signal(**event)
 
@@ -157,8 +157,6 @@ class DSSimulation:
         causes cond to be False is ignored and the function is waiting.
         '''
 
-        # Put myself (my process) on the queue
-        abs_time = self.time + timeout
         # Get from simulation the current process ID. The current process ID is the ID of
         # the process which is parent - the most highest one in the yield stack structure.
         # With such process the scheduler on timeout will kick the parent process,
@@ -168,9 +166,10 @@ class DSSimulation:
         # just ended and disappeared in scheduler. But we need that the scheduler is said to plan
         # another timeout for this process.
         schedulable = self.parent_process
+        # Put myself (my process) on the queue
         self.schedule_timeout(timeout, schedulable)
         try:
-            event = yield from self._wait_for_event(abs_time, cond)
+            event = yield from self._wait_for_event(cond)
         except Exception as exc:
             # If we got any exception, we will never use the timeout anymore
             self.delete(lambda e: e[0] is schedulable)
@@ -188,7 +187,7 @@ class DSSimulation:
             pass
 
     # @DSSchedulable - not needed, removed to reduce code complexity
-    def _wait_for_event(self, abs_time, cond):
+    def _wait_for_event(self, cond):
         ''' Provides a backend for the wait() method.
         Handles the reception of the event / an exception.
         '''
