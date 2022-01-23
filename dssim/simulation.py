@@ -81,12 +81,19 @@ class _ProcessMetadata:
 class DSSimulation:
     ''' The simulation is a which schedules the nearest (in time) events. '''
 
-    def __init__(self):
+    def __init__(self, name='dssim'):
         ''' The simulation holds the list of producers which share the same time queue.
         The list is only for the application informational purpose to be able to identify
         all the producers which belong to the same simulation entity.
         '''
+        self.name = name
         self._restart(time=0)
+
+    def __repr__(self):
+        return self.name
+
+    def __str__(self):
+        return self.name
 
     def restart(self, time=0):
         self._restart(time=time)
@@ -371,18 +378,18 @@ class DSInterface:
     '''
     _names = {}
 
-    def __init__(self, name=None, sim=sim, **kwargs):
+    def __init__(self, *args, name=None, sim=sim, **kwargs):
+        self.sim = sim
         if name is None:
-            counter = DSInterface._names.get(str(self.__class__), [])
-            num = len(counter)
-            counter.append(num)
-            DSInterface._names[str(self.__class__)] = counter
-            self.name = '{}{}'.format(str(self.__class__), num)
-        elif name in self._names:
+            name = f'{self.sim}.{self.__class__}'
+            counter = DSInterface._names.get(name, 0)
+            DSInterface._names[name] = counter + 1
+            name = name + f'{counter}'
+        elif name in DSInterface._names:
             raise ValueError('Interface with such name already registered.')
         else:
-            self.name = name
-        self.sim = sim
+            DSInterface._names[name] = 0
+        self.name = name
 
     def __repr__(self):
         return self.name
@@ -478,8 +485,7 @@ class DSProcess(DSComponent):
 
     def _scheduled_fcn(self, time):
         ''' Start a schedulable process with possible delay '''
-        if time:
-            yield from self.sim.wait(time)
+        yield from self.sim.wait(time)
         retval = yield from self.generator
         return retval
 
@@ -490,7 +496,13 @@ class DSProcess(DSComponent):
 
     def schedule(self, time):
         ''' This api is to schedule directly task.schedule(3) '''
-        self.sim.schedule(time, self)
+        return self.sim.schedule(time, self)
+
+    def signal(self, **event):
+        return self.sim.signal(self.scheduled_generator, **event)
+
+    def signal_object(self, event_object):
+        self.sim.signal(self.scheduled_generator, event_object)
 
     def _finish(self):
         self.finished = True
@@ -505,7 +517,6 @@ class DSProcess(DSComponent):
         with self.sim.observe_pre(self.finish_tx):
             retval = yield from self.sim.check_and_wait(cond=lambda e:self.finished())
         return retval
-
 
 _exiting = False  # global var to prevent repeating nested exception frames
 

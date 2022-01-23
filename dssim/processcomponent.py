@@ -1,0 +1,86 @@
+# Copyright 2022 NXP Semiconductors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+'''
+The file provides process-centric API to easy the design of process-oriented
+application.
+'''
+from dssim.simulation import DSComponent, DSProcess, DSAbortException
+from dssim.components.queue import Queue
+from dssim.components.resource import Resource
+
+class DSProcessComponent(DSComponent):
+    _dscomponent_instances = 0
+
+    def __init__(self, name=None, *args, **kwargs):
+        if name is None:
+            name = type(self).__name__ + '.' + str(self._dscomponent_instances)
+        super().__init__(self, name=name, *args, **kwargs)
+        retval = self.sim.schedule(0, DSProcess(self.process(), sim=self.sim, name=self.name+'.process'))
+        self.scheduled_process = retval
+        self.__class__._dscomponent_instances += 1
+
+    def signal(self, event_object):
+        self.scheduled_process.signal(object=event_object)
+
+    def wait(self, timeout=float('inf')):
+        try:
+            retval = yield from self.sim.wait(timeout, cond=lambda c: True)
+            if retval is not None:
+                retval = retval['object']
+        except DSAbortException as exc:
+            self.scheduled_process.abort()
+        return retval
+
+    def enter(self, queue,timeout=float('inf')):
+        try:
+            retval = yield from queue.put(timeout, object=self)
+            if retval is not None:
+                retval = retval['object']
+        except DSAbortException as exc:
+            self.scheduled_process.abort()
+        return retval
+
+    def enter_nowait(self, queue):
+        retval = queue.put_nowait(object=self)
+        return retval
+
+    def leave(self, queue,timeout=float('inf')):
+        queue.remove({'object': self})
+
+    def pop(self, queue, timeout=float('inf')):
+        try:
+            retval = yield from queue.get(timeout)
+            if retval is not None:
+                retval = retval['object']
+        except DSAbortException as exc:
+            self.scheduled_process.abort()
+        return retval
+
+    def pop_nowait(self, queue):
+        retval = queue.get_nowait()
+        return retval
+
+    def get(self, resource, amount, timeout=float('inf')):
+        if isinstance(resource, Queue):
+            with self.sim.consume(resource):
+                retval = yield from self.sim.wait(timeout, cond=lambda x: len(resource) >= amount)
+                if retval is not None:
+                    # TODO: get first N object from the queue
+                    pass
+        elif isinstance(resource, Resource):
+            with self.sim.consume(amount):
+                retval = yield from resource.get(timeout, amount)
+                if retval is not None:
+                    pass
+
