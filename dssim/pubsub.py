@@ -12,11 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-This file defines producers (publishers) and consumers (subscribers)
+This file defines publishers (producers) and subscribers (observers,
+consumers or monitors).
+Observer: an object which takes (snifss) signals from producers
+Consumer: an object which takes signal from producer and then stops
+  further spread.
 '''
+from collections.abc import Iterable
 from abc import abstractmethod
-from inspect import isgeneratorfunction
-from dssim.simulation import DSInterface, DSProcess
+from dssim.simulation import DSInterface
 
 class DSAbstractConsumer(DSInterface):
     ''' An interface for a consumer '''
@@ -39,25 +43,11 @@ class DSConsumer(DSAbstractConsumer):
 
     def notify(self, **data):
         ''' The function calls all the registered methods from objects after passing filter. '''
-        if self.cond(data):
-            self.forward_method(self.forward_obj, **data)
-
-class DSProcessConsumer(DSAbstractConsumer, DSProcess):
-    ''' A consumer which can consume events in a schedulable process.
-    '''
-    def __init__(self, process, start=False, delay=0, **kwargs):
-        DSProcess.__init__(self, generator=process, **kwargs)
-        assert self.generator == process
-        if start:
-            process = self.schedule(delay) # update the process with parent decorator
-        elif delay != 0:
-            raise ValueError('The process can be delayed only if started at initialization')
-
-    def notify(self, **data):
-        ''' Interface which can pass event into a waiting process.
-        Note that a notification to a not yet started process will start it
-        '''
-        self.sim.signal(self, **data)
+        retval = False
+        if callable(self.cond) and self.cond(data) or self.cond == data:
+            retval = self.forward_method(self.forward_obj, **data)
+        return retval
+        
 
 class DSAbstractProducer(DSInterface):
     ''' Provides base abstract class for producers '''
@@ -78,25 +68,40 @@ class DSAbstractProducer(DSInterface):
 
     def schedule(self, time_delta, consumer_process=None, **event_data):
         ''' Schedule future event with parametrized event '''
-        if consumer_process:
-            self.sim.schedule_event(time_delta, event_data, consumer_process)
-        else:
-            dsevent = self.encapsulate_data_to_transport(**event_data)
-            self.sim.schedule_event(time_delta, dsevent, self.sim.time_process)
+
+        # We will schedule all the future events into time_process and not directly
+        # to the attached subscribers. The reason is simple- in the time of the event
+        # evaluation (in the future) the set of attached subscribers can be different.
+
+        # Another reason is that signalling directly from a component can create
+        # cyclic signalling dependency (an event from processA signals processB, it
+        # executes immediately and tries to send signal to processA). Decoupling with
+        # schedule could be a solution.
+
+        # The last caveat of signalling is the order of execution. For instance, if
+        # processA gets signal i.e. "char A available on serial line", executes and
+        # frees serial line which in turn triggers signal i.e. "char B available
+        # on serial line" which now triggers processB, then the processB executes
+        # and preempts processA to finish its "char A" execution first.
+        # Though both events happen in the same sim.time, the execution is typically
+        # expected to run sequentially.
+
+        dsevent = self.encapsulate_data_to_transport(**event_data)
+        self.sim.schedule_event(time_delta, dsevent, self.sim.time_process)
 
     @abstractmethod
-    def add_consumer(self, consumer):
-        ''' Add a consumer to the list of consumers connected to this producer '''
+    def add_subscriber(self, subscriber, phase):
+        ''' Add a subscriber to the list of subscribers connected to this producer '''
         raise NotImplementedError('Abstract method, use derived classes')
 
     @abstractmethod
-    def get_consumers(self):
-        ''' Get the list of consumers associated with this producer '''
+    def remove_subscriber(self, subscriber, phase):
+        ''' Remove subscriber from the list of subscribers connected to this producer '''
         raise NotImplementedError('Abstract method, use derived classes')
 
     @abstractmethod
     def signal(self, **event_data):
-        ''' Emit signal to associated consumers '''
+        ''' Emit signal to associated subscribers '''
         raise NotImplementedError('Abstract method, use derived classes')
 
 
@@ -104,55 +109,62 @@ class DSProducer(DSAbstractProducer):
     ''' Full feature producer which can signal events to the attached consumers. '''
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.consumers = []
-        self.process_consumers = []
-        self._single_process_consumer = False
+        # queue [notify_in_progress?] [phase] [process or function?]
+        self.subs = {
+            'pre': {
+                False: {},
+                True: {},
+            },
+            'act': {
+                False: {},
+                True: {},
+            },
+            'post': {
+                False: {},
+                True: {},
+            },
+        }
 
-    def add_consumer(self, consumer):
-        if isinstance(consumer, DSProcess):
-            self.process_consumers.append(consumer)
-        else:
-            self.consumers.append(consumer)
+    def add_subscriber(self, subscriber, phase='act'):
+        if subscriber:
+            subs = self.subs[phase][isinstance(subscriber, Iterable)]
+            subs[subscriber] =subs.get(subscriber, 0) + 1
 
-    def get_consumers(self):
-        return self.consumers + self.process_consumers
+    def remove_subscriber(self, subscriber, phase='act'):
+        if subscriber:
+            subs = self.subs[phase][isinstance(subscriber, Iterable)]
+            subs[subscriber] = subs.get(subscriber, 0) - 1
 
     def signal(self, **event_data):
-        ''' Emit a signal to be received by all consumers.'''
-        for consumer in self.consumers:
-            # To increase performance, we just call the consumer directly.
-            # The correct decoupled code would be self.sim.signal(c, **event_data)
-            consumer.notify(**event_data)
-        for consumer in self.process_consumers:
-            consumer.notify(**event_data)
+        ''' Send signal object to the subscribers '''
 
-    def schedule(self, time_delta, **event_data):
-        ''' Schedule future event with parametrized event '''
-        for consumer in self.process_consumers:
-            # To reduce cycles, for the DSProcessConsumer we could already schedule against
-            # their process.
-            # 1. Producer -> schedule_event(event, time_process) (and returns)
-            # 2. Simulator -> signal_object(time_process, encapsulated_event)
-            # 3.   signal_object -> send(time_process, encapsulated_event)
-            # 4.     time_process -> get the encapsulated producer
-            # and in the case of the only DSProcessConsumer attached, following would happen:
-            # 5.         Producer -> notify(DSProcessConsumer, event)
-            # 6.           DSProcessConsumer -> signal(event) = send(process, event)
-            # With this shortcut, we change the this flow to:
-            # 1. Producer -> schedule_event(event, time_process) (and returns)
-            # 2. Simulator -> signal_object(process, event)
-            # 3.   signal_object -> send(time_process, event)
-            # That means performance improvement.
-            # The drawback of this solution is that the number of consumers is evaluated
-            # in the time of scheduling the event, not in the time when event occurs. This
-            # is typically not an issue.
-            super().schedule(time_delta, consumer, **event_data)
-        if self.consumers:
-            # Before scheduling of the event, check if it will be consumed.
-            # If not- useless schedule => ignore
-            super().schedule(time_delta, **event_data)
+        # Emit the signal to all pre-observers
+        for subscriber, refs in self.subs['pre'][False].items():
+            subscriber.notify(**event_data) if refs else None
+        for subscriber, refs in self.subs['pre'][True].items():
+            self.sim.signal(subscriber, **event_data) if refs else None
 
-class DSSingleProducer(DSProducer):
-    ''' A producer which has only single consumer is removed for simplicity.
-    The more generic DSProducer logic is used instead.
-    '''
+        # Emit the signal to all consumers and stop with the first one
+        # which accepted the signal
+        for subscriber, refs in self.subs['act'][False].items():
+            if refs and subscriber.notify(**event_data):
+                break
+        else:
+            for subscriber, refs in self.subs['act'][True].items():
+                if refs and self.sim.signal(subscriber, **event_data):
+                    break
+            else:
+                # Emit the signal to all post-observers
+                for subscriber, refs in self.subs['post'][False].items():
+                    subscriber.notify(**event_data) if refs else None
+                for subscriber, refs in self.subs['post'][True].items():
+                    self.sim.signal(subscriber, **event_data) if refs else None
+
+        # cleanup- remove items with zero references
+        # We do not cleanup in remove_subscriber, because remove_subscriber could
+        # be called from the notify(...) and that could produce an error 
+        for phase in self.subs:
+            for process_or_fcn in self.subs[phase]:
+                old_dict = self.subs[phase][process_or_fcn]
+                new_dict = {k: v for k, v in old_dict.items() if v > 0}
+                self.subs[phase][process_or_fcn] = new_dict

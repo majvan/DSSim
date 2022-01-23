@@ -30,9 +30,42 @@ class DSAbortException(Exception):
         self.info = info
 
 
+class DSSubscriberContextManager:
+    def __init__(self, process, queue_id, components):
+        self.process = process
+        self.pre = set(components) if queue_id == 'pre' else set()
+        self.act = set(components) if queue_id == 'act' else set()
+        self.post = set(components) if queue_id == 'post' else set()
+
+    def __enter__(self):
+        ''' Connects publisher endpoint with new subscriptions '''
+        for producer in self.pre:
+            producer.add_subscriber(self.process, 'pre')
+        for producer in self.act:
+            producer.add_subscriber(self.process, 'act')
+        for producer in self.post:
+            producer.add_subscriber(self.process, 'post')
+        return self
+
+    def __exit__(self, exc_type, exc_value, tb):
+        for producer in self.pre:
+            producer.remove_subscriber(self.process, 'pre')
+        for producer in self.act:
+            producer.remove_subscriber(self.process, 'act')
+        for producer in self.post:
+            producer.remove_subscriber(self.process, 'post')
+
+    def __add__(self, other):
+        self.pre = self.pre | other.pre
+        self.act = self.act | other.act
+        self.post = self.post | other.post
+        return self
+
+
 class _ProcessMetadata:
     def __init__(self):
         self.cond = lambda c: True
+
 
 class DSSimulation:
     ''' The simulation is a which schedules the nearest (in time) events. '''
@@ -160,8 +193,7 @@ class DSSimulation:
             self.parent_process = schedulable
             schedulable.send(event)
         except StopIteration as exc:
-            # There is nothing more, the schedulable has finished and is not waiting anymore
-            pass
+            self.cleanup(schedulable)
         except ValueError as exc:
             global _exiting
             if 'generator already executing' in str(exc) and not _exiting:
@@ -201,7 +233,7 @@ class DSSimulation:
         try:
             # Wait for next event
             event = yield
-	    # We received an event. In the lazy evaluation case, we would be now calling
+	        # We received an event. In the lazy evaluation case, we would be now calling
             # _check_cond and returning or raising an event only if the condition matches,
             # otherwise we would be waiting in an infinite loop here.
             # However we do an early evaluation of conditions- they are checked upon
@@ -213,7 +245,7 @@ class DSSimulation:
                 raise event
         except Exception as exc:
             # If we got any exception, we will not use the other events anymore
-            self.delete(lambda e: e[0] is self.parent_process)
+            self.delete(lambda e: e == (self.parent_process, None))
             raise
         return event
 
@@ -237,7 +269,7 @@ class DSSimulation:
         self.schedule_timeout(timeout, schedulable)
 
         metaobj = self.get_process_metadata(schedulable)
-        # This should increase performance of the check_condition() method.
+        # Get the condition object (lambda / object / ...) from the process metadata
         metaobj.cond = cond
 
         event = yield from self._wait_for_event(cond)
@@ -247,12 +279,34 @@ class DSSimulation:
             self.delete(lambda e: e[0] is schedulable)
         return event
 
+    def check_and_wait(self, timeout=float('inf'), cond=lambda c: False):
+        # This function can be used to run a pre-check for such conditions, which are
+        # invariant to the passed event, for instance to check for a state of an object
+        # so if the state matches, it returns immediately
+        # Otherwise it jumps to the waiting process.
+        _, event = self._check_cond(cond, object())
+        if event:
+            return event  # return event immediately
+        retval = yield from self.wait(timeout, cond)
+        return retval
+
     def _kick(self, schedulable):
         ''' Provides first kick (run) of a schedulable process. '''
         try:
             next(schedulable)
         except StopIteration as exp:
             pass
+
+    def cleanup(self, schedulable):
+        # The schedulable has finished and is not waiting anymore.
+        # We make a cleanup of a waitable condition. There is still waitable condition kept
+        # for the schedulable. Since the process has finished, it will never need it, however
+        # there may be events for the process planned.
+        # Remove the condition
+        metaobj = self.get_process_metadata(schedulable)
+        metaobj.cond = None  # we keep a condition, but an easy one; accepting None events
+        # Remove all the events for this schedulable
+        self.time_queue.delete(lambda e:e[0] is schedulable)
 
     def run(self, up_to=None):
         ''' This is the simulation machine. In a loop it takes first event and process it.
@@ -273,6 +327,15 @@ class DSSimulation:
 
         self.time = up_to
         return self.num_events
+
+    def observe_pre(self, *components):
+        return DSSubscriberContextManager(self.parent_process, 'pre', components)
+
+    def consume(self, *components):
+        return DSSubscriberContextManager(self.parent_process, 'act', components)
+
+    def observe_post(self, *components):
+        return DSSubscriberContextManager(self.parent_process, 'post', components)
 
 
 # Creates already one instance of simulation. Typically only this instance is all we need
