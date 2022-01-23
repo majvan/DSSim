@@ -127,8 +127,11 @@ class DSSimulation:
         # The variable we get from schedulable by inspecting its stack. It is the only possibility how
         # to do it for generators. However for DSProcess there is another way- to set condition info
         # into process attribute before going to wait and read it directly here.
-        # For now we get DSProcess's generator and use the same method as for generator/
-        sched = schedulable.generator if isinstance(schedulable, DSProcess) else schedulable
+        if isinstance(schedulable, DSProcess):
+            return schedulable.cond
+        # For generator, we have to find cond on his stack.
+        # Note this is possible (but slow) for schedulable.generator, too if schedulable is DSProcess
+        sched = schedulable
         while True:
             variables = dict(inspect.getmembers(sched))
             fcn = variables.get('__qualname__', None)
@@ -238,8 +241,15 @@ class DSSimulation:
         # just ended and disappeared in scheduler. But we need that the scheduler is said to plan
         # another timeout for this process.
         schedulable = self.parent_process
+    
         # Put myself (my process) on the queue. Next line may be skipped if timeout is inf.
         self.schedule_timeout(timeout, schedulable)
+
+        if isinstance(schedulable, DSProcess):
+            # For DSProcess schedulable we can store some variables.
+            # Unfortunately we cannot do that for generators.
+            # This should increase performance of the check_condition() method.
+            schedulable.cond = cond
 
         event = yield from self._wait_for_event(cond)
 
@@ -342,12 +352,13 @@ class DSProcess(DSComponent):
     '''
     def __init__(self, generator, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        ''' Initializes DSProcess. The input has to be a geneator function. '''
+        ''' Initializes DSProcess. The input has to be a generator function. '''
         self.generator = generator
         self.scheduled_generator = generator
         # We store the latest value. Useful to check the status after finish.
         self.value = None
         self.finished = False
+        self.cond = lambda c: True  # default condition
         self.waiting_tasks = []  # taks waiting to finish this task
 
     def __iter__(self):
@@ -408,7 +419,7 @@ class DSProcess(DSComponent):
             return 
         try:
             self.waiting_tasks.append(self.sim.parent_process)
-            obj = yield from sim.wait(timeout, cond=lambda c:True)
+            obj = yield from self.sim.wait(timeout, cond=lambda c:True)
         finally:
             try:
                 waiting_task = self.waiting_tasks.remove(self.sim.parent_process)
