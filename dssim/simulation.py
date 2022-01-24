@@ -14,9 +14,7 @@
 '''
 The file provides basic logic to run the simulation and supported methods.
 '''
-import types
 import sys
-import inspect
 from functools import wraps
 from collections.abc import Iterable
 from inspect import isgeneratorfunction
@@ -31,6 +29,10 @@ class DSAbortException(Exception):
         self.producer = producer
         self.info = info
 
+
+class _ProcessMetadata:
+    def __init__(self):
+        self.cond = lambda c: True
 
 class DSSimulation:
     ''' The simulation is a which schedules the nearest (in time) events. '''
@@ -51,6 +53,7 @@ class DSSimulation:
         self.time = time
         self.parent_process = None
         self.time_process = self._time_process()
+        self._process_metadata = {}
         self._kick(self.time_process)
 
     def _time_process(self):
@@ -61,6 +64,18 @@ class DSSimulation:
             event = yield from self._wait_for_event(cond=lambda e: True)
             # Get producer which really produced the event and signal to associated consumers
             event['producer'].signal(**event)
+
+    def get_process_metadata(self, process):
+        if isinstance(process, DSProcess):
+            retval = process.meta  # DSProcess itself stores a metadata
+        else:
+            # we store metadata for generators in associated objects
+            if process not in self._process_metadata:
+                retval = _ProcessMetadata()
+                self._process_metadata[process] = retval
+            else:
+                retval = self._process_metadata[process]
+        return retval
 
     def schedule_event(self, time, event, process=None):
         ''' Schedules an event object into timequeue '''
@@ -121,32 +136,8 @@ class DSSimulation:
         else:  # the event does not match our condition and hence will be ignored
             return False, None
 
-    def _get_condition(self, schedulable):
-        ''' This is a helper to get 'cond' variable from the stack of process / generator waiting in wait '''
-
-        # The variable we get from schedulable by inspecting its stack. It is the only possibility how
-        # to do it for generators. However for DSProcess there is another way- to set condition info
-        # into process attribute before going to wait and read it directly here.
-        if isinstance(schedulable, DSProcess):
-            return schedulable.cond
-        # For generator, we have to find cond on his stack.
-        # Note this is possible (but slow) for schedulable.generator, too if schedulable is DSProcess
-        sched = schedulable
-        while True:
-            variables = dict(inspect.getmembers(sched))
-            fcn = variables.get('__qualname__', None)
-            if not fcn:
-                 # the generator is not waiting in our wait, so we return a condition which accepts
-                 # every event
-                 return lambda c: True
-            if 'DSSimulation.wait' in fcn:  # search for the wait function
-                frame = variables['gi_frame']
-                cond = frame.f_locals['cond']  # get the local variable 'cond'
-                return cond
-            sched = variables['gi_yieldfrom']  # get next frame of the stack
-
     def check_condition(self, schedulable, event):
-        cond = self._get_condition(schedulable)
+        cond = self.get_process_metadata(schedulable).cond
         retval, event = self._check_cond(cond, event)
         return retval
 
@@ -245,11 +236,9 @@ class DSSimulation:
         # Put myself (my process) on the queue. Next line may be skipped if timeout is inf.
         self.schedule_timeout(timeout, schedulable)
 
-        if isinstance(schedulable, DSProcess):
-            # For DSProcess schedulable we can store some variables.
-            # Unfortunately we cannot do that for generators.
-            # This should increase performance of the check_condition() method.
-            schedulable.cond = cond
+        metaobj = self.get_process_metadata(schedulable)
+        # This should increase performance of the check_condition() method.
+        metaobj.cond = cond
 
         event = yield from self._wait_for_event(cond)
 
@@ -358,7 +347,7 @@ class DSProcess(DSComponent):
         # We store the latest value. Useful to check the status after finish.
         self.value = None
         self.finished = False
-        self.cond = lambda c: True  # default condition
+        self.meta = _ProcessMetadata()
         self.waiting_tasks = []  # taks waiting to finish this task
 
     def __iter__(self):
