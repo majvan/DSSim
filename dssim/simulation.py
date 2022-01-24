@@ -538,8 +538,7 @@ def print_cyclic_signal_exception(exc):
           '   Previous code:\n'
           '   sim.signal(process, status="Ok")\n'
           '   New code:\n'
-          '   sim.schedule_event(0, {"status": "Ok"}, process)\n\n'
-          'Signal stack:')
+          '   sim.schedule_event(0, {"status": "Ok"}, process)\n\n')
     while True:
         if not exc_traceback.tb_next:
             break
@@ -550,6 +549,7 @@ def print_cyclic_signal_exception(exc):
         stack.append(f)
         f = f.f_back
     stack.reverse()
+    to_process = None
     for frame in stack:
         if frame.f_code.co_filename != __file__:
             method = frame.f_code.co_name
@@ -562,6 +562,9 @@ def print_cyclic_signal_exception(exc):
             d = [method, line, filename, from_process, to_process, event, False, False]
             process_stack.append(d)
     # search for the processes to highlight (highlight the loop conflict)
+    if not to_process:
+        return
+    print('Signal stack:')
     conflicting_process = to_process
     for frame in reversed(process_stack):
         if frame[3] == conflicting_process:
