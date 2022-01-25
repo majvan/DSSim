@@ -22,45 +22,50 @@ class Timer(DSComponent):
     ''' The class exports 'source' Producer which ticks with a period provided at init. '''
     def __init__(self, name, period=1, repeats=None, **kwargs):
         super().__init__(**kwargs)
-        self.status = 'STOPPED'
         self.period = period
         self.counter = repeats
-        self.source = DSProducer(name=self.name + '.tick source')
-        feedback = DSConsumer(self, Timer._on_tick, name=self.name + '.(internal) fb', sim=self.sim)
-        self.source.add_consumer(feedback)
+        self.state = 'STOPPED'
+        self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
+        self.proc = self.sim.schedule(0, DSProcess(self.process(), name=self.name+'.process'))
 
-    def _schedule_next_time(self):
+    def process(self):
         ''' Methods schedules new event depending on the counter '''
-        if self.counter is None:
-            self.source.schedule(self.period)
-            return True
-        if self.counter > 0:
-            self.counter -= 1
-            self.source.schedule(self.period)
-            return True
-        return False
-
-    def _on_tick(self, **others):
-        ''' Feedback from the tick event to schedule a new event. '''
-        if self.status != 'RUNNING':
-            return
-        if not self._schedule_next_time():
-            self.status = 'STOPPED'
-
-    def delay(self, delay_time):
-        ''' Start the timer with a delay. '''
-        self.start(delay_time, 1)
+        remaining = self.period
+        while True:
+            if status == 'RUNNING':
+                last = self.sim.time
+                interrupt = yield from self.sim.wait(remaining, lambda c:True) # wait with timeout
+                remaining = max(last + self.period - self.sim.time, 0)
+                if interrupt is None:  # timed out
+                    tick_nr = tick_nr + 1
+                    self.counter -= 1
+                    self.tx.signal(tick=tick_nr)
+                    if self.counter <= 0:
+                        self.status = 'STOPPED'
+            elif self.status == 'PAUSED':
+                interrupt = yield from self.sim.wait(lambda c:True)  # wait for any state change
+            else:  # self.status == 'STOPPED':
+                interrupt = yield from self.sim.wait(lambda c:True)  # wait for any state change
+                remaining = self.period
 
     def start(self, period=None, repeats=None):
         ''' Start the timer. '''
-        if period:
-            self.period = period  # Redefine period
-        self.counter = repeats
-        if self._schedule_next_time():
-            self.status = 'RUNNING'
+        self.period = period or self.period  # Redefine period
+        self.counter = repeats or float('inf')
+        self.status = 'RUNNING'
+        self.proc.signal(status='RUNNING')
 
     def stop(self, time):
         ''' Stop the timer. '''
-        # if we already scheduled a tick, delete it
-        self.source.undo_all_futures()
         self.status = 'STOPPED'
+        self.proc.signal(status='STOPPED')
+
+    def pause(self):
+        ''' Pause the timer. '''
+        self.status = 'PAUSED'
+        self.proc.signal(status='PAUSED')
+
+    def resume(self):
+        ''' Resume the timer. '''
+        self.status = 'RUNNING'
+        self.proc.signal(status='RUNNING')

@@ -31,25 +31,6 @@ class Queue(DSComponent):
         self.capacity = capacity
         self.queue = []
 
-    def _enqueue(self, obj):
-        self.queue.append(obj)
-        return obj
-
-    def _dequeue(self):
-        return self.queue.pop(0)
-
-    def append(self, obj):
-        self.queue.append(obj)
-        self.tx_queue_changed.schedule(0, info='queue changed')
-        return obj
-
-    def pop(self, index):
-        retval = None
-        if len(self.queue) > index:
-            retval = self.queue.pop(index)
-            self.tx_queue_changed.schedule(0, info='queue changed')
-        return retval
-
     def put_nowait(self, **obj):
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         if len(self) < self.capacity:
@@ -81,6 +62,18 @@ class Queue(DSComponent):
             retval = self.pop(0)  # will emit "queue changed"
         return retval
 
+    def append(self, obj):
+        self.queue.append(obj)
+        self.tx_queue_changed.schedule(0, info='queue changed')
+        return obj
+
+    def pop(self, index, default=None):
+        retval = None
+        if len(self.queue) > index:
+            retval = self.queue.pop(index, default)
+            self.tx_queue_changed.schedule(0, info='queue changed')
+        return retval
+
     def remove(self, cond):
         ''' Removes event(s) from queue '''
         # Get list of elements to be removed
@@ -95,7 +88,9 @@ class Queue(DSComponent):
     def __getitem__(self, index):
         return self.queue[index]
 
+    def __setitem__(self, index, data):
+        self.queue[index] = data
+        self.tx_queue_changed.schedule(0, info='queue changed')
+
     def __iter__(self):
         return iter(self.queue)
-
-
