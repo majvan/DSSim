@@ -396,6 +396,7 @@ def DSSchedulable(api_func):
     
     return scheduled_func
 
+from dssim.pubsub import DSProducer
 
 class DSProcess(DSComponent):
     ''' Typical task used in the simulations.
@@ -412,6 +413,7 @@ class DSProcess(DSComponent):
         self.finished = False
         self.meta = _ProcessMetadata()
         self.waiting_tasks = []  # taks waiting to finish this task
+        self.finish_tx = DSProducer(name=self.name+'.finish tx')
 
     def __iter__(self):
         ''' Required to use the class to get events from it. '''
@@ -425,6 +427,10 @@ class DSProcess(DSComponent):
             self.value = e.value
             self._finish()
             raise
+        except Exception as e:
+            self.value = e
+            self._fail()
+            raise
         return self.value
 
     def send(self, event):
@@ -435,6 +441,10 @@ class DSProcess(DSComponent):
             self.value = e.value
             self._finish()
             raise
+        except Exception as e:
+            self.value = e
+            self._fail()
+            raise
         return self.value
 
     def abort(self, producer=None, **info):
@@ -443,6 +453,8 @@ class DSProcess(DSComponent):
             self.value = self.send(DSAbortException(producer, **info))
         except StopIteration as e:
             self._finish()
+        except Exception as e:
+            self._fail()
         return self.value
 
     def _scheduled_fcn(self, time):
@@ -463,21 +475,17 @@ class DSProcess(DSComponent):
 
     def _finish(self):
         self.finished = True
-        for task in self.waiting_tasks:
-            self.sim.signal(task, finished=True)  # push the blocked task
+        self.sim.cleanup(self)
+        self.finish_tx.schedule(0, finished='Ok')
+
+    def _fail(self):
+        self.sim.cleanup(self)
+        self.finish_tx.schedule(0, finished='Fail')
 
     def join(self, timeout=float('inf')):
-        if self.finished:
-            return 
-        try:
-            self.waiting_tasks.append(self.sim.parent_process)
-            obj = yield from self.sim.wait(timeout, cond=lambda c:True)
-        finally:
-            try:
-                waiting_task = self.waiting_tasks.remove(self.sim.parent_process)
-            except ValueError as e:
-                pass
-        return obj
+        with self.sim.observe_pre(self.finish_tx):
+            retval = yield from self.sim.check_and_wait(cond=lambda e:self.finished())
+        return retval
 
 
 _exiting = False  # global var to prevent repeating nested exception frames

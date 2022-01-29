@@ -168,6 +168,7 @@ class TestDSSchedulable(unittest.TestCase):
         with self.assertRaises(StopIteration):
             retval = next(process)
         self.assertEqual(process.value, 'Success')
+        retval = next(process_waiting)
         self.assertEqual(process_waiting.value, 'After process finished')
 
 
