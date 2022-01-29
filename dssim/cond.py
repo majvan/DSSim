@@ -16,12 +16,11 @@ This file implements advanced filtering logic - with overloading operators
 to be able create advanced expressions.
 '''
 import inspect
-from multiprocessing import parent_process
-from dssim.simulation import DSProcess, sim
+from dssim.simulation import DSProcess, DSCondition, sim
 from dssim.pubsub import DSConsumer
 
 
-class DSFilter:
+class DSFilter(DSCondition):
     def __init__(self, cond=None, reevaluate=False, signal_timeout=False):
         self.signaled = False
         self.value = None
@@ -37,20 +36,23 @@ class DSFilter:
         self.signal_timeout = signal_timeout
         if inspect.isgenerator(self.cond):
             # We create a new process from generator. This is required:
-            # 1. (TODO: document!) Events scheduled only for the current process: they won't be taken by the new process 
-            # 2. (TODO: implement!) Events which are taken by the current process from subscription will go to the
-            #    new process because it has to inherit (fork) all the subscriptions from the current process
+            # 1. (TODO: document!) Events scheduled only for the current process: they won't be taken by the new
+            #    process.
+            # 2. Events which are processed by the current process have go to the new process so it has to inherit
+            #    (fork) all the subscriptions from the current process.
+            #    Another possibility to solve this is to push all the events from this process to the new process.
             # 3. Events which will be scheduled only for the new process (i.e. the new process schedules for himself)
-            #    won't be taken by the current process
-            # 4. The condition is computed on the return value of the new process
-            # 5. Because of [3] and [4], we have to know the return value but because the process may run his own events,
-            #    the processing could be asynchronous with execution of this filter; i.e. it could return asynchronously.
-            #    For such, we subscribe for the new process finish event and push that to the current process
+            #    won't be taken by the current process (of course).
+            # 4. The condition is computed on the event object, which is return value of the process
+            #    (retval None means timeout).
+            # 5. Because of [3] and [4], we have to know the return value but because the process may be handling his
+            #    own events, the processing could be asynchronous with execution of this filter; i.e. it could return
+            #    asynchronously. For such, we subscribe for the new process finish event and push that to the current
+            #    process.
             if inspect.getgeneratorstate(self.cond) == inspect.GEN_CREATED:
                 self.cond = sim.schedule(0, DSProcess(self.cond))  # convert to DSProcess so we could get return value
                 self.subscriber = DSConsumer(self, self._process_finished)
-                self.cond.finish_tx.add_subscriber('pre', self.subscriber)
-                # sim._kick(self.cond)
+                self.cond.finish_tx.add_subscriber(self.subscriber, 'pre')
             else:
                 raise ValueError('Cannot filter already running generator.')
 
@@ -65,43 +67,45 @@ class DSFilter:
     def __str__(self):
         return f'DSFilter({self.cond})'
 
-    def __eq__(self, event):
-        retval = False
-        if event is self:
-            retval = True
-        elif self.cond == event:
-            retval = True
-        return retval
-
     def __bool__(self):
         return self.signaled
 
     def __call__(self, other):
         if self.signaled and not self.reevaluate:
             return True
+        signaled, value = False, None
         if isinstance(self.cond, DSProcess):
             # now we should get this signaled only after return
             if self.cond.finished:
                 if self.cond.value is None and self.signal_timeout:
-                    self.value = None
-                    self.signaled = True
+                    signaled, value = True, None
                 elif isinstance(self.cond.value, Exception):
                     pass
                 else:
-                    self.value = self.cond.value
-                    self.signaled = True
+                    signaled, value = True, self.cond.value
+            else:
+                sim.signal(self.cond, **other)
         elif callable(self.cond) and self.cond(other):
-            self.value = other
-            self.signaled = True
-        elif self == other:
-            self.value = other
-            self.signaled = True
+            signaled, value = True, other
+        elif self is other:
+            signaled, value = True, other
+        elif self.cond == other:
+            signaled, value = True, other
+        self.signaled, self.value = signaled, value
         return self.signaled
 
     def _process_finished(self, *args, **kwargs):
         # Following forces re-evaluation by injecting new event
-        self.cond.finish_tx.remove_subscriber(self.subscriber)
+        self.cond.finish_tx.remove_subscriber(self.subscriber, 'pre')
         sim.signal(self.parent_process, producer=self.cond, finished=True)
+
+    def cond_value(self, event):
+        return self.value
+
+    def cond_cleanup(self):
+        if isinstance(self.cond, DSProcess):
+            self.cond.finish_tx.remove_subscriber(self.subscriber, 'pre')
+            sim.cleanup(self.cond)
 
 
 class DSFilterAggregated:
@@ -123,6 +127,22 @@ class DSFilterAggregated:
         else:
             return DSFilterAggregated(all, self, other)
 
+    def cond_value(self, event):
+        retval = {}
+        for el in self.elements:
+            if not el:
+                continue
+            if isinstance(el, DSFilter):
+                retval[el] = el.cond_value(event)
+            else:
+                embedded = el.cond_value(event)
+                retval.update(embedded)
+        return retval
+    
+    def cond_cleanup(self):
+        for el in self.elements:
+            el.cond_cleanup()
+
     def __bool__(self):
         return self.expression(self.elements)
 
@@ -133,11 +153,16 @@ class DSFilterAggregated:
 
     def __call__(self, event):
         ''' Handles logic for the event. '''
-        # This converts from callable object into method calling.
+        # First, we update all the elements.
         for el in self.elements:
             el(event)
+        # And then we compute the expression.
+        # Note- another approach would be if we would immediatelly compute the expression.
+        # For instance, if we had an instance of any(A, B, C, ...) and we update A whose
+        # expression would afterwards compute as True (satisfied), we would not need to
+        # update others (B, C, ...).
+        # The limitation of such solution is that it could not be applied to expressions
+        # which have DFilter(reevaluate=True). This is the reason why it's implemented
+        # this way.
         retval = self.expression(self.elements)
-        if retval:
-            # TODO: instead of boolean (True), return dict with signalled objects
-            pass
         return retval
