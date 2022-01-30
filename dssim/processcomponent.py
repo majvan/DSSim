@@ -32,6 +32,7 @@ class DSProcessComponent(DSComponent):
 
     def signal(self, event_object):
         self.scheduled_process.signal(object=event_object)
+        #self.sim.schedule_event(0, {'object': event_object}, self.scheduled_process)
 
     def wait(self, timeout=float('inf')):
         try:
@@ -52,7 +53,7 @@ class DSProcessComponent(DSComponent):
         return retval
 
     def enter_nowait(self, queue):
-        retval = queue.put_nowait(object=self)
+        retval = queue.put_nowait({'object': self})
         return retval
 
     def leave(self, queue,timeout=float('inf')):
@@ -61,8 +62,9 @@ class DSProcessComponent(DSComponent):
     def pop(self, queue, timeout=float('inf')):
         try:
             retval = yield from queue.get(timeout)
+            assert len(retval) == 1
             if retval is not None:
-                retval = retval['object']
+                retval = retval[0]['object']
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
@@ -71,16 +73,10 @@ class DSProcessComponent(DSComponent):
         retval = queue.get_nowait()
         return retval
 
-    def get(self, resource, amount, timeout=float('inf')):
-        if isinstance(resource, Queue):
-            with self.sim.consume(resource):
-                retval = yield from self.sim.wait(timeout, cond=lambda x: len(resource) >= amount)
-                if retval is not None:
-                    # TODO: get first N object from the queue
-                    pass
-        elif isinstance(resource, Resource):
-            with self.sim.consume(amount):
-                retval = yield from resource.get(timeout, amount)
-                if retval is not None:
-                    pass
-
+    def get(self, resource, amount=1, timeout=float('inf')):
+        retval = yield from resource.get(timeout, amount)
+        return retval
+            
+    def put(self, resource, *amount, timeout=float('inf')):
+        retval = yield from resource.put(timeout, *amount)
+        return retval
