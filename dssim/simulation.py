@@ -19,6 +19,7 @@ from functools import wraps
 from collections.abc import Iterable
 from inspect import isgeneratorfunction
 from dssim.timequeue import TimeQueue
+from abc import abstractmethod
 
 
 class DSAbortException(Exception):
@@ -28,6 +29,16 @@ class DSAbortException(Exception):
         super().__init__()
         self.producer = producer
         self.info = info
+
+
+class DSCondition:
+    @abstractmethod
+    def cond_value(self, event):
+        return event
+
+    @abstractmethod
+    def cond_cleanup(self):
+        pass
 
 
 class DSSubscriberContextManager:
@@ -277,6 +288,10 @@ class DSSimulation:
         if event is not None:
             # If we terminated before timeout, then the timeout event is on time queue- remove it
             self.delete(lambda e: e[0] is schedulable)
+        if hasattr(cond, 'cond_value'):
+            event = cond.cond_value(event)
+        if hasattr(cond, 'cond_cleanup'):
+            cond.cond_cleanup()
         return event
 
     def check_and_wait(self, timeout=float('inf'), cond=lambda c: False):
@@ -286,6 +301,10 @@ class DSSimulation:
         # Otherwise it jumps to the waiting process.
         _, event = self._check_cond(cond, object())
         if event:
+            if hasattr(cond, 'cond_value'):
+                event = cond.cond_value(event)
+            if hasattr(cond, 'cond_cleanup'):
+                cond.cond_cleanup()
             return event  # return event immediately
         retval = yield from self.wait(timeout, cond)
         return retval
