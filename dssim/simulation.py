@@ -17,7 +17,7 @@ The file provides basic logic to run the simulation and supported methods.
 import sys
 from functools import wraps
 from collections.abc import Iterable
-from inspect import isgeneratorfunction
+import inspect
 from dssim.timequeue import TimeQueue
 from abc import abstractmethod
 
@@ -414,7 +414,7 @@ def DSSchedulable(api_func):
     
     @wraps(api_func)
     def scheduled_func(*args, **kwargs):
-        if isgeneratorfunction(api_func):
+        if inspect.isgeneratorfunction(api_func):
             extended_gen = api_func(*args, **kwargs)
         else:
             extended_gen = _fcn_in_generator(*args, **kwargs)
@@ -436,7 +436,6 @@ class DSProcess(DSComponent):
         self.scheduled_generator = generator
         # We store the latest value. Useful to check the status after finish.
         self.value = None
-        self.finished = False
         self.meta = _ProcessMetadata()
         self.waiting_tasks = []  # taks waiting to finish this task
         self.finish_tx = DSProducer(name=self.name+'.finish tx')
@@ -504,8 +503,13 @@ class DSProcess(DSComponent):
     def signal_object(self, event_object):
         self.sim.signal(self.scheduled_generator, event_object)
 
+    def started(self):
+        return inspect.getgeneratorstate(self.scheduled_generator) != inspect.GEN_CREATED
+
+    def finished(self):
+        return inspect.getgeneratorstate(self.scheduled_generator) == inspect.GEN_CLOSED
+
     def _finish(self):
-        self.finished = True
         self.sim.cleanup(self)
         self.finish_tx.schedule(0, finished='Ok')
 
