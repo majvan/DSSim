@@ -49,12 +49,15 @@ class DSFilter(DSCondition):
             #    own events, the processing could be asynchronous with execution of this filter; i.e. it could return
             #    asynchronously. For such, we subscribe for the new process finish event and push that to the current
             #    process.
-            if inspect.getgeneratorstate(self.cond) == inspect.GEN_CREATED:
-                self.cond = sim.schedule(0, DSProcess(self.cond))  # convert to DSProcess so we could get return value
-                self.subscriber = DSConsumer(self, self._process_finished)
-                self.cond.finish_tx.add_subscriber(self.subscriber, 'pre')
-            else:
-                raise ValueError('Cannot filter already running generator.')
+            # if inspect.getgeneratorstate(self.cond) == inspect.GEN_CREATED:
+            self.cond = DSProcess(self.cond)  # convert to DSProcess so we could get return value
+            # else:
+            #     raise ValueError('Cannot filter already running generator.')
+        if isinstance(self.cond, DSProcess):
+            if not self.cond.started():
+                self.cond = sim.schedule(0, self.cond)  # start the process
+            self.subscriber = DSConsumer(self, self._process_finished)
+            self.cond.finish_tx.add_subscriber(self.subscriber, 'pre')
 
     def __or__(self, other):
         retval = DSFilterAggregated(any, self, other)
@@ -76,7 +79,7 @@ class DSFilter(DSCondition):
         signaled, value = False, None
         if isinstance(self.cond, DSProcess):
             # now we should get this signaled only after return
-            if self.cond.finished:
+            if self.cond.finished():
                 if self.cond.value is None and self.signal_timeout:
                     signaled, value = True, None
                 elif isinstance(self.cond.value, Exception):
@@ -106,6 +109,9 @@ class DSFilter(DSCondition):
         if isinstance(self.cond, DSProcess):
             self.cond.finish_tx.remove_subscriber(self.subscriber, 'pre')
             sim.cleanup(self.cond)
+
+    def get_process(self):
+        return self.cond if isinstance(self.cond, DSProcess) else None
 
 
 class DSFilterAggregated:
