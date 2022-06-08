@@ -7,6 +7,7 @@ class School(DSComponent):
         super().__init__(*args, **kwargs)
         self.tx = DSProducer(name=self.name+'.bell_tx')
         self.sim.schedule(0, DSProcess(self.school_bell(), name=self.name+'.bell_process'))
+        self.days = 0
 
     def school_bell(self):
         while True:
@@ -50,12 +51,14 @@ class School(DSComponent):
             self.tx.signal(bell='start')
             yield from self.sim.wait(45)  # 9th class wait 45 minutes
             self.tx.signal(bell='end')
+            self.days += 1
 
 class Pupil(DSComponent):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.tx = DSProducer(name=self.name+'.brain_activity_tx')
         self.brain_activity = 'none'
+        self.total_classes = 0
 
     def go_to_school(self, school, nr_of_classes):
         self.brain_activity = 'moderate'
@@ -70,6 +73,7 @@ class Pupil(DSComponent):
                 yield from self.sim.wait(cond=lambda e: e['bell'] == 'end')
                 class_n += 1
                 if class_n >= nr_of_classes:
+                    self.total_classes += nr_of_classes
                     break
                 print(f'{self} starting break at {self.sim.time % (24 * 60) // 60}:{self.sim.time % 60:02d}')
             self.tx.signal(activity='moderate')
@@ -81,8 +85,7 @@ class Pupil(DSComponent):
         self.tx.signal(activity='none')
         return 'done'
 
-def family_life(school):
-    pupils = [Pupil(name=pupil_name) for pupil_name in ('Peter', 'John', 'Maria', 'Eva')]
+def family_life(school, pupils):
     while True:
         now = sim.time % (24 * 60)  # get time of day in [minutes]
         yield from sim.wait(24 * 60 - now)  # wait till midnight
@@ -90,7 +93,13 @@ def family_life(school):
         for pupil in pupils:
             school_process = sim.schedule(0, DSProcess(pupil.go_to_school(school, randint(6, 8))))
 
-school = School(name='Elementary School Newton Street')
-sim.schedule(0, DSProcess(family_life(school)))
+if __name__ == '__main__':
+    school = School(name='Elementary School Newton Street')
+    pupils = [Pupil(name=pupil_name) for pupil_name in ('Peter', 'John', 'Maria', 'Eva')]
+    sim.schedule(0, DSProcess(family_life(school, pupils)))
 
-sim.run(24 * 60 * 30)
+    sim.run(24 * 60 * 30)
+    assert 180 <= pupils[0].total_classes <= 220  # high probability to get into interval
+    assert 180 <= pupils[1].total_classes <= 220  # high probability to get into interval
+    assert 180 <= pupils[2].total_classes <= 220  # high probability to get into interval
+    assert 180 <= pupils[3].total_classes <= 220  # high probability to get into interval

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dssim.simulation import DSSchedulable, DSProcess, DSComponent, sim
+import inspect
 
 class MyComponent(DSComponent):
     def __init__(self, *args, **kwargs):
@@ -77,3 +78,4 @@ if __name__ == '__main__':
     print('Scheduling task', obj0.taskDummy, 'in 2 sec')
     sim.schedule(2, obj0.taskDummy)
     sim.run(20)
+    assert inspect.getgeneratorstate(obj0.taskDummy) == inspect.GEN_CLOSED

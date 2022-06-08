@@ -60,11 +60,13 @@ class CarGenerator(DSProcessComponent):
             yield from self.sim.wait(randint(*T_INTER))
             Car()
 
+if __name__ == '__main__':
+    # Create environment and start processes
+    gas_station = Resource(2, name="Gas station places")  # 2 places in gas station
+    fuel_pump = Resource(capacity=GAS_STATION_SIZE, name="Gas station fuel")
+    tank_truck = TankTruck()
+    CarGenerator()
 
-# Create environment and start processes
-gas_station = Resource(2, name="Gas station places")  # 2 places in gas station
-fuel_pump = Resource(capacity=GAS_STATION_SIZE, name="Gas station fuel")
-tank_truck = TankTruck()
-CarGenerator()
-
-sim.run(SIM_TIME)
+    sim.run(SIM_TIME)
+    print("Done.")
+    assert sim.time > 29900

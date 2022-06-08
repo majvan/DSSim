@@ -14,22 +14,27 @@
 from dssim.simulation import sim, DSComponent, DSAbortException
 from random import randint
 
+NUM_OF_SPEAKERS = 20
+
 class Studio(DSComponent):
     def __init__(self):
         # Prepare moderator
         moderator = self.moderator_process()
         # Prepare speakers to talk
-        self.speakers = [self.speaker_process() for i in range(20)]
+        self.speakers = [self.speaker_process() for i in range(NUM_OF_SPEAKERS)]
         # Start the role of moderator
         self.moderator = sim.schedule(0, moderator)
+        self.stat = {'abort': 0, 'finish': 0}
 
     def speaker_process(self):
         try:
             yield from sim.wait(randint(20, 40))
             print('Speaker finished')
+            self.stat['finish'] += 1
             sim.signal(self.moderator)
         except DSAbortException as e:
             print(e.info['msg'])
+            self.stat['abort'] += 1
 
     def moderator_process(self):
         for s in self.speakers:
@@ -39,5 +44,10 @@ class Studio(DSComponent):
                 # We finished with timeout
                 sim.abort(s, msg='No time left')
 
-s = Studio()
-sim.run(1000)
+if __name__ == '__main__':
+    s = Studio()
+    sim.run(1000)
+
+    assert s.stat['finish'] > 0  # high probability to pass
+    assert s.stat['abort'] > 0  # high probability to pass
+    assert s.stat['finish'] + s.stat['abort'] == NUM_OF_SPEAKERS

@@ -62,6 +62,6 @@ def main():
     print(sim.time, ret)
 
 
-
-sim.schedule(0, main())
-sim.run(100)
+if __name__ == '__main__':
+    sim.schedule(0, main())
+    sim.run(100)

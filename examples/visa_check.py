@@ -17,6 +17,7 @@ from dssim.simulation import DSAbortException, sim, DSSchedulable, DSComponent
 from random import randint
 
 q = Queue(capacity=12)
+SIM_TIME = 60 * 10
 
 class Person(DSComponent):
     def __init__(self, info, identifier, max_waiting_time, *args, **kwargs):
@@ -61,6 +62,7 @@ class VisaCheck(DSComponent):
         self.max_waiting_time = max_waiting_time
         self.queue = queue
         self.sim.schedule(0, self.work())
+        self.stat = {'processed': 0}
 
     def work(self):
         while True:
@@ -87,6 +89,7 @@ class VisaCheck(DSComponent):
             print(f'{sim.time:<5} {self}: Going to process {person} for {busy} minutes; first one is {first_person}')
             yield from sim.wait(busy)
             print(f'{sim.time:<5} {self}: {person} done.')
+            self.stat['processed'] += 1
 
     def __repr__(self):
         return f'Check{self.info}[{self.identifier}]'
@@ -131,11 +134,17 @@ def alien_person_generator():
         print(f'{sim.time:<5} New Mars: queue too long, {person} gave up and did not queue.')
 
 
-persons = sim.schedule(0, eu_person_generator())
-persons = sim.schedule(0, ww_person_generator())
-#sim.schedule(300, alien_person_generator())
+if __name__ == '__main__':
+    persons = sim.schedule(0, eu_person_generator())
+    persons = sim.schedule(0, ww_person_generator())
+    #sim.schedule(300, alien_person_generator())
 
-visa_checks = [VisaCheck('EU', i, q, max_waiting_time=randint(15, 30)) for i in range(2)]
-visa_checks = [VisaCheck('WW', i, q, max_waiting_time=randint(15, 30)) for i in range(2)]
+    eu_visa_checks = [VisaCheck('EU', i, q, max_waiting_time=randint(15, 30)) for i in range(2)]
+    ww_visa_checks = [VisaCheck('WW', i, q, max_waiting_time=randint(15, 30)) for i in range(2)]
 
-sim.run(10 * 60)
+    sim.run(SIM_TIME)
+    print("Done.")
+    total_processed = sum([check.stat['processed'] for check in eu_visa_checks + ww_visa_checks])
+
+    assert total_processed > 120  # high probability to pass
+

@@ -13,6 +13,7 @@
 # limitations under the License.
 from dssim.components.queue import Queue
 from dssim.simulation import sim
+import inspect
 
 q_ab, q_ba = Queue(), Queue()
 
@@ -66,6 +67,10 @@ def do_somethingB():
     print('B5 Finish')
 
 if __name__ == '__main__':
-    sim.schedule(0, do_somethingA())
-    sim.schedule(0, do_somethingB())
+    process_a, process_b = do_somethingA(), do_somethingB()
+    sim.schedule(0, process_a)
+    sim.schedule(0, process_b)
     sim.run(20)
+
+    assert inspect.getgeneratorstate(process_a) == inspect.GEN_CLOSED
+    assert inspect.getgeneratorstate(process_b) == inspect.GEN_CLOSED

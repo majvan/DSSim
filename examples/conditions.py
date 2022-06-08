@@ -69,6 +69,6 @@ def demo_filtering():
     assert sim.time == time + 5  # wait for (2 and 6) or (1 and 5) => signal at 1 then 5 makes this true
     assert tuple(ret.values()) == (None, None)
 
-
-proc = sim.schedule(0, demo_filtering())
-sim.run()
+if __name__ == '__main__':
+    proc = sim.schedule(0, demo_filtering())
+    sim.run()
