@@ -16,7 +16,7 @@
 Tests for simulation module
 '''
 import unittest
-from unittest.mock import Mock, call
+from unittest.mock import Mock, MagicMock, call
 from dssim.simulation import DSSimulation, DSAbortException, DSSchedulable, DSProcess, sim
 
 class SomeObj:
@@ -84,7 +84,7 @@ class TestDSSchedulable(unittest.TestCase):
             retval = e.value
         self.assertEqual(retval, 'Success')
 
-    def test3_process(self):
+    def test3_generator_as_process(self):
         process = DSProcess(self.__generator())
         retval = next(process)
         self.assertEqual(retval, 'First return')
@@ -97,7 +97,7 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertEqual(retval, 'Success')
         self.assertEqual(process.value, 'Success')
 
-    def test4_generator(self):
+    def test4_send_to_generator(self):
         process = self.__generator()
         retval = next(process)
         self.assertEqual(retval, 'First return')
@@ -115,7 +115,7 @@ class TestDSSchedulable(unittest.TestCase):
             retval2 = e.value
         self.assertEqual(retval2, None)
 
-    def test5_process(self):
+    def test5_send_to_process(self):
         process = DSProcess(self.__generator())
         retval = next(process)
         self.assertEqual(retval, 'First return')
@@ -135,7 +135,7 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertEqual(retval2, None)
         self.assertEqual(process.value, None)
 
-    def test6_generator(self):
+    def test6_send_to_generator(self):
         process = self.__loopback_generator()
         retval = next(process)
         retval = process.send('from_test0')
@@ -143,7 +143,7 @@ class TestDSSchedulable(unittest.TestCase):
         retval = process.send(DSAbortException(producer='test'))
         self.assertTrue(isinstance(retval, DSAbortException))
 
-    def test7_process(self):
+    def test7_send_to_generator_as_process(self):
         process = DSProcess(self.__loopback_generator())
         retval = next(process)
         retval = process.send('from_test0')
@@ -152,8 +152,10 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertTrue(isinstance(retval, DSAbortException))
         self.assertTrue(isinstance(process.value, DSAbortException))
 
-    def test8_process(self):
+    def test8_joining_process(self):
         process = DSProcess(self.__generator())
+        process.join = MagicMock()
+        process.join.return_value = iter(['Join called',])
         process_waiting = DSProcess(self.__waiting_for_join(process))
         retval = next(process)
         self.assertEqual(retval, 'First return')
@@ -161,10 +163,10 @@ class TestDSSchedulable(unittest.TestCase):
         sim.parent_process = process_waiting
         retval = next(process_waiting)
         self.assertEqual(process.value, 'First return')  # process not changed
-        self.assertEqual(process_waiting.value, None)
+        self.assertEqual(process_waiting.value, 'Join called')
         retval = next(process)
         self.assertEqual(process.value, 'Second return')
-        self.assertEqual(process_waiting.value, None)
+        self.assertEqual(process_waiting.value, 'Join called')
         with self.assertRaises(StopIteration):
             retval = next(process)
         self.assertEqual(process.value, 'Success')
