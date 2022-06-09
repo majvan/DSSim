@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dssim.simulation import DSComponent, DSProcess, sim
-from dssim.pubsub import DSSingleProducer, DSConsumer
+from dssim.pubsub import DSProducer, DSConsumer
 from dssim.components.limiter import Limiter
 
 
@@ -20,10 +20,11 @@ class MCU(DSComponent):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.limiter = Limiter(0, name=self.name + '.(internal) limiter0')
-        self._producer = DSSingleProducer(name=self.name + '.(internal) event producer')
-        self._producer.add_consumer(self.limiter.rx)
+        self._producer = DSProducer(name=self.name + '.(internal) event producer')
+        self._producer.add_subscriber(self.limiter.rx)
         consumer = DSConsumer(self, MCU._on_output, name=self.name + '.(internal) output')
-        self.limiter.tx.add_consumer(consumer)
+        self.limiter.tx.add_subscriber(consumer)
+        self.stat = {'generated': 0, 'received': 0}
 
     def boot(self):
         ''' This function has to be called after producers are registered '''
@@ -55,13 +56,16 @@ class MCU(DSComponent):
             yield from self.sim.wait(delay)
             n += 1
             # print('Event', n, 'produced @', self.sim.time)
-            time = self.sim.time
             self._producer.signal(n=n)  # feed the producer with some event
+            self.stat['generated'] += 1
 
     def _on_output(self, n, **others):
         print('Event', n, 'came @', self.sim.time)
+        self.stat['received'] += 1
 
 if __name__ == '__main__':
     mcu0 = MCU(name='mcu master')
     mcu0.boot()
     sim.run(10)
+    assert mcu0.stat['generated'] == 199
+    assert mcu0.stat['received'] == 72
