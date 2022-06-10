@@ -1,35 +1,35 @@
 #!/usr/bin/env sh
 
-CURRENT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]:-$0}"; )" &> /dev/null && pwd 2> /dev/null; )";
-PYTHONPATH="$CURRENT_DIR/.."
+SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]:-$0}"; )" &> /dev/null && pwd 2> /dev/null; )";
+PYTHONPATH="$SCRIPT_DIR/.."
 
 echo "Process schedule"
-python ./process_schedule.py
+python $SCRIPT_DIR/process_schedule.py
 echo "Running bottleneck"
-python ./bottleneck.py
-#  echo "Running bottleneck controller"
-#  python ./bottleneck_controller.py
+python $SCRIPT_DIR/bottleneck.py
+echo "Running bottleneck controller"
+python $SCRIPT_DIR/bottleneck_controller.py
 echo "Running conditions"
-python ./conditions.py
+python $SCRIPT_DIR/conditions.py
 echo "Running conditions process"
-python ./conditions_process.py
+python $SCRIPT_DIR/conditions_process.py
 echo "Running gas station"
-python ./gasstation.py
+python $SCRIPT_DIR/gasstation.py
 #   echo "I2C loopback"
-#   python ./i2c_master_slave.py
+#   python $SCRIPT_DIR/i2c_master_slave.py
 #   echo "Process events"
-#   python ./process_events.py
+#   python $SCRIPT_DIR/process_events.py
 echo "Processcomponent"
-python ./processcomponent.py
+python $SCRIPT_DIR/processcomponent.py
 echo "Queue"
-python ./queue.py
+python $SCRIPT_DIR/queue.py
 echo "School"
-python ./school.py
+python $SCRIPT_DIR/school.py
 echo "Studio"
-python ./studio.py
+python $SCRIPT_DIR/studio.py
 #   echo "UART loop"
-#   python ./uart_loop.py
+#   python $SCRIPT_DIR/uart_loop.py
 #   echo "UART physical"
-#   python ./uart_physical.py
+#   python $SCRIPT_DIR/uart_physical.py
 echo "VISA check"
-python ./visa_check.py
+python $SCRIPT_DIR/visa_check.py
