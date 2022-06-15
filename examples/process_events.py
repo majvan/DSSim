@@ -11,8 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.simulation import DSComponent, sim
-from dssim.pubsub import DSProducer, DSProcessConsumer
+from dssim.simulation import DSComponent, DSProcess, sim
+from dssim.pubsub import DSProducer
 from random import randint
 
 
@@ -34,7 +34,8 @@ class MyComponent(DSComponent):
     def __init__(self, name, **kwargs):
         super().__init__(**kwargs)
         self.stat = {'errors': 0, 'success': 0, 'tries': 0}
-        self.sm = DSProcessConsumer(self.locker_state_machine(), start=True, name=self.name+'.rx_sm')
+        self.sm = DSProcess(self.locker_state_machine(), name=self.name+'.rx_sm')
+        self.sm.schedule(0)
 
     def boot(self):
         self.sim.schedule(0, obj0.attacker1())
@@ -43,15 +44,15 @@ class MyComponent(DSComponent):
         ''' Attacker provides random numbers to try to break the locker machine '''
         while True:
             code = randint(0, 100)
-            self.sm.notify(code=code)
+            self.sm.signal(code=code)
             self.stat['tries'] += 1
             # 2 ms to generate the code, send it and check the status of unlock
             yield from self.sim.wait(0.002)
 
     def attacker2(self):
-        ''' Attacker can provide only constant code 1-1-1-1 '''
+        ''' Attacker tries to guess that the code once becomes 1-1-1-1 '''
         while True:
-            sim.signal(self.sm, code=1)
+            self.sm.signal(code=1)
             self.stat['tries'] += 1
             # 500 us to generate the code, send it and check the status of unlock
             yield from self.sim.wait(0.0005)
@@ -80,8 +81,15 @@ if __name__ == '__main__':
     obj0 = MyComponent(name='obj0')
     obj0.boot()
     print('Running...')
-    sim.run(3600)
+
+    import cProfile
+    cProfile.run('sim.run(3600)')
     print('Done.')
-    print(obj0.stat['success'])
-    print(obj0.stat['errors'])
-    print(obj0.stat['tries'])
+    print(f'Successful attempts: {obj0.stat["success"]}')
+    print(f'Unsuccessful attempts: {obj0.stat["errors"]}')
+    print(f'Attempts: {obj0.stat["tries"]}')
+    print(f'Simulation events: {sim.num_events}')
+    assert obj0.stat["success"] <= 5  # high probability to pass
+    assert obj0.stat["tries"] == 1800001
+    assert sim.num_events == obj0.stat["tries"] + obj0.stat["errors"] + 1
+
