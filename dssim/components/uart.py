@@ -16,8 +16,8 @@ UART components- physical layer nad link layer.
 Link layer components can (but not necessarily has to) use physical layer
 '''
 import random as _rand
-from dssim.simulation import DSSchedulable, DSComponent
-from dssim.pubsub import DSConsumer, DSProducer, DSSingleProducer, DSProcessConsumer
+from dssim.simulation import DSSchedulable, DSComponent, DSProcess
+from dssim.pubsub import DSConsumer, DSProducer
 from dssim.utils import ParityComputer, ByteAssembler
 
 
@@ -132,11 +132,11 @@ class UARTPhysBase(DSComponent):
     def _add_tx_pubsub(self):
         self.tx = DSProducer(name=self.name + '.tx')
         # self.tx_irq = DSProducer(name=self.name + '.tx_irq')  # Not supported yet, low value
-        self.tx_link = DSSingleProducer(name=self.name + '.tx bridge to linklayer', sim=self.sim)
+        self.tx_link = DSProducer(name=self.name + '.tx bridge to linklayer', sim=self.sim)
 
     def _add_rx_pubsub(self):
         # self.rx_irq = DSProducer(name=self.name + '.rx_irq')  # Not supported now, low value
-        self.rx_link = DSSingleProducer(name=self.name + '.rx bridge to linklayer', sim=self.sim)
+        self.rx_link = DSProducer(name=self.name + '.rx bridge to linklayer', sim=self.sim)
 
     def send(self, byte, parity):
         ''' Send a byte over UART with and a parity bit '''
@@ -216,7 +216,6 @@ class UARTPhys(UARTPhysBase):
         pass
 
     def __add_rx_pubsub(self):
-        super()._add_rx_pubsub()
         # Create new interface for RX
         self.rx = DSConsumer(
             self,
@@ -224,12 +223,12 @@ class UARTPhys(UARTPhysBase):
             name=self.name + '.rx',
             sim=self.sim,
         )
-        self._rx_sampler = DSProcessConsumer(
+        self._rx_sampler = DSProcess(
             self._scan_bits(),
-            start=True,
             name=self.name + '.rx_sampler',
             sim=self.sim,
         )
+        self._rx_sampler.schedule(0)
 
     def _send_now(self, byte, parity, *other):
         ''' Working byte, we will shift this byte right to get the bits.
@@ -259,7 +258,7 @@ class UARTPhys(UARTPhysBase):
         # the sampler also requires in some cases async information about line change
         # notify only the _rx_sampler; possible only when this method is run
         # within other process than _rx_sampler
-        self._rx_sampler.notify(line=line)
+        self._rx_sampler.signal(line=line)
 
     def _send_bits(self, bits, parity_bit=None):
         # schedule set of next events
@@ -362,7 +361,7 @@ class UARTPhysBasic(UARTPhysBase):
                               name=self.name + '.(internal) tx fb',
                               sim=self.sim
                               )
-        self.tx.add_consumer(consumer)
+        self.tx.add_subscriber(consumer)
 
     def __add_rx_pubsub(self):
         # Create new interface for RX
@@ -467,15 +466,15 @@ class UARTLink(DSComponent):
                               sim=self.sim
                               )
         if self.phys:
-            self.phys.tx_link.add_consumer(consumer)
+            self.phys.tx_link.add_subscriber(consumer)
         else:
-            self.tx.add_consumer(consumer)
+            self.tx.add_subscriber(consumer)
 
     def __add_rx_pubsub(self):
         self.rx = DSConsumer(self, UARTLink._on_rx_event, name=self.name + '.rx', sim=self.sim)
         self.rx_irq = DSProducer(name=self.name + '.rx_irq', sim=self.sim)
         if self.phys:
-            self.phys.rx_link.add_consumer(self.rx)
+            self.phys.rx_link.add_subscriber(self.rx)
 
     def set_tx_watermark(self, watermark):
         ''' Set watermark for the TX buffer to produce IRQ '''
@@ -564,6 +563,7 @@ class UARTLink(DSComponent):
                 send_watermark = True
         if send_watermark:
             self.tx_irq.signal(producer=producer, flag='byte', flag_detail='sent')
+        return False  # allow others to receive TX signal
 
     def _on_rx_event(self, producer, byte, parity, **other):
         ''' Internal feedback after byte was received  '''
