@@ -27,8 +27,8 @@ echo "Studio"
 python $SCRIPT_DIR/studio.py
 #   echo "UART loop"
 #   python $SCRIPT_DIR/uart_loop.py
-#   echo "UART physical"
-#   python $SCRIPT_DIR/uart_physical.py
+echo "UART physical"
+python $SCRIPT_DIR/uart_physical.py
 echo "VISA check"
 python $SCRIPT_DIR/visa_check.py
 # The following are benchmark tests which take some time

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dssim.simulation import DSComponent, sim
-from dssim.pubsub import DSSingleProducer, DSConsumer
+from dssim.pubsub import DSProducer, DSConsumer
 from dssim.components.uart import UARTPhys
 
 
@@ -20,15 +20,16 @@ class MCU(DSComponent):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.baudrate = 115200
-        self.gpio0 = DSSingleProducer(name=self.name + '.gpio')
+        self.gpio0 = DSProducer(name=self.name + '.gpio')
         self.uart0 = UARTPhys(baudrate=self.baudrate, parity='E', name=self.name + '.uart0')
-        self.gpio0.add_consumer(self.uart0.rx)  # connect gpio output to UART RX peripheral
+        self.gpio0.add_subscriber(self.uart0.rx)  # connect gpio output to UART RX peripheral
+        self.stat = {'last_byte': 0}
 
     def boot(self):
         ''' This function has to be called after producers are registered '''
         # Register ISR routine. The routine is on link layer because physical layer does not
         # export any IRQ (there is not much value to register that a bit was received).
-        self.uart0.rx_link.add_consumer(DSConsumer(self, MCU.rx_isr, name=self.name + '.rx_isr'))
+        self.uart0.rx_link.add_subscriber(DSConsumer(self, MCU.rx_isr, name=self.name + '.rx_isr'))
 
         #  Bit banging with GPIO to send 0x55 = 85
         self.gpio0.schedule(0 / self.baudrate, line=0)  # start
@@ -45,9 +46,11 @@ class MCU(DSComponent):
 
     def rx_isr(self, producer, byte, parity):
         # received a byte. Note that on the physical level the parity is not checked, just reported
-        print('Received byte', byte)
+        self.stat['last_byte'] = byte
 
 if __name__ == '__main__':
     mcu0 = MCU(name='mcu master')
     mcu0.boot()
     sim.run(0.2)
+    print('Received byte', mcu0.stat['last_byte'])
+    assert mcu0.stat['last_byte'] == 85
