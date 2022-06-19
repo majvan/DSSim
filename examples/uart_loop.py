@@ -27,7 +27,7 @@ class MCU(DSComponent):
 
     def boot(self):
         # Register ISRs
-        self.uart0.rx_irq.add_consumer(DSConsumer(self, MCU.rx_isr, name=self.name + '.isr'))
+        self.uart0.rx_irq.add_subscriber(DSConsumer(self, MCU.rx_isr, name=self.name + '.isr'))
 
     def rx_isr(self, flag, **other):
         if flag == 'byte':
@@ -44,8 +44,8 @@ if __name__ == '__main__':
     # connect loopback
     # cpu0.uart0.phys.tx.add_consumer(cpu1.uart0.phys.rx)
     # cpu1.uart0.phys.tx.add_consumer(cpu0.uart0.phys.rx)
-    cpu0.uart0.tx.add_consumer(cpu1.uart0.rx)
-    cpu1.uart0.tx.add_consumer(cpu0.uart0.rx)
+    cpu0.uart0.tx.add_subscriber(cpu1.uart0.rx)
+    cpu1.uart0.tx.add_subscriber(cpu0.uart0.rx)
 
     cpu0.uart0.send(1)
     cpu0.uart0.send(4)
@@ -65,3 +65,7 @@ if __name__ == '__main__':
     print(cpu0.stat['rx_isr_counter'])
     print()
     print(sim.num_events)
+
+    assert cpu0.uart0.stat['tx_counter'] == 100173 == cpu1.uart0.stat['rx_counter']
+    assert cpu0.uart0.stat['rx_counter'] == 100172 == cpu1.uart0.stat['tx_counter']
+    assert sim.num_events == 200345
