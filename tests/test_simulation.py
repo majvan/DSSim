@@ -22,6 +22,10 @@ from dssim.simulation import DSSimulation, DSAbortException, DSSchedulable, DSPr
 class SomeObj:
     pass
 
+class SomeCallableObj:
+    def __call__(self, event):
+        return True
+
 class EventForwarder:
     ''' This represents basic forwarder which forwards events from time_process into a waiting
     process. Some kind of a DSProducer which produces data into one exact running process
@@ -231,6 +235,140 @@ class TestException(unittest.TestCase):
             self.assertTrue(1 == 2)
         except ValueError as exc:
             self.assertTrue('generator already executing' in str(exc))
+
+class TestConditionChecking(unittest.TestCase):
+    ''' Test the processing of the events by the simulation '''
+    def __my_process(self):
+        while True:
+            yield 1
+
+    def test1_process_metadata(self):
+        sim = DSSimulation()
+        self.assertTrue(len(sim._process_metadata) == 0)
+        p = DSProcess(self.__my_process(), sim=sim)
+        p.meta = 'My meta'
+        meta = sim.get_process_metadata(p)
+        self.assertEqual(meta, p.meta)
+        self.assertTrue(len(sim._process_metadata) == 0)
+
+        p = self.__my_process()
+        self.assertTrue(len(sim._process_metadata) == 0)
+        meta = sim.get_process_metadata(p)
+        self.assertIsNotNone(meta)
+        self.assertTrue(len(sim._process_metadata) == 1)  # write the metadata of the generator into the simulation registry
+        meta = sim.get_process_metadata(p)
+        self.assertIsNotNone(meta)
+        self.assertTrue(len(sim._process_metadata) == 1)  # the next retrieve does not increase the registry
+
+    def test2_check_storing_cond_in_metadata(self):
+        ''' By calling wait, the metadata.cond should be stored '''
+        def my_process(event):
+            if True:
+                return 100
+            yield 101
+
+        sim = DSSimulation()
+        sim._wait_for_event = my_process
+        process = DSProcess(self.__my_process())
+        sim.parent_process = process
+        try:
+            retval = next(sim.wait(cond='condition'))
+        except StopIteration as e:
+            retval = e.value
+        self.assertTrue(retval == 100)
+        self.assertTrue(process.meta.cond == 'condition')
+
+        condition = SomeObj()
+        condition.cond_value = lambda e: 'condition value was computed in lambda'
+        condition.cond_cleanup = Mock()
+        try:
+            retval = next(sim.wait(cond=condition))
+        except StopIteration as e:
+            retval = e.value
+        self.assertTrue(process.meta.cond == condition)
+        self.assertTrue(retval == 'condition value was computed in lambda')
+        condition.cond_cleanup.assert_called_once()
+
+    def test3_check_cond(self):
+        ''' Test 5 types of conditions - see _check_cond '''
+        sim = DSSimulation()
+        exception = Exception('error')
+        for cond, event, expected_result in (
+            (lambda e:False, None, (True, None)),
+            (lambda e:True, None, (True, None)),
+            ('abc', None, (True, None)),
+            (None, None, (True, None)),
+            (lambda e:False, exception, (True, exception)),
+            (lambda e:True, exception, (True, exception)),
+            ('abc', exception, (True, exception)),
+            (exception, exception, (True, exception)),
+            (lambda e:False, 'def', (False, None)),
+            (lambda e:True, 'def', (True, 'def')),
+            ('abc', 'def', (False, None)),
+            ('def', 'def', (True, 'def')),
+        ):
+            retval = sim._check_cond(cond, event)
+            self.assertEqual(retval, expected_result)
+
+    def test4_check_condition(self):
+        ''' The check_condition should retrieve cond from the metadata and then call _check_cond '''
+        sim = DSSimulation()
+        p = DSProcess(self.__my_process(), sim=sim)
+        p.meta = SomeObj()
+        p.meta.cond = Mock(return_value='abc')
+        retval = sim.check_condition(p, 'test')
+        p.meta.cond.assert_called_once()
+        self.assertEqual(retval, True)
+    
+    def test5_early_check(self):
+        ''' Test if signal calls first check_condition and then signal_object '''
+        sim = DSSimulation()
+        sim.check_condition = Mock(return_value=False)  # it will not allow to accept the event
+        sim.signal_object = Mock()
+        # sim.check_condition.side_effect = lambda *a, **kw: call_order.append(call(*a, **kw))
+        # sim.signal_object.side_effect = lambda *a, **kw: call_order.append(call(*a, **kw))
+        sim.signal('process1', obj=None)
+        sim.check_condition.assert_called_once()
+        sim.signal_object.assert_not_called()
+
+        call_order = []
+        sim=DSSimulation()
+        def add_to_call_order(fcn_name, *args, **kwargs):
+            call_order.append(call(fcn_name, *args, **kwargs))
+            return True
+        sim.check_condition = Mock(side_effect=lambda *a, **kw: add_to_call_order('check_condition', *a, **kw))  # it will allow to accept the event
+        sim.signal_object = Mock(side_effect=lambda *a, **kw: add_to_call_order('signal_object', *a, **kw))
+        # sim.check_condition.side_effect = 
+        # sim.signal_object.side_effect = lambda *a, **kw: call_order.append(call(*a, **kw))
+        sim.signal('process2', obj=None)
+        sim.check_condition.assert_called_once()
+        sim.signal_object.assert_called_once()
+        self.assertEqual(call_order, [call('check_condition', 'process2', {'obj': None}), call('signal_object', 'process2', {'obj': None})])
+
+    def test6_check_and_wait(self):
+        ''' Test check_and_wait function. First it should call check and if check does not pass, it should call wait '''
+        def always_true(event):
+            return True
+
+        sim = DSSimulation()
+        retval = 'abc'
+        retval = next(sim.check_and_wait(cond=lambda c:False))
+        self.assertIsNone(retval)
+        try:
+            retval = next(sim.check_and_wait(cond=lambda c:True))
+        except StopIteration as e:
+            retval = e.value
+        self.assertIsNotNone(retval)
+
+        condition = SomeCallableObj()
+        condition.cond_value = lambda e: 'condition value was computed in lambda'
+        condition.cond_cleanup = Mock()
+        try:
+            retval = next(sim.check_and_wait(cond=condition))
+        except StopIteration as e:
+            retval = e.value
+        self.assertTrue(retval == 'condition value was computed in lambda')
+        condition.cond_cleanup.assert_called_once()
 
 
 class TestSim(unittest.TestCase):
