@@ -17,7 +17,7 @@ Tests for simulation module
 '''
 import unittest
 from unittest.mock import Mock, MagicMock, call
-from dssim.simulation import DSSimulation, DSAbortException, DSSchedulable, DSProcess, sim
+from dssim.simulation import DSSimulation, DSAbortException, DSSchedulable, DSProcess, DSSubscriberContextManager, sim
 
 class SomeObj:
     pass
@@ -369,6 +369,65 @@ class TestConditionChecking(unittest.TestCase):
             retval = e.value
         self.assertTrue(retval == 'condition value was computed in lambda')
         condition.cond_cleanup.assert_called_once()
+
+class TestSubscriberContext(unittest.TestCase):
+
+    def __process(self):
+        yield 1
+
+    def test0_init_add_remove(self):
+        p = DSProcess(self.__process())
+        cm = DSSubscriberContextManager(p, 'pre', ('a', 'b', 'c'))
+        self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (3, 0, 0))
+        cm = DSSubscriberContextManager(p, 'act', ('a', 'b', 'c', 'd'))
+        self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (0, 4, 0))
+        cm = DSSubscriberContextManager(p, 'post', ('a', 'b', 'c', 'd', 'e'))
+        self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (0, 0, 5))
+        cm = cm + DSSubscriberContextManager(p, 'act', ('a', 'b', 'c'))
+        self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (0, 3, 5))
+        cm = cm + DSSubscriberContextManager(p, 'act', ('d'))
+        self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (0, 4, 5))
+        cm = cm + DSSubscriberContextManager(p, 'act', ('c'))
+        self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (0, 4, 5))
+
+    def test1_enter_exit(self):
+        p = DSProcess(self.__process())
+        mock_a, mock_b, mock_c, mock_d, mock_e = (Mock(), Mock(), Mock(), Mock(), Mock())
+        cm = DSSubscriberContextManager(p, 'pre', (mock_a, mock_c)) + DSSubscriberContextManager(p, 'post', (mock_b,)) + DSSubscriberContextManager(p, 'act', (mock_e,))
+        cm.__enter__()
+        mock_a.add_subscriber.assert_called_once_with(p, 'pre')
+        mock_c.add_subscriber.assert_called_once_with(p, 'pre')
+        mock_b.add_subscriber.assert_called_once_with(p, 'post')
+        mock_d.add_subscriber.assert_not_called()
+        mock_e.add_subscriber.assert_called_once_with(p, 'act')
+        _ = mock_a.reset_mock(), mock_b.reset_mock(), mock_c.reset_mock(), mock_d.reset_mock()
+        cm.__exit__(None, None, None)
+        mock_a.remove_subscriber.assert_called_once_with(p, 'pre')
+        mock_c.remove_subscriber.assert_called_once_with(p, 'pre')
+        mock_b.remove_subscriber.assert_called_once_with(p, 'post')
+        mock_d.remove_subscriber.assert_not_called()
+        mock_e.remove_subscriber.assert_called_once_with(p, 'act')
+
+    def test2_proxy_function(self):
+        sim = DSSimulation()
+        sim.parent_process = DSProcess(self.__process())
+        cm = sim.observe_pre('a', 'b', 'c')
+        self.assertTrue(type(cm) == DSSubscriberContextManager)
+        self.assertTrue(cm.pre == {'a', 'b', 'c'})
+        self.assertTrue((len(cm.act), len(cm.post)) == (0, 0))
+        cm = sim.consume('a', 'c')
+        self.assertTrue(type(cm) == DSSubscriberContextManager)
+        self.assertTrue(cm.act == {'a', 'c'})
+        self.assertTrue((len(cm.pre), len(cm.post)) == (0, 0))
+        cm = sim.observe_post('d')
+        self.assertTrue(type(cm) == DSSubscriberContextManager)
+        self.assertTrue(cm.post == {'d',})
+        self.assertTrue((len(cm.pre), len(cm.act)) == (0, 0))
+        cm = sim.observe_post('d') + sim.observe_pre('a') + sim.consume('b', 'c')
+        self.assertTrue(type(cm) == DSSubscriberContextManager)
+        self.assertTrue(cm.pre == {'a',})
+        self.assertTrue(cm.act == {'b', 'c'})
+        self.assertTrue(cm.post == {'d',})
 
 
 class TestSim(unittest.TestCase):
