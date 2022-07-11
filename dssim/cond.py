@@ -21,15 +21,16 @@ from dssim.pubsub import DSConsumer
 
 
 class DSFilter(DSCondition):
-    def __init__(self, cond=None, reevaluate=False, signal_timeout=False):
+    def __init__(self, cond=None, signal_timeout=False):
         self.signaled = False
         self.value = None
         self.cond = cond
         self.parent_process = sim.parent_process
         # Reevaluation means that after every event we receive we have to re-evaluate
         # the condition
-        # If not reevaluation set, then once filter matches, it is swapped to signaled
-        self.reevaluate = reevaluate
+        # If not reevaluation set, then once filter matches, it is flipped to signaled
+        self.reevaluate = False
+        self.reset = False
         # Signalling timeout is for generators. If a generator returns with None, this means
         # that it timed out. If signal_timeout is True, such timeout would be understood
         # as a valid signal.
@@ -60,12 +61,21 @@ class DSFilter(DSCondition):
             self.cond.finish_tx.add_subscriber(self.subscriber, 'pre')
 
     def __or__(self, other):
-        retval = DSFilterAggregated(any, self, other)
-        return retval
+        setters = [self] * (not self.reset) + [other] * (not other.reset)
+        resetters = [self] * (self.reset) + [other] * other.reset
+        return DSFilterAggregated(any, setters, resetters)
 
     def __and__(self, other):
-        retval = DSFilterAggregated(all, self, other)
-        return retval
+        setters = [self] * (not self.reset) + [other] * (not other.reset)
+        resetters = [self] * (self.reset) + [other] * other.reset
+        return DSFilterAggregated(all, setters, resetters)
+
+    def __neg__(self):
+        self.reset = True
+        return self
+
+    def reseting(self):
+        self.signaled = False
 
     def __str__(self):
         return f'DSFilter({self.cond})'
@@ -115,27 +125,41 @@ class DSFilter(DSCondition):
 
 
 class DSFilterAggregated:
-    def __init__(self, expression, *elements):
+    def __init__(self, expression, setters, resetters):
         self.expression = expression
-        self.elements = list(elements)
+        self.setters = setters
+        self.resetters = resetters
+        self.reset = False
+        self.signaled = False
+
+    def _compile(self, expr, other):
+        if self.expression is expr:
+            if other.reset:
+                self.resetters.append(other)
+            else:
+                self.setters.append(other)
+            return self
+        else:
+            return DSFilterAggregated(expr, [self] * (not self.reset) + [other] * (not other.reset), [self] * (self.reset) + [other] * other.reset)
 
     def __or__(self, other):
-        if self.expression is any:
-            self.elements.append(other)
-            return self
-        else:
-            return DSFilterAggregated(any, self, other)
+        return self._compile(any, other)
 
     def __and__(self, other):
-        if self.expression is all:
-            self.elements.append(other)
-            return self
-        else:
-            return DSFilterAggregated(all, self, other)
+        return self._compile(all, other)
+
+    def __neg__(self):
+        self.reset = True
+        return self
+
+    def reseting(self):
+        self.signaled = False
+        for el in self.setters:
+            el.signaled = False
 
     def cond_value(self, event):
         retval = {}
-        for el in self.elements:
+        for el in self.setters:
             if not el:
                 continue
             if isinstance(el, DSFilter):
@@ -146,29 +170,50 @@ class DSFilterAggregated:
         return retval
     
     def cond_cleanup(self):
-        for el in self.elements:
+        for el in self.setters:
+            el.cond_cleanup()
+        for el in self.resetters:
             el.cond_cleanup()
 
     def __bool__(self):
-        return self.expression(self.elements)
+        passed_set = len(self.setters) > 0 and self.expression(self.setters)
+        self.signaled = passed_set
+        return self.signaled
 
     def __str__(self):
-        strings = [str(v) for v in self.elements]
         expression = '|' if self.expression == any else '&'
-        return '(' + f' {expression} '.join(strings) + ')'
+        strings = [str(v) for v in self.setters]
+        retval = '(' + f' {expression} '.join(strings) + ')'
+        if self.resetters:
+            strings = ['-'+str(v) for v in self.resetters]
+            retval = '(' + retval
+            retval += f'({retval} & (' + f' {expression} '.join(strings) + '))'
+        return retval
 
     def __call__(self, event):
         ''' Handles logic for the event. '''
-        # First, we update all the elements.
-        for el in self.elements:
+        # First, we update all the reset elements.
+        for el in self.resetters:
             el(event)
-        # And then we compute the expression.
-        # Note- another approach would be if we would immediatelly compute the expression.
-        # For instance, if we had an instance of any(A, B, C, ...) and we update A whose
-        # expression would afterwards compute as True (satisfied), we would not need to
-        # update others (B, C, ...).
-        # The limitation of such solution is that it could not be applied to expressions
-        # which have DFilter(reevaluate=True). This is the reason why it's implemented
-        # this way.
-        retval = self.expression(self.elements)
+        passed_reset = len(self.resetters) > 0 and self.expression(self.resetters)
+        # Note: A | B | -C | -D == (A | B) & (-C | -D)
+        #       A & B & -C & -D == (A & B) & (-C & -D)
+        if passed_reset:
+            for el in self.resetters:
+                el.signaled = False
+            for el in self.setters:
+                el.reseting()
+            retval = False
+        else:
+            for el in self.setters:
+                el(event)
+            # And then we compute the expression.
+            # Note- another approach would be if we would immediatelly compute the expression.
+            # For instance, if we had an instance of any(A, B, C, ...) and we update A whose
+            # expression would afterwards compute as True (satisfied), we would not need to
+            # update others (B, C, ...).
+            # The limitation of such solution is that it could not be applied to expressions
+            # which are reevaluated. This is the reason why it's implemented
+            # this way.
+            retval = bool(self)
         return retval
