@@ -1,3 +1,16 @@
+# Copyright 2020 NXP Semiconductors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 from dssim.cond import DSFilter as f
 from dssim.simulation import DSSimulation, sim
 
@@ -18,19 +31,42 @@ def waiting_for_table_service():
     return ret
     
 def demo_filtering():
-    t1, t2 = sim.schedule_event(1, {'value': 'ham'}), sim.schedule_event(2, {'value': 'eggs'})
-    ret = yield from sim.wait(cond=f(t1) | f(t2))
-    assert tuple(ret.values()) == ({'value': 'ham'},)
-    print(ret)
+    time = sim.time
+    t0 = sim.schedule_event(3, {'greeting': 'hello'})
+    t1 = sim.schedule_event(5, {'greeting': 'world'})
+    t2 = sim.schedule_event(4, {'greeting': 'I dont like you'})
+    t3 = sim.schedule_event(6, {'greeting': 'I dont like you'})
+    t4 = sim.schedule_event(7, {'greeting': 'hello'})
+    t5 = sim.schedule_event(8, {'greeting': 'world'})
+    ret = yield from sim.wait(9, cond=-f(t2) | (f(t0) & f(t1)) | (f(t1) & f(t0)))
+    assert sim.time == time + 8
 
+    time = sim.time
+    t0 = sim.schedule_event(3, {'greeting': 'hello'})
+    t1 = sim.schedule_event(5, {'greeting': 'world'})
+    t2 = sim.schedule_event(4, {'greeting': 'I dont like you'})
+    ret = yield from sim.wait(6, cond=-f(t2) & (f(t0) & f(t1)) | (f(t1) & f(t0)))
+    assert sim.time == time + 5
+
+    time = sim.time
     t1, t2 = sim.schedule_event(1, {'value': 'ham'}), sim.schedule_event(2, {'value': 'eggs'})
     ret = yield from sim.wait(cond=f(t1) & f(t2))
     assert tuple(ret.values()) == ({'value': 'ham'}, {'value': 'eggs'})
+    assert sim.time == time + 2
+    print(ret)
+    
+    time = sim.time
+    t1, t2 = sim.schedule_event(1, {'value': 'ham'}), sim.schedule_event(2, {'value': 'eggs'})
+    ret = yield from sim.wait(cond=f(t1) | f(t2))
+    assert tuple(ret.values()) == ({'value': 'ham'},)
+    assert sim.time == time + 1
     print(ret)
 
+    time = sim.time
     t1, t2, t3 = [sim.schedule_event(i, i + 1) for i in range(3)]
     ret = yield from sim.wait(cond=f(t1) & f(t2) | f(t3))
     assert tuple(ret.values()) == (1, 2)  # after t1 and t2 it should finish, so the last is t2
+    assert sim.time == time + 1
     print(ret)  
 
     t1, t2, t3 = sim.schedule_event(3, {'value': 'ham'}), sim.schedule_event(1, {'value': 'ham'}), sim.schedule_event(2, {'value': 'eggs'})
@@ -68,6 +104,7 @@ def demo_filtering():
     ret = yield from sim.wait(cond=f(sim.wait(2), signal_timeout=True) & f(sim.wait(6), signal_timeout=True) | f(sim.wait(4), signal_timeout=True) & f(sim.wait(5), signal_timeout=True))
     assert sim.time == time + 5  # wait for (2 and 6) or (1 and 5) => signal at 1 then 5 makes this true
     assert tuple(ret.values()) == (None, None)
+
 
 if __name__ == '__main__':
     proc = sim.schedule(0, demo_filtering())
