@@ -19,17 +19,43 @@ import inspect
 from dssim.simulation import DSProcess, DSCondition, sim
 from dssim.pubsub import DSConsumer
 
-
 class DSFilter(DSCondition):
-    def __init__(self, cond=None, signal_timeout=False):
+    def one_liner(self):
+        return self.signaled
+
+    def compile(self, other, expr):
+        if (self.expression == expr) and (other.expression == expr):
+            return DSFilterAggregated(expr, [self.signals] + [other.signals])
+        if (other.expression == expr) and (self.expression == self.one_liner):
+            self, other = other, self
+        if (self.expression == expr) and (other.expression == other.one_liner):
+            if self.reset == other.reset:
+                self.signals.append(other)
+                self.set_signals()
+                return self
+            # A reset circuit is mergeable only if it is one_liner. The reason
+            # is that a reset circuit when signaled resets all his setters.
+            if other.reset:
+                self.signals.append(other)
+                self.set_signals()
+                return self
+        return DSFilterAggregated(expr, [self, other])
+
+    def set_signals(self):
+        self.setters = list(filter(lambda s: not s.reset, self.signals))
+        self.resetters = list(filter(lambda s: s.reset, self.signals))
+
+    def __init__(self, cond=None, reevaluate=False, signal_timeout=False):
+        self.expression = self.one_liner
         self.signaled = False
         self.value = None
         self.cond = cond
+        self.signals = [self]
         self.parent_process = sim.parent_process
         # Reevaluation means that after every event we receive we have to re-evaluate
         # the condition
         # If not reevaluation set, then once filter matches, it is flipped to signaled
-        self.reevaluate = False
+        self.reevaluate = reevaluate
         self.reset = False
         # Signalling timeout is for generators. If a generator returns with None, this means
         # that it timed out. If signal_timeout is True, such timeout would be understood
@@ -60,22 +86,18 @@ class DSFilter(DSCondition):
             self.subscriber = DSConsumer(self, self._process_finished)
             self.cond.finish_tx.add_subscriber(self.subscriber, 'pre')
 
+    def make_reset(self):
+        self.signaled = False
+
     def __or__(self, other):
-        setters = [self] * (not self.reset) + [other] * (not other.reset)
-        resetters = [self] * (self.reset) + [other] * other.reset
-        return DSFilterAggregated(any, setters, resetters)
+        return self.compile(other, any)
 
     def __and__(self, other):
-        setters = [self] * (not self.reset) + [other] * (not other.reset)
-        resetters = [self] * (self.reset) + [other] * other.reset
-        return DSFilterAggregated(all, setters, resetters)
-
+        return self.compile(other, all)
+   
     def __neg__(self):
         self.reset = True
         return self
-
-    def reseting(self):
-        self.signaled = False
 
     def __str__(self):
         return f'DSFilter({self.cond})'
@@ -83,7 +105,7 @@ class DSFilter(DSCondition):
     def __bool__(self):
         return self.signaled
 
-    def __call__(self, other):
+    def __call__(self, event):
         if self.signaled and not self.reevaluate:
             return True
         signaled, value = False, None
@@ -97,15 +119,17 @@ class DSFilter(DSCondition):
                 else:
                     signaled, value = True, self.cond.value
             else:
-                sim.signal(self.cond, **other)
-        elif callable(self.cond) and self.cond(other):
-            signaled, value = True, other
-        elif self is other:
-            signaled, value = True, other
-        elif self.cond == other:
-            signaled, value = True, other
-        self.signaled, self.value = signaled, value
-        return self.signaled
+                sim.signal(self.cond, **event)
+        elif callable(self.cond) and self.cond(event):
+            signaled, value = True, event
+        elif self is event:
+            signaled, value = True, event
+        elif self.cond == event:
+            signaled, value = True, event
+        if not self.reset:
+            # A resetting- circuit only pulses its signal, but does not keep the signal, neither value
+            self.signaled, self.value = signaled, value
+        return signaled
 
     def _process_finished(self, *args, **kwargs):
         # Following forces re-evaluation by injecting new event
@@ -124,45 +148,35 @@ class DSFilter(DSCondition):
         return self.cond if isinstance(self.cond, DSProcess) else None
 
 
-class DSFilterAggregated:
-    def __init__(self, expression, setters, resetters):
+class DSFilterAggregated(DSFilter):
+    def __init__(self, expression, signals):
         self.expression = expression
-        self.setters = setters
-        self.resetters = resetters
+        self.signals = signals
+        self.set_signals()
         self.reset = False
         self.signaled = False
 
-    def _compile(self, expr, other):
-        if self.expression is expr:
-            if other.reset:
-                self.resetters.append(other)
-            else:
-                self.setters.append(other)
-            return self
-        else:
-            return DSFilterAggregated(expr, [self] * (not self.reset) + [other] * (not other.reset), [self] * (self.reset) + [other] * other.reset)
+    def make_reset(self):
+        self.signaled = False
+        for el in self.setters:
+            el.signaled = False
 
     def __or__(self, other):
-        return self._compile(any, other)
+        return self.compile(other, any)
 
     def __and__(self, other):
-        return self._compile(all, other)
+        return self.compile(other, all)
 
     def __neg__(self):
         self.reset = True
         return self
-
-    def reseting(self):
-        self.signaled = False
-        for el in self.setters:
-            el.signaled = False
 
     def cond_value(self, event):
         retval = {}
         for el in self.setters:
             if not el:
                 continue
-            if isinstance(el, DSFilter):
+            if el.expression == el.one_liner:
                 retval[el] = el.cond_value(event)
             else:
                 embedded = el.cond_value(event)
@@ -170,14 +184,11 @@ class DSFilterAggregated:
         return retval
     
     def cond_cleanup(self):
-        for el in self.setters:
-            el.cond_cleanup()
-        for el in self.resetters:
+        for el in self.signals:
             el.cond_cleanup()
 
     def __bool__(self):
-        passed_set = len(self.setters) > 0 and self.expression(self.setters)
-        self.signaled = passed_set
+        self.signaled = len(self.setters) > 0 and self.expression(self.setters)
         return self.signaled
 
     def __str__(self):
@@ -192,28 +203,25 @@ class DSFilterAggregated:
 
     def __call__(self, event):
         ''' Handles logic for the event. '''
-        # First, we update all the reset elements.
-        for el in self.resetters:
-            el(event)
-        passed_reset = len(self.resetters) > 0 and self.expression(self.resetters)
-        # Note: A | B | -C | -D == (A | B) & (-C | -D)
-        #       A & B & -C & -D == (A & B) & (-C & -D)
-        if passed_reset:
-            for el in self.resetters:
-                el.signaled = False
-            for el in self.setters:
-                el.reseting()
-            retval = False
+        signaled = False
+        if self.reset:
+            # For resetting signals we check if they are signaled
+            signaled = (len(self.setters) > 0) and self.expression(el(event) for el in self.setters)
+            if signaled:
+                # and if they are signaled, they reset the input setters
+                for el in self.setters:
+                    el.signaled = False
         else:
-            for el in self.setters:
-                el(event)
-            # And then we compute the expression.
-            # Note- another approach would be if we would immediatelly compute the expression.
-            # For instance, if we had an instance of any(A, B, C, ...) and we update A whose
-            # expression would afterwards compute as True (satisfied), we would not need to
-            # update others (B, C, ...).
-            # The limitation of such solution is that it could not be applied to expressions
-            # which are reevaluated. This is the reason why it's implemented
-            # this way.
-            retval = bool(self)
-        return retval
+            # For normal (mixed signals) we check first if the logic of reseters reset the circuit
+            if len(self.resetters) > 0:
+                signaled = self.expression(el(event) for el in self.resetters)
+            if signaled:
+                # If they do, they reset the input setters
+                for el in self.setters:
+                    el.signaled = False
+                signaled = False
+            else:
+                if len(self.setters) > 0:
+                    results = [el(event) for el in self.setters]
+                    signaled = self.expression(results)
+        return signaled
