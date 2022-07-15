@@ -242,7 +242,7 @@ class TestConditionChecking(unittest.TestCase):
         while True:
             yield 1
 
-    def test1_process_metadata(self):
+    def test0_process_metadata(self):
         sim = DSSimulation()
         self.assertTrue(len(sim._process_metadata) == 0)
         p = DSProcess(self.__my_process(), sim=sim)
@@ -260,7 +260,7 @@ class TestConditionChecking(unittest.TestCase):
         self.assertIsNotNone(meta)
         self.assertTrue(len(sim._process_metadata) == 1)  # the next retrieve does not increase the registry
 
-    def test2_check_storing_cond_in_metadata(self):
+    def test1_check_storing_cond_in_metadata(self):
         ''' By calling wait, the metadata.cond should be stored '''
         def my_process(event):
             if True:
@@ -288,8 +288,8 @@ class TestConditionChecking(unittest.TestCase):
         self.assertTrue(process.meta.cond == condition)
         self.assertTrue(retval == 'condition value was computed in lambda')
         condition.cond_cleanup.assert_called_once()
-
-    def test3_check_cond(self):
+    
+    def test2_check_cond(self):
         ''' Test 5 types of conditions - see _check_cond '''
         sim = DSSimulation()
         exception = Exception('error')
@@ -310,7 +310,7 @@ class TestConditionChecking(unittest.TestCase):
             retval = sim._check_cond(cond, event)
             self.assertEqual(retval, expected_result)
 
-    def test4_check_condition(self):
+    def test3_check_condition(self):
         ''' The check_condition should retrieve cond from the metadata and then call _check_cond '''
         sim = DSSimulation()
         p = DSProcess(self.__my_process(), sim=sim)
@@ -320,7 +320,7 @@ class TestConditionChecking(unittest.TestCase):
         p.meta.cond.assert_called_once()
         self.assertEqual(retval, True)
     
-    def test5_early_check(self):
+    def test4_early_check(self):
         ''' Test if signal calls first check_condition and then signal_object '''
         sim = DSSimulation()
         sim.check_condition = Mock(return_value=False)  # it will not allow to accept the event
@@ -345,7 +345,7 @@ class TestConditionChecking(unittest.TestCase):
         sim.signal_object.assert_called_once()
         self.assertEqual(call_order, [call('check_condition', 'process2', {'obj': None}), call('signal_object', 'process2', {'obj': None})])
 
-    def test6_check_and_wait(self):
+    def test5_check_and_wait(self):
         ''' Test check_and_wait function. First it should call check and if check does not pass, it should call wait '''
         def always_true(event):
             return True
@@ -644,7 +644,22 @@ class TestSim(unittest.TestCase):
         ]
         self.__time_process_event.assert_has_calls(calls)
 
-    def test11_abort(self):
+    def test11_timeout_cleanup(self):
+        def my_process(sim):
+            retval = yield from sim.wait(1)
+            yield  # wait here with no interaction to the time_queue
+
+        sim = DSSimulation()
+        process = DSProcess(my_process(sim))
+        sim.parent_process = process
+        sim.schedule_event(4, 'some_event', process=process)
+        retval = process.send(None)  # go to the waiting
+        self.assertTrue(len(sim.time_queue) == 2)
+        retval = process.send('value')  # sending some event makesthat the waiting timeout will be removed
+        # ensure that the some_event scheduled in the future for the process is still in queue
+        self.assertTrue(len(sim.time_queue) == 1)
+
+    def test12_abort(self):
         self.sim = DSSimulation()
         # the following process will create events for the time queue process
         process = self.__my_wait_process()
