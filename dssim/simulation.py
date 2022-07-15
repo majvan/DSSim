@@ -294,7 +294,7 @@ class DSSimulation:
 
         if event is not None:
             # If we terminated before timeout, then the timeout event is on time queue- remove it
-            self.delete(lambda e: e[0] is schedulable)
+            self.delete(lambda e: e == (schedulable, None))
         if hasattr(cond, 'cond_value'):
             event = cond.cond_value(event)
         if hasattr(cond, 'cond_cleanup'):
