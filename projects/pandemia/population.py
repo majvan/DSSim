@@ -113,7 +113,7 @@ class InfectedPopulation(Population):
         self.infection_tx = DSProducer(name=self.name+".infection tx")
         self.population_tx = DSProducer(name=self.name+".population tx")
         self.status_tx = DSProducer(name=self.name+".status tx")
-        self.infection_rx = DSConsumer(self, InfectedPopulation.accept_infection, name=self.name+".infection rx")
+        self.infection_rx = DSConsumer(self.accept_infection, name=self.name+".infection rx")
 
     def accept_infection(self, population, **kwargs):
         pass  # we are already infected

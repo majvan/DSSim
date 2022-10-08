@@ -21,8 +21,8 @@ class GenericPopulation(DSComponent):
         self.people_container = [self.generic, self.infected, self.diagnosed, self.recovered, self.immune]
 
         # These 2 endpoints will concentrate all the info about infection and spread it next
-        self.infection_rx = DSConsumer(self, GenericPopulation.infection_distributor, name=self.name + '.infection rx')
-        self.population_rx = DSConsumer(self, GenericPopulation.population_distributor, name=self.name + '.population rx')
+        self.infection_rx = DSConsumer(self.infection_distributor, name=self.name + '.infection rx')
+        self.population_rx = DSConsumer(self.population_distributor, name=self.name + '.population rx')
 
         self.time_rx = DSProcessConsumer(self.time_observer(), start=True, name=self.name + '.time observer')
 

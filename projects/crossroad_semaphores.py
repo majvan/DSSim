@@ -42,7 +42,7 @@ class CarGenerator(DSProducer):
 
 class CarRecorder(DSConsumer):
     def __init__(self, name):
-        super().__init__(None, None, name=name)
+        super().__init__(None, name=name)
         self.recorded = []
 
     def notify(self, **data):
