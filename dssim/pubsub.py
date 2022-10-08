@@ -35,9 +35,8 @@ class DSConsumer(DSAbstractConsumer):
     The only functionality a consumer interface provides is to
     forward the signal (event) to other (non-DSInterface) interfaces.
     '''
-    def __init__(self, forward_obj, forward_method, cond=lambda e: True, **kwargs):
+    def __init__(self, forward_method, cond=lambda e: True, **kwargs):
         super().__init__(**kwargs)
-        self.forward_obj = forward_obj
         self.forward_method = forward_method
         self.cond = cond
 
@@ -45,7 +44,7 @@ class DSConsumer(DSAbstractConsumer):
         ''' The function calls all the registered methods from objects after passing filter. '''
         retval = False
         if callable(self.cond) and self.cond(data) or self.cond == data:
-            retval = self.forward_method(self.forward_obj, **data)
+            retval = self.forward_method(**data)
         return retval
         
 
@@ -128,7 +127,7 @@ class DSProducer(DSAbstractProducer):
     def add_subscriber(self, subscriber, phase='act'):
         if subscriber:
             subs = self.subs[phase][isinstance(subscriber, Iterable)]
-            subs[subscriber] =subs.get(subscriber, 0) + 1
+            subs[subscriber] = subs.get(subscriber, 0) + 1
 
     def remove_subscriber(self, subscriber, phase='act'):
         if subscriber:
