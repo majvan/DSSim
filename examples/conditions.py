@@ -94,20 +94,25 @@ def demo_filtering():
     print(ret)  
     sim.delete(cond=lambda e:True)
 
+    time = sim.time
     t1, t2, t3 = sim.schedule_event(3, {'value': 'ham'}), sim.schedule_event(1, {'value': 'ham'}), sim.schedule_event(2, {'value': 'eggs'})
     ret = yield from sim.wait(cond=f(t1) & f(t2) | f(t3))
     assert tuple(ret.values()) == ({'value': 'ham'}, {'value': 'ham'})  # the first event {'value': 'ham'} satisfies both f(t1) and f(t2) filters, hence it finishes after 1 second
+    assert sim.time == time + 1
     print(ret)
     sim.delete(cond=lambda e:True)
 
+    time = sim.time
     t1, t2 = sim.schedule_event(1, {'food': 'ham'}), sim.schedule_event(2, {'food': 'eggs'}),
     t3, = sim.schedule_event(3, {'drink': 'tea'}),
     t4, t5 = sim.schedule_event(4, {'tool': 'knife'}), sim.schedule_event(6, {'tool': 'fork'}), 
     ret = yield from sim.wait(cond=f(lambda e:'food' in e) & f(t4) & f(t5) | f(lambda e:'drink' in e))
     assert tuple(ret.values()) == ({'drink': 'tea'},)  # waiting for either food with tools or a drink - first we are satisfied with the drink
+    assert sim.time == time + 3
     print(ret)
     sim.delete(cond=lambda e:True)
 
+    time = sim.time
     t0 = sim.schedule_event(10, {'apologize': 'sorry'})
     t1, t2 = sim.schedule_event(3, {'food': 'ham'}), sim.schedule_event(1, {'food': 'eggs'}), 
     t3, t4 = sim.schedule_event(5, {'food': 'yogurt'}), sim.schedule_event(2, {'food': 'muesli'}),
@@ -115,6 +120,7 @@ def demo_filtering():
     ret = yield from sim.wait(cond=f(waiting_for_table_service()) | f(t0))
     # We were served with yogurt + muesli + milk + spoon in table service; but the waiting_for_table_service returns only one event
     assert tuple(ret.values()) == ({'service': 'good'},)
+    assert sim.time == time + 5
     print(ret)
     sim.delete(cond=lambda e:True)
 
