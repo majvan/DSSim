@@ -29,7 +29,7 @@ class MCU(DSComponent):
         ''' This function has to be called after producers are registered '''
         # Register ISR routine. The routine is on link layer because physical layer does not
         # export any IRQ (there is not much value to register that a bit was received).
-        self.uart0.rx_link.add_subscriber(DSConsumer(self, MCU.rx_isr, name=self.name + '.rx_isr'))
+        self.uart0.rx_link.add_subscriber(DSConsumer(self.rx_isr, name=self.name + '.rx_isr'))
 
         #  Bit banging with GPIO to send 0x55 = 85
         self.gpio0.schedule(0 / self.baudrate, line=0)  # start

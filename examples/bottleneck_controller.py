@@ -22,7 +22,7 @@ class MCU(DSComponent):
         self.limiter = Limiter(0, name=self.name + '.(internal) limiter0')
         self._producer = DSProducer(name=self.name + '.(internal) event producer')
         self._producer.add_subscriber(self.limiter.rx)
-        consumer = DSConsumer(self, MCU._on_output, name=self.name + '.(internal) output')
+        consumer = DSConsumer(self._on_output, name=self.name + '.(internal) output')
         self.limiter.tx.add_subscriber(consumer)
         self.stat = {'generated': 0, 'received': 0}
 
