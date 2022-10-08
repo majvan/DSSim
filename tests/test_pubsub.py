@@ -36,22 +36,34 @@ class TestConsumer(unittest.TestCase):
     ''' Test the DSConsumer '''
 
     def test0_consumer(self):
-        obj = SomeObj()
         my_consumer_fcn = Mock()
-        c = DSConsumer(obj, my_consumer_fcn)
+        c = DSConsumer(my_consumer_fcn)
         c.notify(data=1)
-        my_consumer_fcn.assert_called_once_with(obj, data=1)
+        my_consumer_fcn.assert_called_once_with(data=1)
         my_consumer_fcn.reset_mock()
         c.notify(data=0)
-        my_consumer_fcn.assert_called_once_with(obj, data=0)
+        my_consumer_fcn.assert_called_once_with(data=0)
         my_consumer_fcn.reset_mock()
-        
-    def test1_consumer_with_filter(self):
-        obj = SomeObj()
-        my_consumer_fcn = Mock()
-        c = DSConsumer(obj, my_consumer_fcn, cond=lambda e:e['data'] > 0)
+
+    def test1_consumer(self):
+        class ObjWithCallback:
+            def cb(self, *args, **kwargs):
+                self.args = args
+                self.kwargs = kwargs
+        obj = ObjWithCallback()
+        c = DSConsumer(obj.cb)
         c.notify(data=1)
-        my_consumer_fcn.assert_called_once_with(obj, data=1)
+        self.assertEqual(obj.args, ())
+        self.assertEqual(obj.kwargs, {'data': 1})
+        c.notify(data=0)
+        self.assertEqual(obj.args, ())
+        self.assertEqual(obj.kwargs, {'data': 0})
+
+    def test2_consumer_with_filter(self):
+        my_consumer_fcn = Mock()
+        c = DSConsumer(my_consumer_fcn, cond=lambda e:e['data'] > 0)
+        c.notify(data=1)
+        my_consumer_fcn.assert_called_once_with(data=1)
         my_consumer_fcn.reset_mock()
         c.notify(data=0)
         my_consumer_fcn.notify.assert_not_called()
