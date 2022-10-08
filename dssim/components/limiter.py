@@ -32,8 +32,7 @@ class IntegralLimiter(DSComponent):
         self.accumulated_report = accumulated_report
         self.sim.start(self.push())
         self.rx = DSConsumer(
-            self,
-            IntegralLimiter._on_event,
+            self._on_event,
             name=self.name + '.rx',
             sim=self.sim,
         )
@@ -76,7 +75,7 @@ class Limiter(DSComponent):
             sim=self.sim,
         )
         self.pusher.schedule(0)
-        self.rx = DSConsumer(self, Limiter._on_event, name=self.name + '.rx', sim=self.sim)
+        self.rx = DSConsumer(self._on_event, name=self.name + '.rx', sim=self.sim)
         self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
 
     def _compute_period(self, throughput):

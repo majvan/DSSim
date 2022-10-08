@@ -24,7 +24,7 @@ class Delay(DSComponent):
     def __init__(self, delay=None, name='delay', **kwargs):
         super().__init__(**kwargs)
         self.set_delay(delay)
-        self.rx = DSConsumer(self, Delay._on_event, name=self.name + '.rx', sim=self.sim)
+        self.rx = DSConsumer(self._on_event, name=self.name + '.rx', sim=self.sim)
         self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
 
     def set_delay(self, delay):

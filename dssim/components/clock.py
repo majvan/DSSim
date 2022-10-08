@@ -15,7 +15,7 @@
 Periodic timer with on/off control
 '''
 from dssim.simulation import DSComponent
-from dssim.pubsub import DSProducer, DSConsumer
+from dssim.pubsub import DSProducer
 
 
 class Timer(DSComponent):

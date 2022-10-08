@@ -91,14 +91,12 @@ class I2CMasterBasic(DSComponent):
 
         self.tx = I2CMasterProducer(name=self.name + '.tx', sim=self.sim)
         self.tx.add_consumer(DSConsumer(
-            self,
-            I2CMasterBasic._on_sent,
+            self._on_sent,
             name=self.name + '.(internal) tx fb',
             sim=self.sim,
         ))
         self.rx = DSConsumer(
-            self,
-            I2CMasterBasic._on_received,
+            self._on_received,
             name=self.name + '.rx',
             sim=self.sim,
         )
