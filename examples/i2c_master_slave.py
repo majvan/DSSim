@@ -11,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.pubsub import DSConsumer
-from dssim.simulation import sim, DSComponent
+from dssim.simulation import sim, DSComponent, DSCallback
 from dssim.components.i2c import I2CMasterBasic, I2CSlaveBasic
 
 
@@ -25,7 +24,7 @@ class MCU_master(DSComponent):
 
     def boot(self):
         # Register ISRs
-        self.i2c0.rx_irq.add_consumer(DSConsumer(self.rx_isr, name=self.name + '.isr'))
+        self.i2c0.rx_irq.add_consumer(DSCallback(self.rx_isr, name=self.name + '.isr'))
 
     def tx_isr(self, addr, rnw, data=None, **others):
         self.stat['i2c0_tx_counter'] += 1
@@ -44,7 +43,7 @@ class MCU_slave(DSComponent):
 
     def boot(self):
         # Register ISRs
-        self.i2c0.rx_irq.add_consumer(DSConsumer(self.rx_isr, name=self.name + '.isr'))
+        self.i2c0.rx_irq.add_consumer(DSCallback(self.rx_isr, name=self.name + '.isr'))
 
     def tx_isr(self, rnw, data=None, **others):
         if data:

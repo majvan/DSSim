@@ -11,8 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.simulation import DSComponent, DSProcess, sim
-from dssim.pubsub import DSProducer, DSConsumer
+from dssim.simulation import DSComponent, DSProcess, DSCallback, sim
+from dssim.pubsub import DSProducer
 from dssim.components.limiter import Limiter
 from random import uniform
 
@@ -23,7 +23,7 @@ class MCU(DSComponent):
         limiter = Limiter(1, name=self.name + '.(internal) limiter0')
         self._producer = DSProducer(name=self.name + '.(internal) event producer')
         self._producer.add_subscriber(limiter.rx)
-        consumer = DSConsumer(self._on_output, name=self.name+'.(internal) output')
+        consumer = DSCallback(self._on_output, name=self.name+'.(internal) output')
         limiter.tx.add_subscriber(consumer)
         self.stat = {'generated': 0, 'received': 0}
 
