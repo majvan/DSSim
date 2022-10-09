@@ -30,7 +30,7 @@ class CarGenerator(DSProducer):
         while True:
             time = uniform(0, 2 * avg_time)
             yield from self.sim.wait(time)
-            self._limiter.rx.notify(label=self._label, num=1)
+            self.sim.signal(self._limiter.rx, label=self._label, num=1)
 
     def set_throughput(self, throughput):
         self._limiter.set_throughput(throughput)
@@ -45,7 +45,7 @@ class CarRecorder(DSConsumer):
         super().__init__(None, name=name)
         self.recorded = []
 
-    def notify(self, **data):
+    def send(self, **data):
         data['time'] = self.sim.time
         self.recorded.append(data)
 
