@@ -14,8 +14,8 @@
 '''
 Simple controllable bottleneck components
 '''
-from dssim.simulation import DSComponent, DSProcess
-from dssim.pubsub import DSConsumer, DSProducer
+from dssim.simulation import DSComponent, DSCallback, DSProcess
+from dssim.pubsub import DSProducer
 
 
 class IntegralLimiter(DSComponent):
@@ -31,7 +31,7 @@ class IntegralLimiter(DSComponent):
         self.accumulated_rate = 0
         self.accumulated_report = accumulated_report
         self.sim.start(self.push())
-        self.rx = DSConsumer(
+        self.rx = DSCallback(
             self._on_event,
             name=self.name + '.rx',
             sim=self.sim,
@@ -75,7 +75,7 @@ class Limiter(DSComponent):
             sim=self.sim,
         )
         self.pusher.schedule(0)
-        self.rx = DSConsumer(self._on_event, name=self.name + '.rx', sim=self.sim)
+        self.rx = DSCallback(self._on_event, name=self.name + '.rx', sim=self.sim)
         self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
 
     def _compute_period(self, throughput):

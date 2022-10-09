@@ -14,8 +14,8 @@
 '''
 Link layer of the I2C protocol
 '''
-from dssim.simulation import DSComponent
-from dssim.pubsub import DSConsumer, DSProducer
+from dssim.simulation import DSComponent, DSCallback
+from dssim.pubsub import DSProducer
 
 
 class I2CMasterProducer(DSProducer):
@@ -47,7 +47,7 @@ class I2CMasterProducer(DSProducer):
         return self.slaves.get(slave_addr, None)
 
 
-class I2CSlaveProducer(DSConsumer):
+class I2CSlaveConsumer(DSCallback):
     ''' Extension of Consumer with associated I2C slave address. '''
     def __init__(self, addr, *args, **kwargs):
         self.addr = addr
@@ -90,12 +90,12 @@ class I2CMasterBasic(DSComponent):
         self.stat['rx_message_counter'] = 0
 
         self.tx = I2CMasterProducer(name=self.name + '.tx', sim=self.sim)
-        self.tx.add_consumer(DSConsumer(
+        self.tx.add_consumer(DSCallback(
             self._on_sent,
             name=self.name + '.(internal) tx fb',
             sim=self.sim,
         ))
-        self.rx = DSConsumer(
+        self.rx = DSCallback(
             self._on_received,
             name=self.name + '.rx',
             sim=self.sim,
@@ -197,10 +197,9 @@ class I2CSlaveBasic(DSComponent):
         self.stat['rx_message_counter'] = 0
 
         self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
-        self.rx = I2CSlaveProducer(
+        self.rx = I2CSlaveConsumer(
             addr,
-            self,
-            I2CSlaveBasic._on_received,
+            self._on_received,
             cond=lambda e: e['addr'] == self.addr,
             name=self.name + '.rx',
             sim=self.sim

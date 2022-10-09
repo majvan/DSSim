@@ -16,8 +16,8 @@ UART components- physical layer nad link layer.
 Link layer components can (but not necessarily has to) use physical layer
 '''
 import random as _rand
-from dssim.simulation import DSSchedulable, DSComponent, DSProcess
-from dssim.pubsub import DSConsumer, DSProducer
+from dssim.simulation import DSSchedulable, DSComponent, DSCallback, DSProcess
+from dssim.pubsub import DSProducer
 from dssim.utils import ParityComputer, ByteAssembler
 
 
@@ -42,7 +42,7 @@ class UARTNoisyLine(DSComponent):
         self.probability_level = int(bit_error_probability * self.resolution)
         # The random module is required when using this component
         self._rand = _rand
-        self.rx = DSConsumer(
+        self.rx = DSCallback(
             self._on_rx_event,
             name=self.name + '.rx',
             sim=self.sim,
@@ -216,7 +216,7 @@ class UARTPhys(UARTPhysBase):
 
     def __add_rx_pubsub(self):
         # Create new interface for RX
-        self.rx = DSConsumer(
+        self.rx = DSCallback(
             self._on_rx_line_state,
             name=self.name + '.rx',
             sim=self.sim,
@@ -354,7 +354,7 @@ class UARTPhysBasic(UARTPhysBase):
         self.stat['err_overrun'] = 0  # RX overruns counter (app to slow to recv)
 
     def __add_tx_pubsub(self):
-        consumer = DSConsumer(self._on_tx_byte_event,
+        consumer = DSCallback(self._on_tx_byte_event,
                               name=self.name + '.(internal) tx fb',
                               sim=self.sim
                               )
@@ -362,7 +362,7 @@ class UARTPhysBasic(UARTPhysBase):
 
     def __add_rx_pubsub(self):
         # Create new interface for RX
-        self.rx = DSConsumer(self._on_rx_byte_event,
+        self.rx = DSCallback(self._on_rx_byte_event,
                              name=self.name + '.rx',
                              sim=self.sim
                              )
@@ -456,7 +456,7 @@ class UARTLink(DSComponent):
     def __add_tx_pubsub(self):
         self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
         self.tx_irq = DSProducer(name=self.name + '.tx_irq', sim=self.sim)
-        consumer = DSConsumer(self._on_tx_event,
+        consumer = DSCallback(self._on_tx_event,
                               name=self.name + '.(internal) tx_fb',
                               sim=self.sim
                               )
@@ -466,7 +466,7 @@ class UARTLink(DSComponent):
             self.tx.add_subscriber(consumer)
 
     def __add_rx_pubsub(self):
-        self.rx = DSConsumer(self._on_rx_event, name=self.name + '.rx', sim=self.sim)
+        self.rx = DSCallback(self._on_rx_event, name=self.name + '.rx', sim=self.sim)
         self.rx_irq = DSProducer(name=self.name + '.rx_irq', sim=self.sim)
         if self.phys:
             self.phys.rx_link.add_subscriber(self.rx)

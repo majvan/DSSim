@@ -22,31 +22,6 @@ from collections.abc import Iterable
 from abc import abstractmethod
 from dssim.simulation import DSInterface
 
-class DSAbstractConsumer(DSInterface):
-    ''' An interface for a consumer '''
-
-    @abstractmethod
-    def notify(self, **data):
-        ''' This method is called to notify about an event. '''
-        raise NotImplementedError('Abstract method, use derived classes')
-
-class DSConsumer(DSAbstractConsumer):
-    ''' A consumer interface.
-    The only functionality a consumer interface provides is to
-    forward the signal (event) to other (non-DSInterface) interfaces.
-    '''
-    def __init__(self, forward_method, cond=lambda e: True, **kwargs):
-        super().__init__(**kwargs)
-        self.forward_method = forward_method
-        self.cond = cond
-
-    def notify(self, **data):
-        ''' The function calls all the registered methods from objects after passing filter. '''
-        retval = False
-        if callable(self.cond) and self.cond(data) or self.cond == data:
-            retval = self.forward_method(**data)
-        return retval
-        
 
 class DSAbstractProducer(DSInterface):
     ''' Provides base abstract class for producers '''
@@ -108,62 +83,43 @@ class DSProducer(DSAbstractProducer):
     ''' Full feature producer which can signal events to the attached consumers. '''
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # queue [notify_in_progress?] [phase] [process or function?]
         self.subs = {
-            'pre': {
-                False: {},
-                True: {},
-            },
-            'act': {
-                False: {},
-                True: {},
-            },
-            'post': {
-                False: {},
-                True: {},
-            },
+            'pre': {},
+            'act': {},
+            'post': {},
         }
 
     def add_subscriber(self, subscriber, phase='act'):
         if subscriber:
-            subs = self.subs[phase][isinstance(subscriber, Iterable)]
+            subs = self.subs[phase]
             subs[subscriber] = subs.get(subscriber, 0) + 1
 
     def remove_subscriber(self, subscriber, phase='act'):
         if subscriber:
-            subs = self.subs[phase][isinstance(subscriber, Iterable)]
+            subs = self.subs[phase]
             subs[subscriber] = subs.get(subscriber, 0) - 1
 
     def signal(self, **event_data):
         ''' Send signal object to the subscribers '''
 
         # Emit the signal to all pre-observers
-        for subscriber, refs in self.subs['pre'][False].items():
-            subscriber.notify(**event_data) if refs else None
-        for subscriber, refs in self.subs['pre'][True].items():
+        for subscriber, refs in self.subs['pre'].items():
             self.sim.signal(subscriber, **event_data) if refs else None
 
         # Emit the signal to all consumers and stop with the first one
         # which accepted the signal
-        for subscriber, refs in self.subs['act'][False].items():
-            if refs and subscriber.notify(**event_data):
+        for subscriber, refs in self.subs['act'].items():
+            if refs and self.sim.signal(subscriber, **event_data):
                 break
         else:
-            for subscriber, refs in self.subs['act'][True].items():
-                if refs and self.sim.signal(subscriber, **event_data):
-                    break
-            else:
-                # Emit the signal to all post-observers
-                for subscriber, refs in self.subs['post'][False].items():
-                    subscriber.notify(**event_data) if refs else None
-                for subscriber, refs in self.subs['post'][True].items():
-                    self.sim.signal(subscriber, **event_data) if refs else None
+            # Emit the signal to all post-observers
+            for subscriber, refs in self.subs['post'].items():
+                self.sim.signal(subscriber, **event_data) if refs else None
 
         # cleanup- remove items with zero references
         # We do not cleanup in remove_subscriber, because remove_subscriber could
         # be called from the notify(...) and that could produce an error 
         for phase in self.subs:
-            for process_or_fcn in self.subs[phase]:
-                old_dict = self.subs[phase][process_or_fcn]
-                new_dict = {k: v for k, v in old_dict.items() if v > 0}
-                self.subs[phase][process_or_fcn] = new_dict
+            old_dict = self.subs[phase]
+            new_dict = {k: v for k, v in old_dict.items() if v > 0}
+            self.subs[phase] = new_dict

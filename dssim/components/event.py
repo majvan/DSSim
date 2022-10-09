@@ -27,14 +27,12 @@ class Event(DSComponent):
         If the event is signalled, a task going to wait is unblocked immediately.
         '''
         super().__init__(*args, **kwargs)
-        self.signalled = False
-        self.waiting_tasks = []
+        self._tx = DSProducer(name=self.name + '.tx (internal)')
 
     def signal(self):
         ''' Signal the event and unblocks all the tasks waiting for it. '''
-        self.signalled = True
-        for t in self.waiting_tasks:
-            self.sim.signal(t, signalled=True)
+        self._tx.signal({})
+
 
     def clear(self):
         ''' Clear the event '''
@@ -45,11 +43,6 @@ class Event(DSComponent):
         if self.signalled:
             return True
         self.waiting_tasks.append(self.sim.parent_process)
-        try:
+        with self.sim.monitor(self._tx):
             obj = yield from self.sim.wait(timeout, cond=lambda c:True)
-        finally:
-            try:
-                waiting_task = self.waiting_tasks.remove(self.sim.parent_process)
-            except ValueError as e:
-                pass
         return obj

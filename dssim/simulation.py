@@ -74,8 +74,8 @@ class DSSubscriberContextManager:
 
 
 class _ProcessMetadata:
-    def __init__(self):
-        self.cond = lambda c: True
+    def __init__(self, cond=lambda c: True):
+        self.cond = cond
 
 
 class DSSimulation:
@@ -117,8 +117,8 @@ class DSSimulation:
             event['producer'].signal(**event)
 
     def get_process_metadata(self, process):
-        if isinstance(process, DSProcess):
-            retval = process.meta  # DSProcess itself stores a metadata
+        if isinstance(process, DSProcess) or isinstance(process, DSCallback):
+            retval = process.meta  # DSProcess / DSCallback themselves store a metadata
         else:
             # we store metadata for generators in associated objects
             if process not in self._process_metadata:
@@ -195,6 +195,8 @@ class DSSimulation:
     def signal_object(self, schedulable, event):
         ''' Send an event object to a schedulable consumer '''
 
+        retval = False
+
         # We want to kick from this process to another process (see below). However, after
         # returning back to this process, we want to renew our process ID back to be used.
         # We do that by remembering the pid here and restoring at the end.
@@ -209,7 +211,7 @@ class DSSimulation:
             # without a handler- so this is the context switch handler, currently only
             # changing process ID.
             self.parent_process = schedulable
-            schedulable.send(event)
+            retval = schedulable.send(event)
         except StopIteration as exc:
             self.cleanup(schedulable)
         except ValueError as exc:
@@ -220,6 +222,7 @@ class DSSimulation:
             raise
         finally:
             self.parent_process = pid
+        return retval
 
     def signal(self, schedulable, **event):
         ''' Send an event object to a consumer process. Convert event from parameters to object. '''
@@ -231,8 +234,8 @@ class DSSimulation:
         # pre_check means that the check of condition for the schedulable was already done
         if not self.check_condition(schedulable, event):
             return False  # not signalled
-        self.signal_object(schedulable, event)
-        return True
+        retval = self.signal_object(schedulable, event)
+        return retval
 
     def abort(self, schedulable, **info):
         ''' Send abort exception to a consumer process. Convert event from parameters to object. '''
@@ -423,6 +426,23 @@ def DSSchedulable(api_func):
     return scheduled_func
 
 from dssim.pubsub import DSProducer
+
+class DSCallback(DSComponent):
+    ''' A callback interface.
+    The callback interface is called from the simulator when a process sends events.
+    '''
+    def __init__(self, forward_method, cond=lambda e: True, **kwargs):
+        super().__init__(**kwargs)
+        # TODO: check if forward method is not a generator / process; otherwise throw an error
+        self.meta = _ProcessMetadata(cond)
+        self.forward_method = forward_method
+        self.cond = cond
+
+    def send(self, data):
+        ''' The function calls all the registered methods from objects after passing filter. '''
+        retval = self.forward_method(**data)
+        return retval
+
 
 class DSProcess(DSComponent):
     ''' Typical task used in the simulations.

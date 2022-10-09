@@ -16,8 +16,7 @@ This file implements advanced filtering logic - with overloading operators
 to be able create advanced expressions.
 '''
 import inspect
-from dssim.simulation import DSProcess, DSCondition, sim
-from dssim.pubsub import DSConsumer
+from dssim.simulation import DSProcess, DSCondition, DSCallback, sim
 
 class DSFilter(DSCondition):
     def one_liner(self):
@@ -83,7 +82,7 @@ class DSFilter(DSCondition):
         if isinstance(self.cond, DSProcess):
             if not self.cond.started():
                 self.cond = sim.schedule(0, self.cond)  # start the process
-            self.subscriber = DSConsumer(self._process_finished)
+            self.subscriber = DSCallback(self._process_finished)
             self.cond.finish_tx.add_subscriber(self.subscriber, 'pre')
 
     def make_reset(self):
