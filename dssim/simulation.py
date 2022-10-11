@@ -74,7 +74,7 @@ class DSSubscriberContextManager:
 
 
 class _ProcessMetadata:
-    def __init__(self, cond=lambda c: True):
+    def __init__(self, cond=lambda e: True):
         self.cond = cond
 
 
@@ -116,16 +116,20 @@ class DSSimulation:
             # Get producer which really produced the event and signal to associated consumers
             event['producer'].signal(**event)
 
+    def create_metadata(self, process):
+        if isinstance(process, DSProcess) or isinstance(process, DSCallback):
+            retval = process.create_metadata()
+        else:
+            retval = _ProcessMetadata()
+            self._process_metadata[process] = retval
+        return retval
+
     def get_process_metadata(self, process):
         if isinstance(process, DSProcess) or isinstance(process, DSCallback):
             retval = process.meta  # DSProcess / DSCallback themselves store a metadata
         else:
-            # we store metadata for generators in associated objects
-            if process not in self._process_metadata:
-                retval = _ProcessMetadata()
-                self._process_metadata[process] = retval
-            else:
-                retval = self._process_metadata[process]
+            retval = self._process_metadata.get(process, None)
+            retval = retval or self.create_metadata(process)
         return retval
 
     def schedule_event(self, time, event, process=None):
@@ -165,12 +169,18 @@ class DSSimulation:
         # However to kick a new process, we just setup a new process ID to the simulation,
         # kick the process and then set back for the simulation the previous process ID.
         old_process = self.parent_process
+
         if hasattr(schedulable, '_schedule'):
             new_process = schedulable._schedule(time)
         else:
             new_process = self._scheduled_fcn(time, schedulable)
         self.parent_process = new_process
+        # The following will change the process default metadata cond
         self._kick(new_process)
+        # Restore the default metadata cond by creating a new default one.
+        # It is useful for processes which will not use yield from sim.wait(...)
+        self.create_metadata(new_process)
+
         self.parent_process = old_process
         return new_process
 
@@ -213,6 +223,7 @@ class DSSimulation:
             self.parent_process = schedulable
             retval = schedulable.send(event)
         except StopIteration as exc:
+            retval = exc.value
             self.cleanup(schedulable)
         except ValueError as exc:
             global _exiting
@@ -250,10 +261,10 @@ class DSSimulation:
         retval = yield from schedulable
         return retval
 
-    def _wait_for_event(self, cond):
+    def _wait_for_event(self, cond, val=None):
         try:
-            # Wait for next event
-            event = yield
+            # Pass value to the feeder and wait for next event
+            event = yield val
 	        # We received an event. In the lazy evaluation case, we would be now calling
             # _check_cond and returning or raising an event only if the condition matches,
             # otherwise we would be waiting in an infinite loop here.
@@ -270,7 +281,7 @@ class DSSimulation:
             raise
         return event
 
-    def wait(self, timeout=float('inf'), cond=lambda c: False):
+    def wait(self, timeout=float('inf'), cond=lambda e: False, val=None):
         ''' Wait for an event from producer for max. timeout time. The criteria which events to be
         accepted is given by cond. An accepted event returns from the wait function. An event which
         causes cond to be False is ignored and the function is waiting.
@@ -293,7 +304,7 @@ class DSSimulation:
         # Get the condition object (lambda / object / ...) from the process metadata
         metaobj.cond = cond
 
-        event = yield from self._wait_for_event(cond)
+        event = yield from self._wait_for_event(cond, val)
 
         if event is not None:
             # If we terminated before timeout, then the timeout event is on time queue- remove it
@@ -304,7 +315,7 @@ class DSSimulation:
             cond.cond_cleanup()
         return event
 
-    def check_and_wait(self, timeout=float('inf'), cond=lambda c: False):
+    def check_and_wait(self, timeout=float('inf'), cond=lambda e: False, val=None):
         # This function can be used to run a pre-check for such conditions, which are
         # invariant to the passed event, for instance to check for a state of an object
         # so if the state matches, it returns immediately
@@ -316,7 +327,7 @@ class DSSimulation:
             if hasattr(cond, 'cond_cleanup'):
                 cond.cond_cleanup()
             return event  # return event immediately
-        retval = yield from self.wait(timeout, cond)
+        retval = yield from self.wait(timeout, cond, val)
         return retval
 
     def _kick(self, schedulable):
@@ -434,14 +445,19 @@ class DSCallback(DSComponent):
     def __init__(self, forward_method, cond=lambda e: True, **kwargs):
         super().__init__(**kwargs)
         # TODO: check if forward method is not a generator / process; otherwise throw an error
-        self.meta = _ProcessMetadata(cond)
         self.forward_method = forward_method
         self.cond = cond
+        self.create_metadata()
 
     def send(self, data):
         ''' The function calls all the registered methods from objects after passing filter. '''
         retval = self.forward_method(**data)
         return retval
+
+    def create_metadata(self):
+        self.meta = _ProcessMetadata()
+        return self.meta
+
 
 
 class DSProcess(DSComponent):
@@ -454,9 +470,9 @@ class DSProcess(DSComponent):
         ''' Initializes DSProcess. The input has to be a generator function. '''
         self.generator = generator
         self.scheduled_generator = generator
+        self.create_metadata()
         # We store the latest value. Useful to check the status after finish.
         self.value = None
-        self.meta = _ProcessMetadata()
         self.waiting_tasks = []  # taks waiting to finish this task
         self.finish_tx = DSProducer(name=self.name+'.finish tx')
 
@@ -501,6 +517,10 @@ class DSProcess(DSComponent):
         except Exception as e:
             self._fail()
         return self.value
+
+    def create_metadata(self):
+        self.meta = _ProcessMetadata()
+        return self.meta
 
     def _scheduled_fcn(self, time):
         ''' Start a schedulable process with possible delay '''

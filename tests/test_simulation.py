@@ -262,7 +262,7 @@ class TestConditionChecking(unittest.TestCase):
 
     def test1_check_storing_cond_in_metadata(self):
         ''' By calling wait, the metadata.cond should be stored '''
-        def my_process(event):
+        def my_process(event, value):
             if True:
                 return 100
             yield 101
@@ -347,9 +347,6 @@ class TestConditionChecking(unittest.TestCase):
 
     def test5_check_and_wait(self):
         ''' Test check_and_wait function. First it should call check and if check does not pass, it should call wait '''
-        def always_true(event):
-            return True
-
         sim = DSSimulation()
         retval = 'abc'
         retval = next(sim.check_and_wait(cond=lambda c:False))
@@ -369,6 +366,50 @@ class TestConditionChecking(unittest.TestCase):
             retval = e.value
         self.assertTrue(retval == 'condition value was computed in lambda')
         condition.cond_cleanup.assert_called_once()
+
+    def test6_wait_return(self):
+        def my_process():
+            yield 1
+            yield from self.sim.wait(cond=lambda e:True, val=2)
+            return 3
+
+        self.sim = DSSimulation()
+        p = my_process()
+        retval = self.sim._kick(p)
+        # self.assertTrue(retval == 1)  # kick does not return value
+        retval = self.sim.signal(p)
+        self.assertTrue(retval == 2)
+        retval = self.sim.signal(p)
+        self.assertTrue(retval == 3)
+
+        p = DSProcess(my_process())
+        retval = self.sim._kick(p)
+        # self.assertTrue(retval == 1)  # kick does not return value
+        retval = self.sim.signal(p)
+        self.assertTrue(retval == 2)
+        retval = self.sim.signal(p)
+        self.assertTrue(retval == 3)
+
+        p = my_process()
+        p = self.sim.schedule(0, p)
+        # kick does not return value
+        retval = self.sim.signal(p)
+        self.assertTrue(retval == 1)
+        retval = self.sim.signal(p)
+        self.assertTrue(retval == 2)
+        retval = self.sim.signal(p)
+        self.assertTrue(retval == 3)
+
+        p = DSProcess(my_process())
+        p = self.sim.schedule(0, p)
+        # kick does not return value
+        retval = self.sim.signal(p)
+        self.assertTrue(retval == 1)
+        retval = self.sim.signal(p)
+        self.assertTrue(retval == 2)
+        retval = self.sim.signal(p)
+        self.assertTrue(retval == 3)
+
 
 class TestSubscriberContext(unittest.TestCase):
 
@@ -630,11 +671,11 @@ class TestSim(unittest.TestCase):
         producer = EventForwarder(self, process)
         self.sim.parent_process = process
         self.sim._kick(process)
-        self.sim.schedule_event(1, {'producer': producer, 'data': 1}, self.sim.time_process)
-        self.sim.schedule_event(2, {'producer': producer, 'data': 2}, self.sim.time_process)
-        self.sim.schedule_event(3, {'producer': producer, 'data': 3}, self.sim.time_process)
+        self.sim.schedule_event(1, {'producer': producer, 'data': 1}, process)
+        self.sim.schedule_event(2, {'producer': producer, 'data': 2}, process)
+        self.sim.schedule_event(3, {'producer': producer, 'data': 3}, process)
         num_events = self.sim.run(5)
-        self.assertEqual(num_events, 4)
+        self.assertEqual(num_events, 4)  # 3 events scheduled here + 1 timeout scheduled by the __my_wait_process
         # first event is dropped, because though it was taken by the time_process, the process condition was
         # to wait till timeout
         calls = [
