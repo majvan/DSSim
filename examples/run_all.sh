@@ -5,6 +5,8 @@ PYTHONPATH="$SCRIPT_DIR/.."
 
 echo "Process schedule"
 python $SCRIPT_DIR/process_schedule.py
+echo "Process return value"
+python $SCRIPT_DIR/process_retval.py
 echo "Running bottleneck"
 python $SCRIPT_DIR/bottleneck.py
 echo "Running bottleneck controller"
