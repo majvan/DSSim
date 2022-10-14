@@ -281,7 +281,7 @@ class DSSimulation:
             raise
         return event
 
-    def wait(self, timeout=float('inf'), cond=lambda e: False, val=None):
+    def wait(self, timeout=float('inf'), cond=lambda e: False, val=True):
         ''' Wait for an event from producer for max. timeout time. The criteria which events to be
         accepted is given by cond. An accepted event returns from the wait function. An event which
         causes cond to be False is ignored and the function is waiting.
@@ -315,7 +315,7 @@ class DSSimulation:
             cond.cond_cleanup()
         return event
 
-    def check_and_wait(self, timeout=float('inf'), cond=lambda e: False, val=None):
+    def check_and_wait(self, timeout=float('inf'), cond=lambda e: False, val=True):
         # This function can be used to run a pre-check for such conditions, which are
         # invariant to the passed event, for instance to check for a state of an object
         # so if the state matches, it returns immediately

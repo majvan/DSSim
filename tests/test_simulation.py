@@ -349,13 +349,14 @@ class TestConditionChecking(unittest.TestCase):
         ''' Test check_and_wait function. First it should call check and if check does not pass, it should call wait '''
         sim = DSSimulation()
         retval = 'abc'
+        # The generator sim.check_and_wait yields in the middle with the value back, which is by default "True"
         retval = next(sim.check_and_wait(cond=lambda c:False))
-        self.assertIsNone(retval)
+        self.assertTrue(retval == True)
         try:
             retval = next(sim.check_and_wait(cond=lambda c:True))
         except StopIteration as e:
             retval = e.value
-        self.assertIsNotNone(retval)
+        self.assertTrue(isinstance(retval, object)) # we get back the object which was created in the check_and_wait function
 
         condition = SomeCallableObj()
         condition.cond_value = lambda e: 'condition value was computed in lambda'
