@@ -7,6 +7,8 @@ echo "Process schedule"
 python $SCRIPT_DIR/process_schedule.py
 echo "Process return value"
 python $SCRIPT_DIR/process_retval.py
+echo "Consumer ordering (default, round robin, priority...)"
+python $SCRIPT_DIR/consumer_ordering.py
 echo "Running bottleneck"
 python $SCRIPT_DIR/bottleneck.py
 echo "Running bottleneck controller"
