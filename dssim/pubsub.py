@@ -79,47 +79,140 @@ class DSAbstractProducer(DSInterface):
         raise NotImplementedError('Abstract method, use derived classes')
 
 
+class NotifierDict():
+    def __init__(self):
+        self.d = {}
+
+    def __iter__(self):
+        return iter(self.d.items())
+
+    def rewind(self, *args, **kwargs):
+        return
+
+    def inc(self, key, **kwargs):
+        self.d[key] = self.d.get(key, 0) + 1
+
+    def dec(self, key, **kwargs):
+        self.d[key] = self.d.get(key, 0) - 1
+
+    def cleanup(self):
+        old_dict = self.d
+        new_dict = {k: v for k, v in old_dict.items() if v > 0}
+        self.d = new_dict
+
+
+class NotifierRoundRobin():
+    def __init__(self):
+        self.queue = []
+
+    def __iter__(self):
+        self.current_index = 0
+        return self
+
+    def __next__(self):
+        if self.current_index >= len(self.queue):
+            raise StopIteration
+        retval = self.queue[self.current_index]
+        self.current_index += 1
+        return retval
+
+    def rewind(self, *args, **kwargs):
+        self.queue = self.queue[self.current_index:] + self.queue[:self.current_index:]
+
+    def inc(self, key, **kwargs):
+        for item in self.queue:
+            if item[0] == key:
+                item[1] += 1
+                return
+        self.queue.append([key, 1])
+
+    def dec(self, key, **kwargs):
+        for item in self.queue:
+            if item[0] == key:
+                item[1] -= 1
+                return
+        raise ValueError('A key was supposed to be in the queue')
+
+    def cleanup(self):
+        new_queue = []
+        for item in self.queue:
+            if item[1] > 0:
+                new_queue.append(item)
+        self.queue = new_queue
+
+
+class NotifierPriority():
+    def __init__(self):
+        self.d = {}
+
+    def __iter__(self):
+        return iter(self.iterate_by_priority())
+
+    def iterate_by_priority(self):
+        for prio in sorted(self.d.keys()):
+            for d in self.d[prio].items():
+                yield d
+
+    def rewind(self, *args, **kwargs):
+        return
+
+    def inc(self, key, priority, **kwargs):
+        priority_dict = self.d[priority] = self.d.get(priority, {})
+        priority_dict[key] = priority_dict.get(key, 0) + 1
+
+    def dec(self, key, priority, **kwargs):
+        priority_dict = self.d[priority] = self.d.get(priority, {})
+        priority_dict[key] = priority_dict.get(key, 0) + 1
+
+    def cleanup(self):
+        new_prio_dict = {}
+        for key, old_dict in self.d.items():
+            new_dict = {k: v for k, v in old_dict.items() if v > 0}
+            if new_dict:
+                new_prio_dict[key] = new_dict
+        self.d = new_prio_dict
+
+
 class DSProducer(DSAbstractProducer):
     ''' Full feature producer which can signal events to the attached consumers. '''
-    def __init__(self, **kwargs):
+    def __init__(self, notifier=NotifierDict, **kwargs):
         super().__init__(**kwargs)
         self.subs = {
-            'pre': {},
-            'act': {},
-            'post': {},
+            'pre': notifier(),
+            'act': notifier(),
+            'post': notifier(),
         }
 
-    def add_subscriber(self, subscriber, phase='act'):
+    def add_subscriber(self, subscriber, phase='act', **kwargs):
         if subscriber:
             subs = self.subs[phase]
-            subs[subscriber] = subs.get(subscriber, 0) + 1
+            subs.inc(subscriber, **kwargs)
 
-    def remove_subscriber(self, subscriber, phase='act'):
+    def remove_subscriber(self, subscriber, phase='act', **kwargs):
         if subscriber:
             subs = self.subs[phase]
-            subs[subscriber] = subs.get(subscriber, 0) - 1
+            subs.dec(subscriber, **kwargs)
 
     def signal(self, **event_data):
         ''' Send signal object to the subscribers '''
 
         # Emit the signal to all pre-observers
-        for subscriber, refs in self.subs['pre'].items():
+        for subscriber, refs in self.subs['pre']:
             self.sim.signal(subscriber, **event_data) if refs else None
 
         # Emit the signal to all consumers and stop with the first one
         # which accepted the signal
-        for subscriber, refs in self.subs['act'].items():
+        for subscriber, refs in self.subs['act']:
             if refs and self.sim.signal(subscriber, **event_data):
+                self.subs['act'].rewind()  # this will rewind for round robin
                 break
         else:
             # Emit the signal to all post-observers
-            for subscriber, refs in self.subs['post'].items():
+            for subscriber, refs in self.subs['post']:
                 self.sim.signal(subscriber, **event_data) if refs else None
 
         # cleanup- remove items with zero references
         # We do not cleanup in remove_subscriber, because remove_subscriber could
         # be called from the notify(...) and that could produce an error 
-        for phase in self.subs:
-            old_dict = self.subs[phase]
-            new_dict = {k: v for k, v in old_dict.items() if v > 0}
-            self.subs[phase] = new_dict
+        for queue in self.subs.values():
+            queue.cleanup()

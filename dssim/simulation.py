@@ -42,29 +42,30 @@ class DSCondition:
 
 
 class DSSubscriberContextManager:
-    def __init__(self, process, queue_id, components):
+    def __init__(self, process, queue_id, components, **kwargs):
         self.process = process
         self.pre = set(components) if queue_id == 'pre' else set()
         self.act = set(components) if queue_id == 'act' else set()
         self.post = set(components) if queue_id == 'post' else set()
+        self.kwargs = kwargs
 
     def __enter__(self):
         ''' Connects publisher endpoint with new subscriptions '''
         for producer in self.pre:
-            producer.add_subscriber(self.process, 'pre')
+            producer.add_subscriber(self.process, 'pre', **self.kwargs)
         for producer in self.act:
-            producer.add_subscriber(self.process, 'act')
+            producer.add_subscriber(self.process, 'act', **self.kwargs)
         for producer in self.post:
-            producer.add_subscriber(self.process, 'post')
+            producer.add_subscriber(self.process, 'post', **self.kwargs)
         return self
 
     def __exit__(self, exc_type, exc_value, tb):
         for producer in self.pre:
-            producer.remove_subscriber(self.process, 'pre')
+            producer.remove_subscriber(self.process, 'pre', **self.kwargs)
         for producer in self.act:
-            producer.remove_subscriber(self.process, 'act')
+            producer.remove_subscriber(self.process, 'act', **self.kwargs)
         for producer in self.post:
-            producer.remove_subscriber(self.process, 'post')
+            producer.remove_subscriber(self.process, 'post', **self.kwargs)
 
     def __add__(self, other):
         self.pre = self.pre | other.pre
@@ -368,14 +369,14 @@ class DSSimulation:
         self.time = up_to
         return self.num_events
 
-    def observe_pre(self, *components):
-        return DSSubscriberContextManager(self.parent_process, 'pre', components)
+    def observe_pre(self, *components, **kwargs):
+        return DSSubscriberContextManager(self.parent_process, 'pre', components, **kwargs)
 
-    def consume(self, *components):
-        return DSSubscriberContextManager(self.parent_process, 'act', components)
+    def consume(self, *components, **kwargs):
+        return DSSubscriberContextManager(self.parent_process, 'act', components, **kwargs)
 
-    def observe_post(self, *components):
-        return DSSubscriberContextManager(self.parent_process, 'post', components)
+    def observe_post(self, *components, **kwargs):
+        return DSSubscriberContextManager(self.parent_process, 'post', components, **kwargs)
 
 
 # Creates already one instance of simulation. Typically only this instance is all we need
