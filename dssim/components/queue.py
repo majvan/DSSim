@@ -69,7 +69,7 @@ class Queue(DSComponent):
             self.tx_queue_changed.schedule(0, info='queue changed')
         return retval
 
-    def pop(self, index, default=None):
+    def pop(self, index=0, default=None):
         retval = None
         if len(self.queue) > index:
             retval = self.queue.pop(index, default)
