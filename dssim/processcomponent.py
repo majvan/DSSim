@@ -36,14 +36,14 @@ class DSProcessComponent(DSComponent):
 
     def wait(self, timeout=float('inf')):
         try:
-            retval = yield from self.sim.wait(timeout, cond=lambda c: True)
+            retval = yield from self.sim.wait(timeout, cond=lambda e: True)
             if retval is not None:
                 retval = retval['object']
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
 
-    def enter(self, queue,timeout=float('inf')):
+    def enter(self, queue, timeout=float('inf')):
         try:
             retval = yield from queue.put(timeout, object=self)
             if retval is not None:
@@ -71,6 +71,8 @@ class DSProcessComponent(DSComponent):
 
     def pop_nowait(self, queue):
         retval = queue.get_nowait()
+        if retval is not None:
+            retval = retval[0]['object']
         return retval
 
     def get(self, resource, amount=1, timeout=float('inf')):
