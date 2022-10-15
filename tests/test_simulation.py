@@ -265,7 +265,7 @@ class TestConditionChecking(unittest.TestCase):
 
     def test1_check_storing_cond_in_metadata(self):
         ''' By calling wait, the metadata.cond should be stored '''
-        def my_process(event, value):
+        def my_process(value):
             if True:
                 return 100
             yield 101

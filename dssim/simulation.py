@@ -122,7 +122,7 @@ class DSSimulation:
         additional process which signals them in the scheduled time.
         '''
         while True:
-            event = yield from self._wait_for_event(cond=lambda e: True)
+            event = yield from self._wait_for_event()
             # Get producer which really produced the event and signal to associated consumers
             event['producer'].signal(**event)
 
@@ -271,16 +271,16 @@ class DSSimulation:
         retval = yield from schedulable
         return retval
 
-    def _wait_for_event(self, cond, val=None):
+    def _wait_for_event(self, val=None):
         try:
             # Pass value to the feeder and wait for next event
             event = yield val
-	        # We received an event. In the lazy evaluation case, we would be now calling
+            # We received an event. In the lazy evaluation case, we would be now calling
             # _check_cond and returning or raising an event only if the condition matches,
             # otherwise we would be waiting in an infinite loop here.
-            # However we do an early evaluation of conditions- they are checked upon
-            # calling signal_object and we know that the conditions to return / raise an
-            # exceptions are satisfied. See the code there for more info.
+            # However we do an early evaluation of conditions- they are checked before
+            # calling signal_object and we know that the conditions to return (or to raise an
+            # exception) are satisfied. See the code there for more info.
 
             # Convert exception signal to a real exception
             if isinstance(event, Exception):
@@ -314,7 +314,7 @@ class DSSimulation:
         # Get the condition object (lambda / object / ...) from the process metadata
         metaobj.cond = cond
 
-        event = yield from self._wait_for_event(cond, val)
+        event = yield from self._wait_for_event(val)
 
         if event is not None:
             # If we terminated before timeout, then the timeout event is on time queue- remove it
