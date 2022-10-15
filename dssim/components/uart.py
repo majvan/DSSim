@@ -129,7 +129,7 @@ class UARTPhysBase(DSComponent):
         self.rx_buffer_size = rx_buffer_size
 
     def _add_tx_pubsub(self):
-        self.tx = DSProducer(name=self.name + '.tx')
+        self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
         # self.tx_irq = DSProducer(name=self.name + '.tx_irq')  # Not supported yet, low value
         self.tx_link = DSProducer(name=self.name + '.tx bridge to linklayer', sim=self.sim)
 

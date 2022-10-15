@@ -379,13 +379,6 @@ class DSSimulation:
         return DSSubscriberContextManager(self.parent_process, 'post', components, **kwargs)
 
 
-# Creates already one instance of simulation. Typically only this instance is all we need
-# for simulation.
-# There is a possibility to create another simulation object and refer to that object.
-# Useful if we want to restart the simulation, for example.
-sim = DSSimulation()
-
-
 class DSInterface:
     ''' Common interface for DSSim. It creates a rule that every interface shall have
     a name (useful for debugging when debugger displays interface name) and assigned
@@ -393,7 +386,7 @@ class DSInterface:
     '''
     _names = {}
 
-    def __init__(self, *args, name=None, sim=sim, **kwargs):
+    def __init__(self, *args, name=None, sim=None, **kwargs):
         self.sim = sim
         if name is None:
             name = f'{self.sim}.{self.__class__}'
@@ -405,6 +398,8 @@ class DSInterface:
         else:
             DSInterface._names[name] = 0
         self.name = name
+        if sim is None:
+            raise ValueError(f'Interface {self.name} does not have sim parameter set')
 
     def __repr__(self):
         return self.name
@@ -475,7 +470,7 @@ class DSProcess(DSComponent):
         # We store the latest value. Useful to check the status after finish.
         self.value = None
         self.waiting_tasks = []  # taks waiting to finish this task
-        self.finish_tx = DSProducer(name=self.name+'.finish tx')
+        self.finish_tx = DSProducer(name=self.name+'.finish tx', sim=self.sim)
 
     def __iter__(self):
         ''' Required to use the class to get events from it. '''

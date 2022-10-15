@@ -31,7 +31,7 @@ class Resource(DSComponent):
         super().__init__(*args, **kwargs)
         if amount > capacity:
             raise ValueError('Initial amount of the resource is greater than capacity.')
-        self.tx_resource_changed = DSProducer(name=self.name+'.tx')
+        self.tx_resource_changed = DSProducer(name=self.name+'.tx', sim=self.sim)
         self.amount = amount
         self.capacity = capacity
 

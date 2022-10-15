@@ -16,7 +16,7 @@ This file implements advanced filtering logic - with overloading operators
 to be able create advanced expressions.
 '''
 import inspect
-from dssim.simulation import DSProcess, DSCondition, DSCallback, sim
+from dssim.simulation import DSProcess, DSCondition, DSCallback, DSSimulation
 
 class DSFilter(DSCondition):
     def one_liner(self):
@@ -44,13 +44,12 @@ class DSFilter(DSCondition):
         self.setters = list(filter(lambda s: not s.reset, self.signals))
         self.resetters = list(filter(lambda s: s.reset, self.signals))
 
-    def __init__(self, cond=None, reevaluate=False, signal_timeout=False):
+    def __init__(self, cond=None, reevaluate=False, signal_timeout=False, sim=None):
         self.expression = self.one_liner
         self.signaled = False
         self.value = None
         self.cond = cond
         self.signals = [self]
-        self.parent_process = sim.parent_process
         # Reevaluation means that after every event we receive we have to re-evaluate
         # the condition
         # If not reevaluation set, then once filter matches, it is flipped to signaled
@@ -76,13 +75,17 @@ class DSFilter(DSCondition):
             #    asynchronously. For such, we subscribe for the new process finish event and push that to the current
             #    process.
             # if inspect.getgeneratorstate(self.cond) == inspect.GEN_CREATED:
-            self.cond = DSProcess(self.cond)  # convert to DSProcess so we could get return value
+            if sim is None:
+                raise ValueError('A condition defined as a generator needs to have sim environment defined')
+            self.cond = DSProcess(self.cond, sim=sim)  # convert to DSProcess so we could get return value
             # else:
             #     raise ValueError('Cannot filter already running generator.')
         if isinstance(self.cond, DSProcess):
+            self.sim = self.cond.sim
             if not self.cond.started():
-                self.cond = sim.schedule(0, self.cond)  # start the process
-            self.subscriber = DSCallback(self._process_finished)
+                self.cond = self.sim.schedule(0, self.cond)  # start the process
+            self.parent_process = self.sim.parent_process
+            self.subscriber = DSCallback(self._process_finished, sim=self.sim)
             self.cond.finish_tx.add_subscriber(self.subscriber, 'pre')
 
     def make_reset(self):
@@ -118,7 +121,7 @@ class DSFilter(DSCondition):
                 else:
                     signaled, value = True, self.cond.value
             else:
-                sim.signal(self.cond, **event)
+                self.sim.signal(self.cond, **event)
         elif callable(self.cond) and self.cond(event):
             signaled, value = True, event
         elif self is event:
@@ -133,7 +136,7 @@ class DSFilter(DSCondition):
     def _process_finished(self, *args, **kwargs):
         # Following forces re-evaluation by injecting new event
         self.cond.finish_tx.remove_subscriber(self.subscriber, 'pre')
-        sim.signal(self.parent_process, producer=self.cond, finished=True)
+        self.sim.signal(self.parent_process, producer=self.cond, finished=True)
 
     def cond_value(self, event):
         return self.value
@@ -141,7 +144,7 @@ class DSFilter(DSCondition):
     def cond_cleanup(self):
         if isinstance(self.cond, DSProcess):
             self.cond.finish_tx.remove_subscriber(self.subscriber, 'pre')
-            sim.cleanup(self.cond)
+            self.sim.cleanup(self.cond)
 
     def get_process(self):
         return self.cond if isinstance(self.cond, DSProcess) else None

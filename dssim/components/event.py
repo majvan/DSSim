@@ -27,7 +27,7 @@ class Event(DSComponent):
         If the event is signalled, a task going to wait is unblocked immediately.
         '''
         super().__init__(*args, **kwargs)
-        self._tx = DSProducer(name=self.name + '.tx (internal)')
+        self._tx = DSProducer(name=self.name + '.tx (internal)', sim=self.sim)
 
     def signal(self):
         ''' Signal the event and unblocks all the tasks waiting for it. '''

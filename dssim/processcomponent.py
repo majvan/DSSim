@@ -22,11 +22,12 @@ from dssim.components.resource import Resource
 class DSProcessComponent(DSComponent):
     _dscomponent_instances = 0
 
-    def __init__(self, name=None, *args, **kwargs):
+    def __init__(self, *args, name=None, **kwargs):
         if name is None:
             name = type(self).__name__ + '.' + str(self._dscomponent_instances)
         super().__init__(self, name=name, *args, **kwargs)
-        retval = self.sim.schedule(0, DSProcess(self.process(), sim=self.sim, name=self.name+'.process'))
+        kwargs.pop('name', None), kwargs.pop('sim', None) # remove the two arguments
+        retval = self.sim.schedule(0, DSProcess(self.process(*args, **kwargs), name=self.name+'.process', sim=self.sim))
         self.scheduled_process = retval
         self.__class__._dscomponent_instances += 1
 

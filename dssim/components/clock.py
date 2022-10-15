@@ -26,7 +26,7 @@ class Timer(DSComponent):
         self.counter = repeats
         self.state = 'STOPPED'
         self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
-        self.proc = self.sim.schedule(0, DSProcess(self.process(), name=self.name+'.process'))
+        self.proc = self.sim.schedule(0, DSProcess(self.process(), name=self.name+'.process', sim=self.sim))
 
     def process(self):
         ''' Methods schedules new event depending on the counter '''

@@ -27,7 +27,7 @@ class Queue(DSComponent):
     def __init__(self, capacity=float('inf'), *args, **kwargs):
         ''' Init Queue component. No special arguments here. '''
         super().__init__(*args, **kwargs)
-        self.tx_queue_changed = DSProducer(name=self.name+'.tx')
+        self.tx_queue_changed = DSProducer(name=self.name+'.tx', sim=self.sim)
         self.capacity = capacity
         self.queue = []
 
