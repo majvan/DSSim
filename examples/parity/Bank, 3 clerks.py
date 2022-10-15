@@ -1,4 +1,4 @@
-# Copyright 2021 NXP Semiconductors
+# Copyright 2022 majvan
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 '''
 The example is showing a code parity with example from salabim project
 '''
-from dssim.simulation import sim
+from dssim.simulation import DSSimulation
 from dssim.processcomponent import DSProcessComponent
 from dssim.components.queue import Queue
 import random
@@ -43,6 +43,7 @@ class Clerk(DSProcessComponent):
             customer.signal("processed")
 
 
+sim = DSSimulation()
 CustomerGenerator()
 clerks = [Clerk() for _ in range(3)]
 waitingline = Queue(name="waitingline")
@@ -50,4 +51,3 @@ waitingline = Queue(name="waitingline")
 sim.run(50)
 print()
 # waitingline.print_statistics()
-

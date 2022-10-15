@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.simulation import DSComponent, DSProcess, DSCallback, sim
+from dssim.simulation import DSComponent, DSProcess, DSCallback, DSSimulation
 from dssim.pubsub import DSProducer
 from dssim.components.limiter import Limiter
 
@@ -19,17 +19,17 @@ from dssim.components.limiter import Limiter
 class MCU(DSComponent):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.limiter = Limiter(0, name=self.name + '.(internal) limiter0')
-        self._producer = DSProducer(name=self.name + '.(internal) event producer')
+        self.limiter = Limiter(0, name=self.name + '.(internal) limiter0', sim=self.sim)
+        self._producer = DSProducer(name=self.name + '.(internal) event producer', sim=self.sim)
         self._producer.add_subscriber(self.limiter.rx)
-        consumer = DSCallback(self._on_output, name=self.name + '.(internal) output')
+        consumer = DSCallback(self._on_output, name=self.name + '.(internal) output', sim=self.sim)
         self.limiter.tx.add_subscriber(consumer)
         self.stat = {'generated': 0, 'received': 0}
 
     def boot(self):
         ''' This function has to be called after producers are registered '''
-        self.sim.schedule(0, DSProcess(self.generator(20), name=self.name + '.(internal) generator process'))
-        self.sim.schedule(0, DSProcess(self.limit_controller(), name=self.name + '.(internal) control process'))
+        self.sim.schedule(0, DSProcess(self.generator(20), name=self.name + '.(internal) generator process', sim=self.sim))
+        self.sim.schedule(0, DSProcess(self.limit_controller(), name=self.name + '.(internal) control process', sim=self.sim))
 
     def limit_controller(self):
         self.limiter.set_throughput(10)  # 0 sec
@@ -64,7 +64,8 @@ class MCU(DSComponent):
         self.stat['received'] += 1
 
 if __name__ == '__main__':
-    mcu0 = MCU(name='mcu master')
+    sim = DSSimulation()
+    mcu0 = MCU(name='mcu master', sim=sim)
     mcu0.boot()
     sim.run(10)
     assert mcu0.stat['generated'] == 199

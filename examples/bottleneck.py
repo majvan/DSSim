@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.simulation import DSComponent, DSProcess, DSCallback, sim
+from dssim.simulation import DSComponent, DSProcess, DSCallback, DSSimulation
 from dssim.pubsub import DSProducer
 from dssim.components.limiter import Limiter
 from random import uniform
@@ -20,16 +20,16 @@ from random import uniform
 class MCU(DSComponent):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        limiter = Limiter(1, name=self.name + '.(internal) limiter0')
-        self._producer = DSProducer(name=self.name + '.(internal) event producer')
+        limiter = Limiter(1, name=self.name + '.(internal) limiter0', sim=self.sim)
+        self._producer = DSProducer(name=self.name + '.(internal) event producer', sim=self.sim)
         self._producer.add_subscriber(limiter.rx)
-        consumer = DSCallback(self._on_output, name=self.name+'.(internal) output')
+        consumer = DSCallback(self._on_output, name=self.name+'.(internal) output', sim=self.sim)
         limiter.tx.add_subscriber(consumer)
         self.stat = {'generated': 0, 'received': 0}
 
     def boot(self):
         ''' This function has to be called after producers are registered '''
-        self.sim.schedule(0, DSProcess(self.generator(average_rate=1.2), name=self.name+'.(internal) generator process'))
+        self.sim.schedule(0, DSProcess(self.generator(average_rate=1.2), name=self.name+'.(internal) generator process', sim=self.sim))
 
     def generator(self, average_rate):
         n = 0
@@ -47,7 +47,8 @@ class MCU(DSComponent):
         self.stat['received'] += 1
 
 if __name__ == '__main__':
-    mcu0 = MCU(name='mcu master')
+    sim = DSSimulation()
+    mcu0 = MCU(name='mcu master', sim=sim)
     mcu0.boot()
     sim.run(300)
     ratio = mcu0.stat['generated'] / mcu0.stat['received']

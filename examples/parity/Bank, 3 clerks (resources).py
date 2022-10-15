@@ -14,7 +14,7 @@
 '''
 The example is showing a code parity with example from salabim project
 '''
-from dssim.simulation import sim
+from dssim.simulation import DSSimulation
 from dssim.processcomponent import DSProcessComponent
 from dssim.components.resource import Resource
 import random
@@ -34,9 +34,10 @@ class Customer(DSProcessComponent):
         yield from self.wait(30)
         yield from self.put(clerks)  # Put the clerk back to the resources, but wait while the resource is full (it is not, the capacity is infinity).
 
- 
+
+sim = DSSimulation() 
 CustomerGenerator()
-clerks = Resource(name="clerks", amount=3)
+clerks = Resource(amount=3, name="clerks")
 sim.run(50000)
 
 # clerks.print_statistics()

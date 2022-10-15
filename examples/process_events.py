@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.simulation import DSComponent, DSProcess, sim
+from dssim.simulation import DSComponent, DSProcess, DSSimulation
 from dssim.pubsub import DSProducer
 from random import randint
 
@@ -34,7 +34,7 @@ class MyComponent(DSComponent):
     def __init__(self, name, **kwargs):
         super().__init__(**kwargs)
         self.stat = {'errors': 0, 'success': 0, 'tries': 0}
-        self.sm = DSProcess(self.locker_state_machine(), name=self.name+'.rx_sm')
+        self.sm = DSProcess(self.locker_state_machine(), name=self.name+'.rx_sm', sim=self.sim)
         self.sm.schedule(0)
 
     def boot(self):
@@ -78,7 +78,8 @@ class MyComponent(DSComponent):
             self.stat['errors'] += 1
 
 if __name__ == '__main__':
-    obj0 = MyComponent(name='obj0')
+    sim = DSSimulation()
+    obj0 = MyComponent(name='obj0', sim=sim)
     obj0.boot()
     print('Running...')
 

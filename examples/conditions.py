@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dssim.cond import DSFilter as f
-from dssim.simulation import DSSimulation, sim
+from dssim.simulation import DSSimulation
 
 
 def return_apologize_after_10():
@@ -117,7 +117,7 @@ def demo_filtering():
     t1, t2 = sim.schedule_event(3, {'food': 'ham'}), sim.schedule_event(1, {'food': 'eggs'}), 
     t3, t4 = sim.schedule_event(5, {'food': 'yogurt'}), sim.schedule_event(2, {'food': 'muesli'}),
     t5, t6, t7 = sim.schedule_event(7, {'drink': 'tea'}), sim.schedule_event(6, {'drink': 'juice'}), sim.schedule_event(3, {'drink': 'milk'}),
-    ret = yield from sim.wait(cond=f(waiting_for_table_service()) | f(t0))
+    ret = yield from sim.wait(cond=f(waiting_for_table_service(), sim=sim) | f(t0))
     # We were served with yogurt + muesli + milk + spoon in table service; but the waiting_for_table_service returns only one event
     assert tuple(ret.values()) == ({'service': 'good'},)
     assert sim.time == time + 5
@@ -127,7 +127,7 @@ def demo_filtering():
     # Test case: A generator "return_greetings_after_10" is going to send event after we return from wait. We should not be affected.
     time = sim.time
     t0 = sim.schedule_event(3, {'greeting': 'hello'})
-    ret = yield from sim.wait(cond=f(t0) | f(return_apologize_after_10()))
+    ret = yield from sim.wait(cond=f(t0) | f(return_apologize_after_10(), sim=sim))
     assert tuple(ret.values()) == ({'greeting': 'hello'},)
     assert sim.time == time + 3
     ret = yield from sim.wait(30, cond=lambda e:True)
@@ -135,11 +135,12 @@ def demo_filtering():
     assert sim.time == time + 33
 
     time = sim.time
-    ret = yield from sim.wait(cond=f(sim.wait(2), signal_timeout=True) & f(sim.wait(6), signal_timeout=True) | f(sim.wait(4), signal_timeout=True) & f(sim.wait(5), signal_timeout=True))
+    ret = yield from sim.wait(cond=f(sim.wait(2), signal_timeout=True, sim=sim) & f(sim.wait(6), signal_timeout=True, sim=sim) | f(sim.wait(4), signal_timeout=True, sim=sim) & f(sim.wait(5), signal_timeout=True, sim=sim))
     assert sim.time == time + 5  # wait for (2 and 6) or (1 and 5) => signal at 1 then 5 makes this true
     assert tuple(ret.values()) == (None, None)
 
 
 if __name__ == '__main__':
+    sim = DSSimulation()
     proc = sim.schedule(0, demo_filtering())
     sim.run()

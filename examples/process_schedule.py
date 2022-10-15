@@ -11,15 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.simulation import DSSchedulable, DSProcess, DSComponent, sim
+from dssim.simulation import DSSchedulable, DSProcess, DSComponent, DSSimulation
 import inspect
 
 class MyComponent(DSComponent):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.taskA = DSProcess(self.do_somethingA(), name=self.name+'.taskA')
-        self.taskB = DSProcess(self.do_somethingB(), name=self.name+'.taskB')
-        self.taskC = DSProcess(self.do_somethingC(), name=self.name+'.taskC')
+        self.taskA = DSProcess(self.do_somethingA(), name=self.name+'.taskA', sim=self.sim)
+        self.taskB = DSProcess(self.do_somethingB(), name=self.name+'.taskB', sim=self.sim)
+        self.taskC = DSProcess(self.do_somethingC(), name=self.name+'.taskC', sim=self.sim)
         self.taskDummy = self.dummy(12)
 
     def do_somethingA(self):
@@ -71,7 +71,8 @@ class MyComponent(DSComponent):
         print(self.taskDummy, '3 all tasks finished')
 
 if __name__ == '__main__':
-    obj0 = MyComponent(name='obj0')
+    sim = DSSimulation()
+    obj0 = MyComponent(name='obj0', sim=sim)
     print('Scheduling task', obj0.taskC, 'in 8 sec')
     sim.schedule(8, obj0.taskC)
     # The dummy task does not have customized name

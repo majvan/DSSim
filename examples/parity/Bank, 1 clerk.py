@@ -14,7 +14,7 @@
 '''
 The example is showing a code parity with example from salabim project
 '''
-from dssim.simulation import sim
+from dssim.simulation import DSSimulation
 from dssim.processcomponent import DSProcessComponent
 from dssim.components.queue import Queue
 import random
@@ -43,6 +43,7 @@ class Clerk(DSProcessComponent):
             customer.signal("processed")
 
 
+sim = DSSimulation()
 
 CustomerGenerator()
 clerks = Clerk()

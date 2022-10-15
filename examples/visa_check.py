@@ -11,12 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from dssim.simulation import DSAbortException, DSSchedulable, DSComponent, DSSimulation
 from dssim.components.queue import Queue
-from dssim.simulation import DSAbortException, sim, DSSchedulable, DSComponent
-
 from random import randint
 
-q = Queue(capacity=12)
 SIM_TIME = 60 * 10
 
 class Person(DSComponent):
@@ -95,10 +93,10 @@ class VisaCheck(DSComponent):
         return f'Check{self.info}[{self.identifier}]'
 
 
-def eu_person_generator():
+def eu_person_generator(sim):
     i = 0
     while True:
-        person = Person('EU', i, max_waiting_time=randint(10, 60))
+        person = Person('EU', i, max_waiting_time=randint(10, 60), sim=sim)
         print(f'{sim.time:<5} {person}: Queueing with max. waiting time {person.max_waiting_time} at position {len(q)}.', end='')
         print(f' First one is thus \033[0;32m{person}\033[0m') if len(q) == 0 else print()
         person.start_waiting(q)
@@ -110,10 +108,10 @@ def eu_person_generator():
         yield from sim.wait(busy)
         i += 1
 
-def ww_person_generator():
+def ww_person_generator(sim):
     i = 0
     while True:
-        person = Person('WW', i, max_waiting_time=randint(20, 90))
+        person = Person('WW', i, max_waiting_time=randint(20, 90), sim=sim)
         print(f'{sim.time:<5} {person}: Queueing with max. waiting time {person.max_waiting_time} at position {len(q)}.', end='')
         print(f' First one is thus \033[0;32m{person}\033[0m') if len(q) == 0 else print()
         person.start_waiting(q)
@@ -135,12 +133,16 @@ def alien_person_generator():
 
 
 if __name__ == '__main__':
-    persons = sim.schedule(0, eu_person_generator())
-    persons = sim.schedule(0, ww_person_generator())
+    sim = DSSimulation()
+
+    q = Queue(capacity=12, name='queue', sim=sim)
+
+    persons = sim.schedule(0, eu_person_generator(sim))
+    persons = sim.schedule(0, ww_person_generator(sim))
     #sim.schedule(300, alien_person_generator())
 
-    eu_visa_checks = [VisaCheck('EU', i, q, max_waiting_time=randint(15, 30)) for i in range(2)]
-    ww_visa_checks = [VisaCheck('WW', i, q, max_waiting_time=randint(15, 30)) for i in range(2)]
+    eu_visa_checks = [VisaCheck('EU', i, q, max_waiting_time=randint(15, 30), sim=sim) for i in range(2)]
+    ww_visa_checks = [VisaCheck('WW', i, q, max_waiting_time=randint(15, 30), sim=sim) for i in range(2)]
 
     sim.run(SIM_TIME)
     print("Done.")

@@ -1,4 +1,17 @@
-from dssim.simulation import DSProcess, DSComponent, sim
+# Copyright 2022 majvan
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+from dssim.simulation import DSProcess, DSComponent, DSSimulation
 from dssim.pubsub import DSProducer
 
 class Switch(DSComponent):
@@ -7,10 +20,10 @@ class Switch(DSComponent):
         super().__init__(*args, **kwargs)
         self.counter = 0
         for i in range(3):
-            p = DSProcess(self.process(i), name=f"{self.name}.take{i}")
+            p = DSProcess(self.process(i), name=f"{self.name}.take{i}", sim=self.sim)
             self.sim.schedule(0, p)
-        self.producer = DSProducer(name=f"{self.name}.feed")
-        self.sim.schedule(0, DSProcess(self.feeder(), name=f"{self.name}.feedprocess"))
+        self.producer = DSProducer(name=f"{self.name}.feed", sim=self.sim)
+        self.sim.schedule(0, DSProcess(self.feeder(), name=f"{self.name}.feedprocess", sim=self.sim))
 
     def feeder(self):
         yield from self.sim.wait(3)
@@ -82,11 +95,13 @@ class Switch2(Switch):
             print(f"Process {nr} returning with {nr}")
         return nr
 
-print('First switch having consumers implemented with yield <literal>')
-s = Switch(name="yield_switch")
-sim.run(10)
-# The second switch is functionally the same as the first one, but sim.wait() gives you more flexibility on filtering
-print()
-print('The second switch having consumers implemented with yield from sim.wait()')
-s = Switch2(name="wait_switch")
-sim.run(20)
+if __name__ == '__main__':
+    sim = DSSimulation()
+    print('First switch having consumers implemented with yield <literal>')
+    s = Switch(name="yield_switch", sim=sim)
+    sim.run(10)
+    # The second switch is functionally the same as the first one, but sim.wait() gives you more flexibility on filtering
+    print()
+    print('The second switch having consumers implemented with yield from sim.wait()')
+    s = Switch2(name="wait_switch", sim=sim)
+    sim.run(20)

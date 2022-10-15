@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.simulation import DSComponent, DSCallback, sim
+from dssim.simulation import DSComponent, DSCallback, DSSimulation
 from dssim.components.uart import UARTLink, UARTPhys
 
 
@@ -20,13 +20,13 @@ class MCU(DSComponent):
         super().__init__(**kwargs)
         # phys = UARTPhys(parity='E')
         phys = None
-        self.uart0 = UARTLink(name=self.name + '.uart0', parity='E', tx_buffer_size=10, phys_component=phys)
+        self.uart0 = UARTLink(parity='E', tx_buffer_size=10, phys_component=phys, name=self.name + '.uart0', sim=self.sim)
         self.stat = {'rx_isr_counter': 0}
         self.boot()
 
     def boot(self):
         # Register ISRs
-        self.uart0.rx_irq.add_subscriber(DSCallback(self.rx_isr, name=self.name + '.isr'))
+        self.uart0.rx_irq.add_subscriber(DSCallback(self.rx_isr, name=self.name + '.isr', sim=self.sim))
 
     def rx_isr(self, flag, **other):
         if flag == 'byte':
@@ -37,8 +37,9 @@ class MCU(DSComponent):
 
 
 if __name__ == '__main__':
-    cpu0 = MCU(name='cpu0')
-    cpu1 = MCU(name='cpu1')
+    sim = DSSimulation()
+    cpu0 = MCU(name='cpu0', sim=sim)
+    cpu1 = MCU(name='cpu1', sim=sim)
 
     # connect loopback
     # cpu0.uart0.phys.tx.add_consumer(cpu1.uart0.phys.rx)

@@ -11,11 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from dssim.simulation import DSSimulation
 from dssim.components.queue import Queue
-from dssim.simulation import sim
 import inspect
-
-q_ab, q_ba = Queue(), Queue()
 
 def do_somethingA():
     # The following will be run in a time t=10 sec (see below schedule_future)
@@ -67,6 +65,8 @@ def do_somethingB():
     print('B5 Finish')
 
 if __name__ == '__main__':
+    sim = DSSimulation()
+    q_ab, q_ba = Queue(sim=sim), Queue(sim=sim)
     process_a, process_b = do_somethingA(), do_somethingB()
     sim.schedule(0, process_a)
     sim.schedule(0, process_b)

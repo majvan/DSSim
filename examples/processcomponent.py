@@ -1,14 +1,12 @@
-from dssim.simulation import sim
+from dssim.simulation import DSSimulation
 from dssim.components.queue import Queue
 from dssim.processcomponent import DSProcessComponent
 from random import randint
 
-waitingline = Queue(capacity=5, name='waitingline')
-
 class CustomerGenerator(DSProcessComponent):
     def process(self):
         while True:
-            Customer()
+            Customer(sim=self.sim)
             yield from self.sim.wait(7) # randint(5, 15))
 
 class Customer(DSProcessComponent):
@@ -43,10 +41,12 @@ class Clerk(DSProcessComponent):
             customer.signal('stop clerk processing')  # get the customer out of it's hold(50)
 
 if __name__ == '__main__':
-    CustomerGenerator(name='CustomerGenerator')
+    sim = DSSimulation()
+    waitingline = Queue(capacity=5, name='waitingline', sim=sim)
+    CustomerGenerator(name='CustomerGenerator', sim=sim)
     sim.number_balked = 0
     sim.number_reneged = 0
-    clerks = [Clerk() for i in range(3)]
+    clerks = [Clerk(sim=sim) for i in range(3)]
 
     #waitingline.length.monitor(False)
     sim.run(up_to=1500)  # first do a prerun of 1500 time units without collecting data

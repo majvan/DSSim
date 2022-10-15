@@ -18,13 +18,13 @@ from dssim.components.i2c import I2CMasterBasic, I2CSlaveBasic
 class MCU_master(DSComponent):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.i2c0 = I2CMasterBasic(name=self.name + '.i2c0')
+        self.i2c0 = I2CMasterBasic(name=self.name + '.i2c0', sim=self.sim)
         self.stat = {'i2c0_tx_counter': 0, 'i2c0_rx_counter': 0}
         self.boot()
 
     def boot(self):
         # Register ISRs
-        self.i2c0.rx_irq.add_consumer(DSCallback(self.rx_isr, name=self.name + '.isr'))
+        self.i2c0.rx_irq.add_consumer(DSCallback(self.rx_isr, name=self.name + '.isr', sim=self.sim))
 
     def tx_isr(self, addr, rnw, data=None, **others):
         self.stat['i2c0_tx_counter'] += 1
@@ -38,12 +38,12 @@ class MCU_master(DSComponent):
 class MCU_slave(DSComponent):
     def __init__(self, name):
         super().__init__(name)
-        self.i2c0 = I2CSlaveBasic(addr=100, name=self.name + '.i2c0')
+        self.i2c0 = I2CSlaveBasic(addr=100, name=self.name + '.i2c0', sim=self.sim)
         self.stat = {'i2c0_tx_counter': 0, 'i2c0_rx_counter': 0}
 
     def boot(self):
         # Register ISRs
-        self.i2c0.rx_irq.add_consumer(DSCallback(self.rx_isr, name=self.name + '.isr'))
+        self.i2c0.rx_irq.add_consumer(DSCallback(self.rx_isr, name=self.name + '.isr', sim=self.sim))
 
     def tx_isr(self, rnw, data=None, **others):
         if data:

@@ -1,4 +1,4 @@
-from dssim.simulation import sim
+from dssim.simulation import DSSimulation
 from dssim.processcomponent import DSProcessComponent
 from dssim.components.resource import Resource
 from random import randint
@@ -31,7 +31,7 @@ class Car(DSProcessComponent):
         print(f'{sim.time} {self} waiting for {liters_required} liters of fuel...')
         if (fuel_pump.amount - liters_required) / fuel_pump.capacity * 100 < THRESHOLD:
             print(f'{sim.time} {self} calling truck for the fuel...')
-            TankTruck()
+            TankTruck(sim=self.sim)
         print(f'{sim.time} {self} going to tank {liters_required} liters...')
         yield from self.get(fuel_pump, liters_required)
         print(f'{sim.time} {self} starting to tank {liters_required} liters...')
@@ -58,14 +58,15 @@ class CarGenerator(DSProcessComponent):
     def process(self):
         while True:
             yield from self.sim.wait(randint(*T_INTER))
-            Car()
+            Car(sim=self.sim)
 
 if __name__ == '__main__':
     # Create environment and start processes
-    gas_station = Resource(2, name="Gas station places")  # 2 places in gas station
-    fuel_pump = Resource(capacity=GAS_STATION_SIZE, name="Gas station fuel")
-    tank_truck = TankTruck()
-    CarGenerator()
+    sim = DSSimulation()
+    gas_station = Resource(2, name="Gas station places", sim=sim)  # 2 places in gas station
+    fuel_pump = Resource(capacity=GAS_STATION_SIZE, name="Gas station fuel", sim=sim)
+    tank_truck = TankTruck(sim=sim)
+    CarGenerator(sim=sim)
 
     sim.run(SIM_TIME)
     print("Done.")
