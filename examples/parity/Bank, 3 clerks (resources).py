@@ -24,15 +24,15 @@ class CustomerGenerator(DSProcessComponent):
     def process(self):
         while True:
             Customer()
-            yield from self.sim.wait(random.uniform(5, 15))
+            yield from self.wait(random.uniform(5, 15))
 
 
 class Customer(DSProcessComponent):
     def process(self):
         yield from self.get(clerks)  # Get for me one clerk (=resource). If not available, wait
         print(f"{self.sim.time} Customer in process with clerk")
-        yield from self.sim.wait(30)
-        yield from self.put(clerks)  # Put the clerk back to the resources, wait till capacity is exceeded
+        yield from self.wait(30)
+        yield from self.put(clerks)  # Put the clerk back to the resources, but wait while the resource is full (it is not, the capacity is infinity).
 
  
 CustomerGenerator()
