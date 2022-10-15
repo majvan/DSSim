@@ -6,7 +6,7 @@ from random import randint
 class CustomerGenerator(DSProcessComponent):
     def process(self):
         while True:
-            Customer(sim=self.sim)
+            Customer()
             yield from self.sim.wait(7) # randint(5, 15))
 
 class Customer(DSProcessComponent):
@@ -42,11 +42,11 @@ class Clerk(DSProcessComponent):
 
 if __name__ == '__main__':
     sim = DSSimulation()
-    waitingline = Queue(capacity=5, name='waitingline', sim=sim)
-    CustomerGenerator(name='CustomerGenerator', sim=sim)
+    waitingline = Queue(capacity=5, name='waitingline')
+    CustomerGenerator(name='CustomerGenerator')
     sim.number_balked = 0
     sim.number_reneged = 0
-    clerks = [Clerk(sim=sim) for i in range(3)]
+    clerks = [Clerk() for i in range(3)]
 
     #waitingline.length.monitor(False)
     sim.run(up_to=1500)  # first do a prerun of 1500 time units without collecting data

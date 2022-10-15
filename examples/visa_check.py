@@ -18,8 +18,8 @@ from random import randint
 SIM_TIME = 60 * 10
 
 class Person(DSComponent):
-    def __init__(self, info, identifier, max_waiting_time, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, info, identifier, max_waiting_time):
+        super().__init__()
         self.info = info
         self.identifier = identifier
         self.max_waiting_time = max_waiting_time
@@ -53,8 +53,8 @@ class Person(DSComponent):
         return f'\033[0;34m{repr(self)}\033[0m' if self.info == 'EU' else f'\033[0;35m{repr(self)}\033[0m'
 
 class VisaCheck(DSComponent):
-    def __init__(self, info, identifier, queue, max_waiting_time, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, info, identifier, queue, max_waiting_time):
+        super().__init__()
         self.info = info
         self.identifier = identifier
         self.max_waiting_time = max_waiting_time
@@ -93,10 +93,10 @@ class VisaCheck(DSComponent):
         return f'Check{self.info}[{self.identifier}]'
 
 
-def eu_person_generator(sim):
+def eu_person_generator():
     i = 0
     while True:
-        person = Person('EU', i, max_waiting_time=randint(10, 60), sim=sim)
+        person = Person('EU', i, max_waiting_time=randint(10, 60))
         print(f'{sim.time:<5} {person}: Queueing with max. waiting time {person.max_waiting_time} at position {len(q)}.', end='')
         print(f' First one is thus \033[0;32m{person}\033[0m') if len(q) == 0 else print()
         person.start_waiting(q)
@@ -108,10 +108,10 @@ def eu_person_generator(sim):
         yield from sim.wait(busy)
         i += 1
 
-def ww_person_generator(sim):
+def ww_person_generator():
     i = 0
     while True:
-        person = Person('WW', i, max_waiting_time=randint(20, 90), sim=sim)
+        person = Person('WW', i, max_waiting_time=randint(20, 90))
         print(f'{sim.time:<5} {person}: Queueing with max. waiting time {person.max_waiting_time} at position {len(q)}.', end='')
         print(f' First one is thus \033[0;32m{person}\033[0m') if len(q) == 0 else print()
         person.start_waiting(q)
@@ -135,18 +135,17 @@ def alien_person_generator():
 if __name__ == '__main__':
     sim = DSSimulation()
 
-    q = Queue(capacity=12, name='queue', sim=sim)
+    q = Queue(capacity=12, name='queue')
 
-    persons = sim.schedule(0, eu_person_generator(sim))
-    persons = sim.schedule(0, ww_person_generator(sim))
+    persons = sim.schedule(0, eu_person_generator())
+    persons = sim.schedule(0, ww_person_generator())
     #sim.schedule(300, alien_person_generator())
 
-    eu_visa_checks = [VisaCheck('EU', i, q, max_waiting_time=randint(15, 30), sim=sim) for i in range(2)]
-    ww_visa_checks = [VisaCheck('WW', i, q, max_waiting_time=randint(15, 30), sim=sim) for i in range(2)]
+    eu_visa_checks = [VisaCheck('EU', i, q, max_waiting_time=randint(15, 30)) for i in range(2)]
+    ww_visa_checks = [VisaCheck('WW', i, q, max_waiting_time=randint(15, 30)) for i in range(2)]
 
     sim.run(SIM_TIME)
     print("Done.")
     total_processed = sum([check.stat['processed'] for check in eu_visa_checks + ww_visa_checks])
 
     assert total_processed > 120  # high probability to pass
-
