@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.simulation import DSSchedulable, DSComponent, sim
+from dssim.simulation import DSSchedulable, DSComponent
 from dssim.pubsub import DSProducer, DSProcessConsumer, DSConsumer
 from dssim.components.limiter import Limiter
 from random import uniform
@@ -21,7 +21,7 @@ class CarGenerator(DSProducer):
     def __init__(self, label, throughput=0, gen_rate=1, name='cargenerator'):
         super().__init__(name=name)
         self._label = label
-        self._limiter = Limiter(throughput, name=self.name + '.limiter')
+        self._limiter = Limiter(throughput, name=self.name + '.limiter', sim=self.sim)
         self.tx = self._limiter.tx
         self.sim.schedule(0, self.car_generator(gen_rate))
 
@@ -52,15 +52,15 @@ class CarRecorder(DSConsumer):
 class Crossroad(DSComponent):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.car_generators = {'N': CarGenerator('N', 0, 0.27, name=self.name + '.cargenN'),
-                               'S': CarGenerator('S', 0, 0.21, name=self.name + '.cargenS'),
-                               'W': CarGenerator('W', 0, 0.15, name=self.name + '.cargenW'),
-                               'E': CarGenerator('E', 0, 0.10, name=self.name + '.cargenE'),
+        self.car_generators = {'N': CarGenerator('N', 0, 0.27, name=self.name + '.cargenN', sim=self.sim),
+                               'S': CarGenerator('S', 0, 0.21, name=self.name + '.cargenS', sim=self.sim),
+                               'W': CarGenerator('W', 0, 0.15, name=self.name + '.cargenW', sim=self.sim),
+                               'E': CarGenerator('E', 0, 0.10, name=self.name + '.cargenE', sim=self.sim),
                                }
-        self.recorders = {'N': CarRecorder(name=self.name + '.recorderN'),
-                          'S': CarRecorder(name=self.name + '.recorderS'),
-                          'W': CarRecorder(name=self.name + '.recorderW'),
-                          'E': CarRecorder(name=self.name + '.recorderE'),
+        self.recorders = {'N': CarRecorder(name=self.name + '.recorderN', sim=self.sim),
+                          'S': CarRecorder(name=self.name + '.recorderS', sim=self.sim),
+                          'W': CarRecorder(name=self.name + '.recorderW', sim=self.sim),
+                          'E': CarRecorder(name=self.name + '.recorderE', sim=self.sim),
                           }
         sm = self.state_machine()
         self.sim.schedule(0, sm)

@@ -11,20 +11,20 @@ class GenericPopulation(DSComponent):
         super().__init__(**kwargs)
         self.csv = csv
 
-        self.generic = [Population(5e6, name=self.name + '.unaffected')]
-        self.infected = [InfectedPopulation(1, name=self.name + '.infected')]
+        self.generic = [Population(5e6, name=self.name + '.unaffected', sim=self.sim)]
+        self.infected = [InfectedPopulation(1, name=self.name + '.infected', sim=self.sim)]
         self.diagnosed = []
         self.recovered = []
-        self.dead = [DeadPopulation(0, name=self.name + '.dead')]
-        self.immune = [ImmunePopulation(0e6, name=self.name + '.immune')]
+        self.dead = [DeadPopulation(0, name=self.name + '.dead', sim=self.sim)]
+        self.immune = [ImmunePopulation(0e6, name=self.name + '.immune', sim=self.sim)]
 
         self.people_container = [self.generic, self.infected, self.diagnosed, self.recovered, self.immune]
 
         # These 2 endpoints will concentrate all the info about infection and spread it next
-        self.infection_rx = DSConsumer(self.infection_distributor, name=self.name + '.infection rx')
-        self.population_rx = DSConsumer(self.population_distributor, name=self.name + '.population rx')
+        self.infection_rx = DSConsumer(self.infection_distributor, name=self.name + '.infection rx', sim=self.sim)
+        self.population_rx = DSConsumer(self.population_distributor, name=self.name + '.population rx', sim=self.sim)
 
-        self.time_rx = DSProcessConsumer(self.time_observer(), start=True, name=self.name + '.time observer')
+        self.time_rx = DSProcessConsumer(self.time_observer(), start=True, name=self.name + '.time observer', sim=self.sim)
 
         for group in self.people_container:
             for pop in group:
@@ -55,7 +55,7 @@ class GenericPopulation(DSComponent):
                     pop.update_population(new_infected)
                     break
             else:
-                new_pop = InfectedPopulation(new_infected, name=self.name + '.infected')
+                new_pop = InfectedPopulation(new_infected, name=self.name + '.infected', sim=self.sim)
                 new_pop.infection_tx.add_consumer(self.infection_rx)
                 new_pop.population_tx.add_consumer(self.population_rx)
                 self.infected.append(new_pop)
@@ -68,7 +68,7 @@ class GenericPopulation(DSComponent):
                     pop.update_population(new_recovered)
                     break
             else:
-                new_pop = RecoveredPopulation(new_recovered, name=self.name + '.recovered')
+                new_pop = RecoveredPopulation(new_recovered, name=self.name + '.recovered', sim=self.sim)
                 new_pop.infection_tx.add_consumer(self.infection_rx)
                 new_pop.population_tx.add_consumer(self.population_rx)
                 self.infection_tx.add_consumer(new_pop.infection_rx)
@@ -81,7 +81,7 @@ class GenericPopulation(DSComponent):
                     pop.update_population(new_diagnosed)
                     break
             else:
-                new_pop = DiagnosedPopulation(new_diagnosed, name=self.name + '.diagnosed')
+                new_pop = DiagnosedPopulation(new_diagnosed, name=self.name + '.diagnosed', sim=self.sim)
                 new_pop.infection_tx.add_consumer(self.infection_rx)
                 new_pop.population_tx.add_consumer(self.population_rx)
                 self.diagnosed.append(new_pop)

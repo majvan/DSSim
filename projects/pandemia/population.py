@@ -18,9 +18,9 @@ class Population(DSComponent):
 
         self.step = 0
 
-        self.infection_tx = DSProducer(name=self.name + ".infection tx")
-        self.population_tx = DSProducer(name=self.name + ".population tx")
-        self.status_tx = DSProducer(name=self.name + ".status tx")
+        self.infection_tx = DSProducer(name=self.name + ".infection tx", sim=self.sim)
+        self.population_tx = DSProducer(name=self.name + ".population tx", sim=self.sim)
+        self.status_tx = DSProducer(name=self.name + ".status tx", sim=self.sim)
         delay = 1 + int(sim.time) - sim.time
         sim.schedule(delay, self.process())  # schedule at the beginning of time
 
@@ -110,10 +110,10 @@ class InfectedPopulation(Population):
     def __init__(self, population, **kwargs):
         super().__init__(population, **kwargs)
 
-        self.infection_tx = DSProducer(name=self.name+".infection tx")
-        self.population_tx = DSProducer(name=self.name+".population tx")
-        self.status_tx = DSProducer(name=self.name+".status tx")
-        self.infection_rx = DSConsumer(self.accept_infection, name=self.name+".infection rx")
+        self.infection_tx = DSProducer(name=self.name+".infection tx", sim=self.sim)
+        self.population_tx = DSProducer(name=self.name+".population tx", sim=self.sim)
+        self.status_tx = DSProducer(name=self.name+".status tx", sim=self.sim)
+        self.infection_rx = DSConsumer(self.accept_infection, name=self.name+".infection rx", sim=self.sim)
 
     def accept_infection(self, population, **kwargs):
         pass  # we are already infected
