@@ -20,10 +20,10 @@ Consumer: an object which takes signal from producer and then stops
 '''
 from collections.abc import Iterable
 from abc import abstractmethod
-from dssim.simulation import DSInterface
+from dssim.simulation import DSComponent
 
 
-class DSAbstractProducer(DSInterface):
+class DSAbstractProducer(DSComponent):
     ''' Provides base abstract class for producers '''
 
     def encapsulate_data_to_transport(self, **event_data):

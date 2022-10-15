@@ -81,14 +81,23 @@ class _ProcessMetadata:
 
 class DSSimulation:
     ''' The simulation is a which schedules the nearest (in time) events. '''
+    sim_singleton = None
 
-    def __init__(self, name='dssim'):
+
+    def __init__(self, name='dssim', single_instance=True):
         ''' The simulation holds the list of producers which share the same time queue.
         The list is only for the application informational purpose to be able to identify
         all the producers which belong to the same simulation entity.
         '''
         self.name = name
         self._restart(time=0)
+        if DSSimulation.sim_singleton is None:
+            DSSimulation.sim_singleton = self  # The first sim environment will be the first initialized one
+        elif not single_instance:
+            print('Warning, you are initializing another instance of the simulation.'
+                  'This case is supported, but it is not a typical case and you may'
+                  'want not intentionally to do so. To suppress this warning, call'
+                  'DSSimulation(single_instance=False)')
 
     def __repr__(self):
         return self.name
@@ -379,37 +388,38 @@ class DSSimulation:
         return DSSubscriberContextManager(self.parent_process, 'post', components, **kwargs)
 
 
-class DSInterface:
-    ''' Common interface for DSSim. It creates a rule that every interface shall have
-    a name (useful for debugging when debugger displays interface name) and assigned
-    simulation object (useful when creating more simulation objects in one application).
+class DSComponent:
+    ''' DSComponent is any component which uses simulation (sim) environment.
+    The component shall have assigned a simulation instance (useful when
+    creating more simulation instances in one application).
+    If the sim instance is not specified, the one from singleton will be assigned.
+
+    The interface has a rule that every instance shall have a (unique) name
+    (useful for debugging when debugger displays interface name).
+    If the name is not specified, it is created from the simulation instance
+    and class name.
     '''
     _names = {}
 
     def __init__(self, *args, name=None, sim=None, **kwargs):
-        self.sim = sim
+        # It is recommended that core components specify the sim argument, i.e. sim should not be None
+        self.sim = sim or DSSimulation.sim_singleton
+        temp_name = name or f'{self.__class__}'
+        if self.sim is None:
+            raise ValueError(f'Interface {temp_name} does not have sim parameter set and no DSSimulation was created yet.')
         if name is None:
-            name = f'{self.sim}.{self.__class__}'
-            counter = DSInterface._names.get(name, 0)
-            DSInterface._names[name] = counter + 1
+            name = f'{self.sim}{temp_name}'
+            counter = DSComponent._names.get(name, 0)
+            DSComponent._names[name] = counter + 1
             name = name + f'{counter}'
-        elif name in DSInterface._names:
+        elif name in DSComponent._names:
             raise ValueError('Interface with such name already registered.')
         else:
-            DSInterface._names[name] = 0
+            DSComponent._names[name] = 0
         self.name = name
-        if sim is None:
-            raise ValueError(f'Interface {self.name} does not have sim parameter set')
 
     def __repr__(self):
         return self.name
-
-
-class DSComponent(DSInterface):
-    ''' An interface for a component of DSSim. So far DSInteface specification is good enough
-    to define a component interface of DSSim. Extension in the future is possible.
-    '''
-    pass
 
 
 def DSSchedulable(api_func):

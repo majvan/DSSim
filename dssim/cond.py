@@ -75,8 +75,6 @@ class DSFilter(DSCondition):
             #    asynchronously. For such, we subscribe for the new process finish event and push that to the current
             #    process.
             # if inspect.getgeneratorstate(self.cond) == inspect.GEN_CREATED:
-            if sim is None:
-                raise ValueError('A condition defined as a generator needs to have sim environment defined')
             self.cond = DSProcess(self.cond, sim=sim)  # convert to DSProcess so we could get return value
             # else:
             #     raise ValueError('Cannot filter already running generator.')
