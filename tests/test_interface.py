@@ -15,6 +15,7 @@
 Tests for instance module
 '''
 import unittest
+from unittest.mock import Mock
 from dssim.simulation import DSComponent
 
 class MyComponent(DSComponent):
@@ -23,12 +24,12 @@ class MyComponent(DSComponent):
 class TestInterface(unittest.TestCase):
     ''' Test the time queue class behavior '''
 
-    def test0_simple_event(self):
-        ''' Assert kicking and pushing events '''
-        i0 = MyComponent()
+    def test0_simple_interface(self):
+        sim = Mock()
+        i0 = MyComponent(sim=sim)
         name = list(MyComponent._names.keys())[0]
         with self.assertRaises(ValueError):
-            i1 = MyComponent(name=name)
-        i2 = MyComponent(name='xyz')
+            i1 = MyComponent(name=name, sim=sim)
+        i2 = MyComponent(name='xyz', sim=sim)
         self.assertEqual(str(i2), 'xyz')
 

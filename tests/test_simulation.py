@@ -17,7 +17,7 @@ Tests for simulation module
 '''
 import unittest
 from unittest.mock import Mock, MagicMock, call
-from dssim.simulation import DSSimulation, DSAbortException, DSSchedulable, DSProcess, DSSubscriberContextManager, sim
+from dssim.simulation import DSSimulation, DSAbortException, DSSchedulable, DSProcess, DSSubscriberContextManager
 
 class SomeObj:
     pass
@@ -68,7 +68,7 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertEqual(retval, 'Success')
 
     def test1_schedulable_fcn_as_process(self):
-        process = DSProcess(self.__fcn())
+        process = DSProcess(self.__fcn(), sim=DSSimulation())
         try:
             next(process)
         except StopIteration as e:
@@ -89,7 +89,7 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertEqual(retval, 'Success')
 
     def test3_generator_as_process(self):
-        process = DSProcess(self.__generator())
+        process = DSProcess(self.__generator(), sim=DSSimulation())
         retval = next(process)
         self.assertEqual(retval, 'First return')
         retval = next(process)
@@ -120,7 +120,7 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertEqual(retval2, None)
 
     def test5_send_to_process(self):
-        process = DSProcess(self.__generator())
+        process = DSProcess(self.__generator(), sim=DSSimulation())
         retval = next(process)
         self.assertEqual(retval, 'First return')
         retval = process.send('anything0')
@@ -148,7 +148,7 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertTrue(isinstance(retval, DSAbortException))
 
     def test7_send_to_generator_as_process(self):
-        process = DSProcess(self.__loopback_generator())
+        process = DSProcess(self.__loopback_generator(), sim=DSSimulation())
         retval = next(process)
         retval = process.send('from_test0')
         self.assertEqual(retval, 'from_test0')
@@ -157,10 +157,11 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertTrue(isinstance(process.value, DSAbortException))
 
     def test8_joining_process(self):
-        process = DSProcess(self.__generator())
+        sim = DSSimulation()
+        process = DSProcess(self.__generator(), sim=sim)
         process.join = MagicMock()
         process.join.return_value = iter(['Join called',])
-        process_waiting = DSProcess(self.__waiting_for_join(process))
+        process_waiting = DSProcess(self.__waiting_for_join(process), sim=DSSimulation())
         retval = next(process)
         self.assertEqual(retval, 'First return')
         self.assertEqual(process.value, 'First return')
@@ -213,6 +214,7 @@ class TestException(unittest.TestCase):
             self.assertTrue('generator already executing' not in str(exc))
 
     def test1_exception_usercode_generators(self):
+        sim = DSSimulation()
         self.process1 = self.__first_cyclic()
         self.process2 = self.__second_cyclic()
         sim._kick(self.process1)
@@ -225,6 +227,7 @@ class TestException(unittest.TestCase):
             self.assertTrue('generator already executing' in str(exc))
 
     def test2_exception_usercode_process(self):
+        sim = DSSimulation()
         self.process1 = DSProcess(self.__first_cyclic(), name="First cyclic", sim=self.sim)
         self.process2 = DSProcess(self.__second_cyclic(), name="Second cyclic", sim=self.sim)
         sim._kick(self.process1)
@@ -269,7 +272,7 @@ class TestConditionChecking(unittest.TestCase):
 
         sim = DSSimulation()
         sim._wait_for_event = my_process
-        process = DSProcess(self.__my_process())
+        process = DSProcess(self.__my_process(), sim=sim)
         sim.parent_process = process
         try:
             retval = next(sim.wait(cond='condition'))
@@ -383,7 +386,7 @@ class TestConditionChecking(unittest.TestCase):
         retval = self.sim.signal(p)
         self.assertTrue(retval == 3)
 
-        p = DSProcess(my_process())
+        p = DSProcess(my_process(), sim=self.sim)
         retval = self.sim._kick(p)
         # self.assertTrue(retval == 1)  # kick does not return value
         retval = self.sim.signal(p)
@@ -401,7 +404,7 @@ class TestConditionChecking(unittest.TestCase):
         retval = self.sim.signal(p)
         self.assertTrue(retval == 3)
 
-        p = DSProcess(my_process())
+        p = DSProcess(my_process(), sim=self.sim)
         p = self.sim.schedule(0, p)
         # kick does not return value
         retval = self.sim.signal(p)
@@ -418,7 +421,8 @@ class TestSubscriberContext(unittest.TestCase):
         yield 1
 
     def test0_init_add_remove(self):
-        p = DSProcess(self.__process())
+        sim = DSSimulation()
+        p = DSProcess(self.__process(), sim=sim)
         cm = DSSubscriberContextManager(p, 'pre', ('a', 'b', 'c'))
         self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (3, 0, 0))
         cm = DSSubscriberContextManager(p, 'act', ('a', 'b', 'c', 'd'))
@@ -433,7 +437,8 @@ class TestSubscriberContext(unittest.TestCase):
         self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (0, 4, 5))
 
     def test1_enter_exit(self):
-        p = DSProcess(self.__process())
+        sim = DSSimulation()
+        p = DSProcess(self.__process(), sim=sim)
         mock_a, mock_b, mock_c, mock_d, mock_e = (Mock(), Mock(), Mock(), Mock(), Mock())
         cm = DSSubscriberContextManager(p, 'pre', (mock_a, mock_c)) + DSSubscriberContextManager(p, 'post', (mock_b,)) + DSSubscriberContextManager(p, 'act', (mock_e,))
         cm.__enter__()
@@ -452,7 +457,7 @@ class TestSubscriberContext(unittest.TestCase):
 
     def test2_proxy_function(self):
         sim = DSSimulation()
-        sim.parent_process = DSProcess(self.__process())
+        sim.parent_process = DSProcess(self.__process(), sim=sim)
         cm = sim.observe_pre('a', 'b', 'c')
         self.assertTrue(type(cm) == DSSubscriberContextManager)
         self.assertTrue(cm.pre == {'a', 'b', 'c'})
@@ -529,7 +534,7 @@ class TestSim(unittest.TestCase):
     def test1_simple_event(self):
         ''' Assert kicking and pushing events '''
         self.sim = DSSimulation()
-        self.assertIsNotNone(sim.time_process)
+        self.assertIsNotNone(self.sim.time_process)
         self.sim.time_process = self.__my_time_process()
         self.sim._kick(self.sim.time_process)  # kick on the time process
         self.__time_process_event.assert_called_once_with('kick-on')
@@ -692,7 +697,7 @@ class TestSim(unittest.TestCase):
             yield  # wait here with no interaction to the time_queue
 
         sim = DSSimulation()
-        process = DSProcess(my_process(sim))
+        process = DSProcess(my_process(sim), sim=sim)
         sim.parent_process = process
         sim.schedule_event(4, 'some_event', process=process)
         retval = process.send(None)  # go to the waiting
