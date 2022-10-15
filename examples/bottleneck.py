@@ -29,7 +29,7 @@ class MCU(DSComponent):
 
     def boot(self):
         ''' This function has to be called after producers are registered '''
-        self.sim.schedule(0, DSProcess(self.generator(average_rate=1.2), name=self.name+'.(internal) generator process', sim=self.sim))
+        DSProcess(self.generator(average_rate=1.2), name=self.name+'.(internal) generator process', sim=self.sim).schedule(0)
 
     def generator(self, average_rate):
         n = 0

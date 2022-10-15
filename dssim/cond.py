@@ -81,7 +81,7 @@ class DSFilter(DSCondition):
         if isinstance(self.cond, DSProcess):
             self.sim = self.cond.sim
             if not self.cond.started():
-                self.cond = self.sim.schedule(0, self.cond)  # start the process
+                self.cond = self.cond.schedule(0)  # start the process
             self.parent_process = self.sim.parent_process
             self.subscriber = DSCallback(self._process_finished, sim=self.sim)
             self.cond.finish_tx.add_subscriber(self.subscriber, 'pre')

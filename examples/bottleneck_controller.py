@@ -28,8 +28,8 @@ class MCU(DSComponent):
 
     def boot(self):
         ''' This function has to be called after producers are registered '''
-        self.sim.schedule(0, DSProcess(self.generator(20), name=self.name + '.(internal) generator process', sim=self.sim))
-        self.sim.schedule(0, DSProcess(self.limit_controller(), name=self.name + '.(internal) control process', sim=self.sim))
+        DSProcess(self.generator(20), name=self.name + '.(internal) generator process', sim=self.sim).schedule(0)
+        DSProcess(self.limit_controller(), name=self.name + '.(internal) control process', sim=self.sim).schedule(0)
 
     def limit_controller(self):
         self.limiter.set_throughput(10)  # 0 sec

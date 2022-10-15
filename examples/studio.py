@@ -20,11 +20,10 @@ class Studio(DSComponent):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Prepare moderator
-        moderator = self.moderator_process()
+        self.moderator = self.sim.schedule(0, self.moderator_process())
         # Prepare speakers to talk
         self.speakers = [self.speaker_process() for i in range(NUM_OF_SPEAKERS)]
         # Start the role of moderator
-        self.moderator = self.sim.schedule(0, moderator)
         self.stat = {'abort': 0, 'finish': 0}
 
     def speaker_process(self):

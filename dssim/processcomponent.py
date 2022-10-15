@@ -26,8 +26,9 @@ class DSProcessComponent(DSComponent):
         if name is None:
             name = type(self).__name__ + '.' + str(self._dscomponent_instances)
         super().__init__(self, name=name, *args, **kwargs)
-        kwargs.pop('name', None), kwargs.pop('sim', None) # remove the two arguments
-        retval = self.sim.schedule(0, DSProcess(self.process(*args, **kwargs), name=self.name+'.process', sim=self.sim))
+        kwargs.pop('name', None), kwargs.pop('sim', None)  # remove the two arguments
+        process = DSProcess(self.process(*args, **kwargs), name=self.name+'.process', sim=self.sim)
+        retval = process.schedule(0)
         self.scheduled_process = retval
         self.__class__._dscomponent_instances += 1
 

@@ -7,7 +7,7 @@ class School(DSComponent):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.tx = DSProducer(name=self.name+'.bell_tx', sim=self.sim)
-        self.sim.schedule(0, DSProcess(self.school_bell(), name=self.name+'.bell_process', sim=self.sim))
+        DSProcess(self.school_bell(), name=self.name+'.bell_process', sim=self.sim).schedule(0)
         self.days = 0
 
     def school_bell(self):
