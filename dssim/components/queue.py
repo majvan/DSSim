@@ -27,7 +27,7 @@ class Queue(DSComponent):
     def __init__(self, capacity=float('inf'), *args, **kwargs):
         ''' Init Queue component. No special arguments here. '''
         super().__init__(*args, **kwargs)
-        self.tx_queue_changed = DSProducer(name=self.name+'.tx', sim=self.sim)
+        self.tx_changed = DSProducer(name=self.name+'.tx', sim=self.sim)
         self.capacity = capacity
         self.queue = []
 
@@ -35,7 +35,7 @@ class Queue(DSComponent):
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         if len(self) + len(obj) <= self.capacity:
             self.queue += list(obj)
-            self.tx_queue_changed.schedule(0, info='queue changed')
+            self.tx_changed.schedule(0, info='queue changed')
             retval = obj
         else:
             retval = None
@@ -43,37 +43,40 @@ class Queue(DSComponent):
 
     def put(self, timeout=float('inf'), *obj):
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
-        with self.sim.consume(self.tx_queue_changed):
+        with self.sim.consume(self.tx_changed):
             retval = yield from self.sim.check_and_wait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)  # wait while first element does not match the cond
         if retval is not None:
             self.queue += list(obj)
-            self.tx_queue_changed.schedule(0, info='queue changed')
+            self.tx_changed.schedule(0, info='queue changed')
         return retval
 
-    def get_nowait(self, amount=1, cond=lambda c: True):
+    def get_nowait(self, amount=1, cond=lambda e: True):
         if len(self) >= amount and cond(self.queue[:amount]):
             retval = self.queue[:amount]
             self.queue = self.queue[amount + 1:]
-            self.tx_queue_changed.schedule(0, info='queue changed')
+            self.tx_changed.schedule(0, info='queue changed')
         else:
             retval = None
         return retval
 
-    def get(self, timeout=float('inf'), amount=1, cond=lambda c: True):
+    def get(self, timeout=float('inf'), amount=1, cond=lambda e: True):
         ''' Get an event from queue. If the queue is empty, wait for the closest event. '''
-        with self.sim.consume(self.tx_queue_changed):
+        with self.sim.consume(self.tx_changed):
             retval = yield from self.sim.check_and_wait(timeout, cond=lambda e:len(self) >= amount and cond(self.queue[0]))  # wait while first element does not match the cond
         if retval is not None:
             retval = self.queue[:amount]
             self.queue = self.queue[amount:]
-            self.tx_queue_changed.schedule(0, info='queue changed')
+            self.tx_changed.schedule(0, info='queue changed')
         return retval
 
     def pop(self, index=0, default=None):
         retval = None
         if len(self.queue) > index:
-            retval = self.queue.pop(index, default)
-            self.tx_queue_changed.schedule(0, info='queue changed')
+            try:
+                retval = self.queue.pop(index)
+                self.tx_changed.schedule(0, info='queue changed')
+            except IndexError as e:
+                retval = default
         return retval
 
     def remove(self, cond):
@@ -92,7 +95,7 @@ class Queue(DSComponent):
 
     def __setitem__(self, index, data):
         self.queue[index] = data
-        self.tx_queue_changed.schedule(0, info='queue changed')
+        self.tx_changed.schedule(0, info='queue changed')
 
     def __iter__(self):
         return iter(self.queue)

@@ -44,5 +44,5 @@ class Event(DSComponent):
             return True
         self.waiting_tasks.append(self.sim.parent_process)
         with self.sim.monitor(self._tx):
-            obj = yield from self.sim.wait(timeout, cond=lambda c:True)
+            obj = yield from self.sim.wait(timeout, cond=lambda e:True)
         return obj

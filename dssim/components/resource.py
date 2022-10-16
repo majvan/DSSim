@@ -21,17 +21,20 @@ from dssim.pubsub import DSProducer
 
 
 class Resource(DSComponent):
-    ''' The (FIFO) queue of events is a SW component which can dynamically
-    be used to put an event in and get (or wait for- if the queue is empty)
-    a queued event.
-    Queue does not use any routing of signals.
+    ''' The Resource models a container of virtual resource(s).
+    By virtual, it means that the components holds only the amount of the resources,
+    not individual objects. The amount can be divisable to any extent, it is represented
+    by float type.
     '''
     def __init__(self, amount=0, capacity=float('inf'), *args, **kwargs):
-        ''' Init Queue component. No special arguments here. '''
+        ''' Init Resource component.
+        Capacity is max. capacity the resource can handle.
+        Amount is initial amount of the resources.
+        '''
         super().__init__(*args, **kwargs)
         if amount > capacity:
             raise ValueError('Initial amount of the resource is greater than capacity.')
-        self.tx_resource_changed = DSProducer(name=self.name+'.tx', sim=self.sim)
+        self.tx_changed = DSProducer(name=self.name+'.tx', sim=self.sim)
         self.amount = amount
         self.capacity = capacity
 
@@ -40,29 +43,29 @@ class Resource(DSComponent):
             retval = None
         else:
             self.amount += amount
-            self.tx_resource_changed.schedule(0, info='resource changed')
+            self.tx_changed.schedule(0, info='resource changed')
         return amount
 
     def put(self, timeout=float('inf'), amount=1):
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
-        with self.sim.consume(self.tx_resource_changed):
+        with self.sim.consume(self.tx_changed):
             retval = yield from self.sim.check_and_wait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
         self.amount += amount
-        self.tx_resource_changed.schedule(0, info='resource changed')
+        self.tx_changed.schedule(0, info='resource changed')
 
     def get_nowait(self, amount=1):
         if amount > self.amount:
             retval = None
         else:
             self.amount -= amount
-            self.tx_resource_changed.schedule(0, info='resource changed')
+            self.tx_changed.schedule(0, info='resource changed')
         return amount
 
     def get(self, timeout=float('inf'), amount=1):
         ''' Get resource. If the resource has not enough amount, wait to have enough requested amount. '''
-        with self.sim.consume(self.tx_resource_changed):
+        with self.sim.consume(self.tx_changed):
             retval = yield from self.sim.check_and_wait(timeout, cond=lambda e:self.amount >= amount)
         if retval is not None:
             self.amount -= amount
-            self.tx_resource_changed.schedule(0, info='resource changed')
+            self.tx_changed.schedule(0, info='resource changed')
         return retval
