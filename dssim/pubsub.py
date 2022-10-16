@@ -193,6 +193,11 @@ class DSProducer(DSAbstractProducer):
             subs = self.subs[phase]
             subs.dec(subscriber, **kwargs)
 
+    def wait(self, timeout=float('inf'), cond=lambda e:True, val=True):
+        with self.sim.consume(self):
+            retval = yield from self.sim.wait(timeout, cond=cond, val=val)
+        return retval
+
     def signal(self, **event_data):
         ''' Send signal object to the subscribers '''
 
