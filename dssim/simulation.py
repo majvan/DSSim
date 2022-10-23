@@ -83,6 +83,9 @@ class DSSimulation:
     ''' The simulation is a which schedules the nearest (in time) events. '''
     sim_singleton = None
 
+    class _TestObject:
+        ''' An artificial object to be used for check_and_wait- see description of the method '''
+        pass
 
     def __init__(self, name='dssim', single_instance=True):
         ''' The simulation holds the list of producers which share the same time queue.
@@ -330,7 +333,7 @@ class DSSimulation:
         # invariant to the passed event, for instance to check for a state of an object
         # so if the state matches, it returns immediately
         # Otherwise it jumps to the waiting process.
-        _, event = self._check_cond(cond, object())
+        _, event = self._check_cond(cond, self._TestObject())
         if event:
             if hasattr(cond, 'cond_value'):
                 event = cond.cond_value(event)
