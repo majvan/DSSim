@@ -15,7 +15,7 @@ This is demo of the trigger/waitfor mechanism,
 just to allow one waiter to be honored.
 """
 from dssim.simulation import DSSimulation, DSAbsTime as _abs
-from dssim.components.state import State
+from dssim.pubsub import DSProducer
 from dssim.processcomponent import DSProcessComponent
 import random
 
@@ -35,24 +35,25 @@ class Prince(DSProcessComponent):
         if king is None:  # there is no king, so this prince will become king, immediately
             kings.append(("no king", lastkingdied, self.sim.time, self.sim.time - lastkingdied))
         else:
-            event = yield from king_died.wait(_abs(self.live_till), cond=lambda e: True)  # wait for any change of the state
-            if not event:  # timeout returns None event
-                print(self.sim.time, self, "dies before getting to the throne")
-                return
+            with self.sim.consume(king_died):  # with consume we manage that once we get notified, we consume event and noone else gets notified
+                event = yield from self.sim.wait(_abs(self.live_till), cond=lambda e:True)  # any message will interrupt, because only king died messages are sent here
+                if not event:  # timeout returns None event
+                    print(self.sim.time, self, "dies before getting to the throne")
+                    return
         king = self
         print(self.sim.time, self, "Vive le roi!")
         kings.append((self.name, self.sim.time, self.live_till, self.live_till - self.sim.time))
         yield from self.sim.wait(_abs(self.live_till))
         king, lastkingdied = None, self.sim.time
         print(self.sim.time, self, "Le roi est mort.")
-        king_died['msg'] = f'{self} king died'  # this will change state and trigger a waiter
+        king_died.signal(msg='king died')
 
 
 sim = DSSimulation()
 king = None
 lastkingdied = sim.time
 kings = []
-king_died = State(name="king died")  # we do not need State for this, all we need is simple notification routing
+king_died = DSProducer(name='king died')  # we do not need State for this, all we need is simple notification routing
 PrinceGenerator()
 
 sim.run(5000)
