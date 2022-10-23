@@ -485,12 +485,10 @@ class TestSim(unittest.TestCase):
         while True:
             event = yield
             if isinstance(event, DSAbortException):
-                self.__time_process_event(self.sim.time_queue.time, abort=True, **event.info)
+                self.__time_process_event(self.sim.time, abort=True, **event.info)
                 break
             else:
-                # note: we cannot use self.sim.time because we are not running simulation
-                # so self.sim.time is always 0
-                self.__time_process_event(self.sim.time_queue.time, **event)
+                self.__time_process_event(self.sim.time, **event)
 
     def __my_wait_process(self):
         try:
@@ -603,17 +601,18 @@ class TestSim(unittest.TestCase):
             # missing producer
             self.sim.schedule_event(1, {'data': 1}, self.sim.time_process)
 
+        self.assertEqual(self.sim.time, 0.5)
         self.sim.schedule_event(2, {'producer': parent_process, 'data': 1}, self.sim.time_process)
         time, (process, event_obj) = self.sim.time_queue.pop()
-        self.assertEqual((time, process), (2, self.sim.time_process))
+        self.assertEqual((time, process), (2.5, self.sim.time_process))
         self.assertEqual(event_obj, {'producer': parent_process, 'data': 1})
-        #self.sim.run(2.5)
+        self.sim.run(2.5)
         retval = self.sim.signal_object(event_obj['producer'], event_obj)
-        self.__time_process_event.assert_called_once_with(2, producer=event_obj['producer'], data=1)
+        self.__time_process_event.assert_called_once_with(2.5, producer=event_obj['producer'], data=1)
         self.__time_process_event.reset_mock()
 
         retval = self.sim.abort(parent_process, testing=-1)
-        self.__time_process_event.assert_called_once_with(2, abort=True, testing=-1)
+        self.__time_process_event.assert_called_once_with(2.5, abort=True, testing=-1)
         self.__time_process_event.reset_mock()
 
     def test6_scheduling(self):

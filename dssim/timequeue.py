@@ -27,11 +27,10 @@ class TimeQueue:
     def __init__(self):
         self.timequeue = []
         self.elementqueue = []
-        self.time = 0
 
-    def add_element(self, time_delta, element):
+    def add_element(self, time, element):
         ''' Add an element to the queue at a time_delta from current time. '''
-        time = self.time + time_delta
+        time = time
         i = bisect_right(self.timequeue, time)
         self.timequeue.insert(i, time)
         self.elementqueue.insert(i, element)
@@ -48,7 +47,6 @@ class TimeQueue:
     def pop(self):
         ''' Pop the first element from the queue and return it to the caller. '''
         time, element = self.timequeue.pop(0), self.elementqueue.pop(0)
-        self.time = time
         return time, element
 
     def delete(self, cond):

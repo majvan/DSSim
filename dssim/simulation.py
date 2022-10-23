@@ -41,6 +41,11 @@ class DSCondition:
         pass
 
 
+class DSAbsTime:
+    def __init__(self, value):
+        self.value = value
+
+
 class DSSubscriberContextManager:
     def __init__(self, process, queue_id, components, **kwargs):
         self.process = process
@@ -147,9 +152,14 @@ class DSSimulation:
 
     def schedule_event(self, time, event, process=None):
         ''' Schedules an event object into timequeue '''
-        if time < 0:
+        if isinstance(time, DSAbsTime):
+            time = time.value
+            if time < self.time:
+                raise ValueError('The time is absolute and cannot be lower than now')
+        elif time < 0:
             raise ValueError('The time is relative from now and cannot be negative')
-        # producer = event['producer']  # Encapsulation of real producer done in the producer.
+        else:
+            time += self.time
         if (process == self.time_process) and 'producer' not in event:
             raise ValueError('The event, if processed by time_process, is missing '
                              'encapsulation of producer. '
@@ -166,8 +176,14 @@ class DSSimulation:
         ''' Schedules a None object. The None object is recognized as a timeout in the
         wait() method.
         '''
-        if time < 0:
+        if isinstance(time, DSAbsTime):
+            time = time.value
+            if time < self.time:
+                raise ValueError('The time is absolute and cannot be lower than now')
+        elif time < 0:
             raise ValueError('The time is relative from now and cannot be negative')
+        else:
+            time += self.time
         self.time_queue.add_element(time, (schedulable, None))
 
     def schedule(self, time, schedulable):
