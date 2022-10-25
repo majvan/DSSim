@@ -150,8 +150,8 @@ class DSSimulation:
             retval = retval or self.create_metadata(process)
         return retval
 
-    def schedule_event(self, time, event, process=None):
-        ''' Schedules an event object into timequeue '''
+    def _compute_time(self, time):
+        ''' Recomputes a rel/abs time to absolute time value '''
         if isinstance(time, DSAbsTime):
             time = time.value
             if time < self.time:
@@ -160,6 +160,11 @@ class DSSimulation:
             raise ValueError('The time is relative from now and cannot be negative')
         else:
             time += self.time
+        return time
+
+    def schedule_event(self, time, event, process=None):
+        ''' Schedules an event object into timequeue. '''
+        time = self._compute_time(time)
         if (process == self.time_process) and 'producer' not in event:
             raise ValueError('The event, if processed by time_process, is missing '
                              'encapsulation of producer. '
@@ -171,20 +176,6 @@ class DSSimulation:
     def delete(self, cond):
         ''' An interface method to delete events on the queue '''
         self.time_queue.delete(cond)
-
-    def schedule_timeout(self, time, schedulable):
-        ''' Schedules a None object. The None object is recognized as a timeout in the
-        wait() method.
-        '''
-        if isinstance(time, DSAbsTime):
-            time = time.value
-            if time < self.time:
-                raise ValueError('The time is absolute and cannot be lower than now')
-        elif time < 0:
-            raise ValueError('The time is relative from now and cannot be negative')
-        else:
-            time += self.time
-        self.time_queue.add_element(time, (schedulable, None))
 
     def schedule(self, time, schedulable):
         ''' Schedules the start of a (new) process. '''
@@ -326,8 +317,11 @@ class DSSimulation:
         # another timeout for this process.
         schedulable = self.parent_process
     
-        # Put myself (my process) on the queue. Next line may be skipped if timeout is inf.
-        self.schedule_timeout(timeout, schedulable)
+        # Re-compute abs/relative time to abs for the timeout
+        time = self._compute_time(timeout)
+        # Schedule the timeout to the time queue. The condition is only for higher performance
+        if time != float('inf'):
+            self.time_queue.add_element(time, (schedulable, None))
 
         metaobj = self.get_process_metadata(schedulable)
         # Get the condition object (lambda / object / ...) from the process metadata
@@ -335,8 +329,8 @@ class DSSimulation:
 
         event = yield from self._wait_for_event(val)
 
-        if event is not None:
-            # If we terminated before timeout, then the timeout event is on time queue- remove it
+        if event is not None and time != float('inf'):
+            # If we terminated before timeout and the timeout event is on time queue- remove it
             self.delete(lambda e: e == (schedulable, None))
         if hasattr(cond, 'cond_value'):
             event = cond.cond_value(event)

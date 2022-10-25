@@ -721,6 +721,10 @@ class TestSim(unittest.TestCase):
             call(2, None),  # timeout logged
         ]
         self.__time_process_event.assert_has_calls(calls)
+        self.assertEqual(len(self.sim.time_queue), 0)  # there is no event left from process
+        self.sim.schedule_event(float('inf'), {'producer': producer, 'data': 2})
+        num_events = self.sim.run(2.5)
+        self.__time_process_event.assert_has_calls([])
         self.assertEqual(len(self.sim.time_queue), 1)  # there are still timeout event left from process
         self.sim.abort(process, testing=-1),  # abort after time
         self.assertEqual(len(self.sim.time_queue), 0)  # test is the timeout event was removed after abort
