@@ -82,10 +82,13 @@ class Queue(DSComponent):
     def remove(self, cond):
         ''' Removes event(s) from queue '''
         # Get list of elements to be removed
-        if len(self.queue) > 0:
+        length = len(self.queue)
+        if length > 0:
             # Remove all others except the first one
             self.queue = [e for e in self.queue if not ((callable(cond) and cond(e) or (cond == e)))]
             # now find what we may emit: "queue changed"
+            if length != len(self.queue):
+                self.tx_changed.schedule(0, info='queue changed')
 
     def __len__(self):
         return len(self.queue)
