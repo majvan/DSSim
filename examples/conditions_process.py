@@ -3,7 +3,7 @@ from dssim.cond import DSFilter as _f
 
 @DSSchedulable
 def pusher(name, what_to_push):
-    sim.signal(what_to_push, info=f'signal from pusher {name}')
+    sim.signal(what_to_push,f'signal from pusher {name}')
 
 def process_with_no_external_events():
     yield from sim.wait(1)

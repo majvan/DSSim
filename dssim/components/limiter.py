@@ -38,7 +38,7 @@ class IntegralLimiter(DSComponent):
         )
         self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
 
-    def _on_event(self, producer, **event):
+    def _on_event(self, event):
         ''' Feed consumer handler '''
         self.buffer.append(event)
 
@@ -54,7 +54,7 @@ class IntegralLimiter(DSComponent):
             self.buffer = self.buffer[limited_num:]
             if not self.accumulated_report:
                 for event in events:
-                    self.tx.schedule(0, **event)
+                    self.tx.schedule(0, event)
             else:
                 self.tx.schedule(0, num=limited_num)
 
@@ -87,15 +87,15 @@ class Limiter(DSComponent):
         self._update_period = self._compute_period(throughput)
         if self.report_period == self._update_period:
             return
-        self.pusher.signal(period_update=True)
+        self.pusher.signal(True)
 
-    def _on_event(self, producer=None, **event):
+    def _on_event(self, event):
         ''' Feed consumer handler '''
         if self.buffer:
             self.buffer.append(event)
         else:
             self.buffer.append(event)
-            self.pusher.signal(event_arrived=True)
+            self.pusher.signal(True)
 
     def _push(self):
         ''' Push another event after computed throughtput time '''
@@ -110,7 +110,7 @@ class Limiter(DSComponent):
             while len(self.buffer) > 0:
                 if self.sim.time >= next_time:
                     event = self.buffer.pop(0)
-                    self.tx.schedule(0, **event)
+                    self.tx.schedule(0, event)
                     previous_time = self.sim.time
                     next_time = previous_time + self.report_period
                 wait_next = next_time - self.sim.time

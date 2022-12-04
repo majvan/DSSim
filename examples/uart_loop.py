@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.simulation import DSComponent, DSCallback, DSSimulation
+from dssim.simulation import DSComponent, DSKWCallback, DSSimulation
 from dssim.components.uart import UARTLink, UARTPhys
 
 
@@ -26,7 +26,7 @@ class MCU(DSComponent):
 
     def boot(self):
         # Register ISRs
-        self.uart0.rx_irq.add_subscriber(DSCallback(self.rx_isr, name=self.name + '.isr', sim=self.sim))
+        self.uart0.rx_irq.add_subscriber(DSKWCallback(self.rx_isr, name=self.name + '.isr', sim=self.sim))
 
     def rx_isr(self, flag, **other):
         if flag == 'byte':

@@ -16,7 +16,7 @@ UART components- physical layer nad link layer.
 Link layer components can (but not necessarily has to) use physical layer
 '''
 import random as _rand
-from dssim.simulation import DSSchedulable, DSComponent, DSCallback, DSProcess
+from dssim.simulation import DSSchedulable, DSComponent, DSKWCallback, DSProcess
 from dssim.pubsub import DSProducer
 from dssim.utils import ParityComputer, ByteAssembler
 
@@ -42,7 +42,7 @@ class UARTNoisyLine(DSComponent):
         self.probability_level = int(bit_error_probability * self.resolution)
         # The random module is required when using this component
         self._rand = _rand
-        self.rx = DSCallback(
+        self.rx = DSKWCallback(
             self._on_rx_event,
             name=self.name + '.rx',
             sim=self.sim,
@@ -95,7 +95,7 @@ class UARTNoisyLine(DSComponent):
                 data['byte'] = chr(ord(data['byte']) ^ flip_bits)
             else:
                 data['byte'] ^= flip_bits
-        self.tx.signal(**data)
+        self.tx.signal_kw(**data)
 
 
 class UARTPhysBase(DSComponent):
@@ -171,7 +171,7 @@ class UARTPhysBase(DSComponent):
         # And if possible, inform link layer to push data again
         if free_slot:
             # Inform top layer about free slot in tx_buffer
-            self.tx_link.signal(producer=self.tx_link, flag='byte')
+            self.tx_link.signal_kw(producer=self.tx_link, flag='byte')
 
 
 class UARTPhys(UARTPhysBase):
@@ -216,7 +216,7 @@ class UARTPhys(UARTPhysBase):
 
     def __add_rx_pubsub(self):
         # Create new interface for RX
-        self.rx = DSCallback(
+        self.rx = DSKWCallback(
             self._on_rx_line_state,
             name=self.name + '.rx',
             sim=self.sim,
@@ -249,33 +249,33 @@ class UARTPhys(UARTPhysBase):
     def _set_tx_line_state(self, state):
         if self.tx_line_state != state:
             self.tx_line_state = state
-            self.tx.signal(line=state)
+            self.tx.signal_kw(producer=self.tx, line=state)
 
-    def _on_rx_line_state(self, line, **others):
+    def _on_rx_line_state(self, line, producer=None, **others):
         self.rx_line_state = line
         # the sampler also requires in some cases async information about line change
         # notify only the _rx_sampler; possible only when this method is run
         # within other process than _rx_sampler
-        self._rx_sampler.signal(line=line)
+        self._rx_sampler.signal_kw(producer=producer, line=line)
 
     def _send_bits(self, bits, parity_bit=None):
         # schedule set of next events
         time = 0
         line = 0
-        self.tx.schedule(time, line=0)
+        self.tx.schedule_kw(time, producer=self.tx, line=0)
         time += self.startbit * self.bittime
         for bit in bits:
             if bit != line:
                 line = bit
-                self.tx.schedule(time, line=line)
+                self.tx.schedule_kw(time, producer=self.tx, line=line)
             time += self.bittime
         if parity_bit is not None:
             if parity_bit != line:
                 line = parity_bit
-                self.tx.schedule(time, line=line)
+                self.tx.schedule_kw(time, producer=self.tx, line=line)
             time += self.bittime
         if line != 1:
-            self.tx.schedule(time, line=1)
+            self.tx.schedule_kw(time, producer=self.tx, line=1)
         yield from self.sim.wait(self.bytetime)
         self.stat['tx_counter'] += 1  # TX bytes counter
         self._send_next()
@@ -318,7 +318,7 @@ class UARTPhys(UARTPhysBase):
                 continue
             self.stat['rx_counter'] += 1  # RX bytes counter
             rx_byte = ByteAssembler(rx_bits).get(lsb=True)
-            self.rx_link.signal(producer=self.rx,  # fake the producer
+            self.rx_link.signal_kw(producer=self.rx,  # fake the producer
                                 byte=rx_byte,
                                 parity=rx_parity_bit,
                                 )
@@ -354,7 +354,7 @@ class UARTPhysBasic(UARTPhysBase):
         self.stat['err_overrun'] = 0  # RX overruns counter (app to slow to recv)
 
     def __add_tx_pubsub(self):
-        consumer = DSCallback(self._on_tx_byte_event,
+        consumer = DSKWCallback(self._on_tx_byte_event,
                               name=self.name + '.(internal) tx fb',
                               sim=self.sim
                               )
@@ -362,21 +362,21 @@ class UARTPhysBasic(UARTPhysBase):
 
     def __add_rx_pubsub(self):
         # Create new interface for RX
-        self.rx = DSCallback(self._on_rx_byte_event,
+        self.rx = DSKWCallback(self._on_rx_byte_event,
                              name=self.name + '.rx',
                              sim=self.sim
                              )
 
     def _send_now(self, byte, parity, *other):
-        self.tx.schedule(self.bytetime, byte=byte, parity=parity)
+        self.tx.schedule_kw(self.bytetime, producer=self.tx, byte=byte, parity=parity)
 
-    def _on_tx_byte_event(self, producer, byte, parity, **event_data):
+    def _on_tx_byte_event(self, byte, parity, producer=None, **event_data):
         self.stat['tx_counter'] += 1
         self._send_next()
 
-    def _on_rx_byte_event(self, producer, byte, parity, **event_data):
+    def _on_rx_byte_event(self, byte, parity, producer=None, **event_data):
         self.stat['rx_counter'] += 1
-        self.rx_link.signal(producer=self.rx_link, byte=byte, parity=parity)
+        self.rx_link.signal_kw(producer=self.rx_link, byte=byte, parity=parity)
 
 
 class UARTLink(DSComponent):
@@ -456,7 +456,7 @@ class UARTLink(DSComponent):
     def __add_tx_pubsub(self):
         self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
         self.tx_irq = DSProducer(name=self.name + '.tx_irq', sim=self.sim)
-        consumer = DSCallback(self._on_tx_event,
+        consumer = DSKWCallback(self._on_tx_event,
                               name=self.name + '.(internal) tx_fb',
                               sim=self.sim
                               )
@@ -466,7 +466,7 @@ class UARTLink(DSComponent):
             self.tx.add_subscriber(consumer)
 
     def __add_rx_pubsub(self):
-        self.rx = DSCallback(self._on_rx_event, name=self.name + '.rx', sim=self.sim)
+        self.rx = DSKWCallback(self._on_rx_event, name=self.name + '.rx', sim=self.sim)
         self.rx_irq = DSProducer(name=self.name + '.rx_irq', sim=self.sim)
         if self.phys:
             self.phys.rx_link.add_subscriber(self.rx)
@@ -534,7 +534,7 @@ class UARTLink(DSComponent):
             if self.transmitting:
                 num = 0
             else:
-                self.tx.schedule(self.bytetime, byte=byte, parity=parity)
+                self.tx.schedule_kw(self.bytetime, producer=self.tx, byte=byte, parity=parity)
                 self.transmitting = True
                 num = 1
         else:
@@ -557,16 +557,16 @@ class UARTLink(DSComponent):
             if len(self.tx_buffer) == self.tx_buffer_watermark:
                 send_watermark = True
         if send_watermark:
-            self.tx_irq.signal(producer=producer, flag='byte', flag_detail='sent')
+            self.tx_irq.signal_kw(producer=producer, flag='byte', flag_detail='sent')
         return False  # allow others to receive TX signal
 
-    def _on_rx_event(self, producer, byte, parity, **other):
+    def _on_rx_event(self, byte, parity, producer=None, **other):
         ''' Internal feedback after byte was received  '''
         # Remove previous flag and possible missing parity
         parity_bit = self._compute_parity(byte)
         if parity != parity_bit:
             self.stat['err_parity'] += 1
-            self.rx_irq.signal(
+            self.rx_irq.signal_kw(
                 producer=producer,
                 flag='err',
                 flag_detail='parity',
@@ -575,9 +575,9 @@ class UARTLink(DSComponent):
             )
         elif len(self.rx_buffer) >= self.rx_buffer_size:
             self.stat['err_overrun'] += 1
-            self.rx_irq.signal(producer=producer, flag='err', flag_detail='overrun')
+            self.rx_irq.signal_kw(producer=producer, flag='err', flag_detail='overrun')
         else:
             self.rx_buffer.append(byte)
             self.stat['rx_counter'] += 1
             if len(self.rx_buffer) == self.rx_buffer_watermark:
-                self.rx_irq.signal(producer=producer, flag='byte', flag_detail='received')
+                self.rx_irq.signal_kw(producer=producer, flag='byte', flag_detail='received')

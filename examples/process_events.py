@@ -44,7 +44,7 @@ class MyComponent(DSComponent):
         ''' Attacker provides random numbers to try to break the locker machine '''
         while True:
             code = randint(0, 100)
-            self.sm.signal(code=code)
+            self.sm.signal(code)
             self.stat['tries'] += 1
             # 2 ms to generate the code, send it and check the status of unlock
             yield from self.sim.wait(0.002)
@@ -52,7 +52,7 @@ class MyComponent(DSComponent):
     def attacker2(self):
         ''' Attacker tries to guess that the code once becomes 1-1-1-1 '''
         while True:
-            self.sm.signal(code=1)
+            self.sm.signal(1)
             self.stat['tries'] += 1
             # 500 us to generate the code, send it and check the status of unlock
             yield from self.sim.wait(0.0005)
@@ -61,17 +61,17 @@ class MyComponent(DSComponent):
         while True:
             lock_code = [randint(0, 100), randint(0, 100), randint(0, 100), randint(0, 100)]
             while True:
-                rv = yield from self.sim.wait(0.01, cond=lambda e: e['code'] == lock_code[0])
-                if not rv:
+                rv = yield from self.sim.wait(0.01, cond=lambda e: e == lock_code[0])
+                if rv is None:
                     break
-                rv = yield from self.sim.wait(0.01, cond=lambda e: e['code'] == lock_code[1])
-                if not rv:
+                rv = yield from self.sim.wait(0.01, cond=lambda e: e == lock_code[1])
+                if rv is None:
                     break
-                rv = yield from self.sim.wait(0.01, cond=lambda e: e['code'] == lock_code[2])
-                if not rv:
+                rv = yield from self.sim.wait(0.01, cond=lambda e: e == lock_code[2])
+                if rv is None:
                     break
-                rv = yield from self.sim.wait(0.01, cond=lambda e: e['code'] == lock_code[3])
-                if not rv:
+                rv = yield from self.sim.wait(0.01, cond=lambda e: e == lock_code[3])
+                if rv is None:
                     break
                 self.stat['success'] += 1
             # Locker closed, the number was not guessed

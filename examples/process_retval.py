@@ -27,31 +27,31 @@ class Switch(DSComponent):
     def feeder(self):
         yield from self.sim.wait(3)
         print(f'Feeder feeding with char a')
-        self.producer.signal(char='a')
+        self.producer.signal('a')
         assert self.counter == 3
         yield from self.sim.wait(1)
         print(f'Feeder feeding with char b')
-        self.producer.signal(char='b')
+        self.producer.signal('b')
         assert self.counter == 4
         yield from self.sim.wait(1)
         print(f'Feeder feeding with char c')
-        self.producer.signal(char='c')
+        self.producer.signal('c')
         assert self.counter == 6
         yield from self.sim.wait(1)
         print(f'Feeder feeding with char d')
-        self.producer.signal(char='d')
+        self.producer.signal('d')
         assert self.counter == 7
         yield from self.sim.wait(1)
         print(f'Feeder feeding with char d')
-        self.producer.signal(char='d')
+        self.producer.signal('d')
         assert self.counter == 8
         yield from self.sim.wait(1)
         print(f'Feeder feeding with char e')
-        self.producer.signal(char='e')
+        self.producer.signal('e')
         assert self.counter == 9
         yield from self.sim.wait(1)
         print(f'Feeder feeding with char f')
-        self.producer.signal(char='f')
+        self.producer.signal('f')
         assert self.counter == 9
 
     def process(self, nr):

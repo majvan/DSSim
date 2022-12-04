@@ -39,10 +39,10 @@ class TestCallback(unittest.TestCase):
         my_consumer_fcn = Mock()
         c = DSCallback(my_consumer_fcn, sim=object())
         c.send({'data': 1})
-        my_consumer_fcn.assert_called_once_with(data=1)
+        my_consumer_fcn.assert_called_once_with({'data': 1})
         my_consumer_fcn.reset_mock()
         c.send({'data': 0})
-        my_consumer_fcn.assert_called_once_with(data=0)
+        my_consumer_fcn.assert_called_once_with({'data': 0})
         my_consumer_fcn.reset_mock()
 
     def test1_consumer(self):
@@ -53,17 +53,17 @@ class TestCallback(unittest.TestCase):
         obj = ObjWithCallback()
         c = DSCallback(obj.cb, sim=object())
         c.send({'data': 1})
-        self.assertEqual(obj.args, ())
-        self.assertEqual(obj.kwargs, {'data': 1})
+        self.assertEqual(obj.args, ({'data': 1},))
+        self.assertEqual(obj.kwargs, {})
         c.send({'data': 0})
-        self.assertEqual(obj.args, ())
-        self.assertEqual(obj.kwargs, {'data': 0})
+        self.assertEqual(obj.args, ({'data': 0},))
+        self.assertEqual(obj.kwargs, {})
 
     def test2_consumer_with_filter(self):
         my_consumer_fcn = Mock()
         c = DSCallback(my_consumer_fcn, cond=lambda e:e['data'] > 0, sim=object())
         c.send({'data': 1})
-        my_consumer_fcn.assert_called_once_with(data=1)
+        my_consumer_fcn.assert_called_once_with({'data': 1})
         my_consumer_fcn.reset_mock()
         c.send({'data': 0})
         my_consumer_fcn.send.assert_not_called()
@@ -141,7 +141,7 @@ class TestProducer(unittest.TestCase):
         self.assertEqual(p.subs['pre'].d, {})
         self.assertEqual(p.subs['act'].d, {c0: 0})
         self.assertEqual(p.subs['post'].d, {})
-        p.signal()
+        p.signal(None)
         self.assertEqual(p.subs['pre'].d, {})
         self.assertEqual(p.subs['act'].d, {})
         self.assertEqual(p.subs['post'].d, {})
@@ -153,7 +153,7 @@ class TestProducer(unittest.TestCase):
         self.assertEqual(p.subs['pre'].d, {})
         self.assertEqual(p.subs['act'].d, {c0: 0, c1:1})
         self.assertEqual(p.subs['post'].d, {})
-        p.signal()
+        p.signal(None)
         self.assertEqual(p.subs['pre'].d, {})
         self.assertEqual(p.subs['act'].d, {c1: 1})
         self.assertEqual(p.subs['post'].d, {})
@@ -165,7 +165,7 @@ class TestProducer(unittest.TestCase):
         self.assertEqual(p.subs['pre'].d, {c0: 1, c1: 1})
         self.assertEqual(p.subs['act'].d, {c0: 0, c1: 1})
         self.assertEqual(p.subs['post'].d, {})
-        p.signal()
+        p.signal(None)
         self.assertEqual(p.subs['pre'].d, {c0: 1, c1: 1})
         self.assertEqual(p.subs['act'].d, {c1: 1})
         self.assertEqual(p.subs['post'].d, {})
@@ -173,7 +173,7 @@ class TestProducer(unittest.TestCase):
         self.assertEqual(p.subs['pre'].d, {c0: 1, c1: 0})
         self.assertEqual(p.subs['act'].d, {c1: 1})
         self.assertEqual(p.subs['post'].d, {})
-        p.signal()
+        p.signal(None)
         self.assertEqual(p.subs['pre'].d, {c0: 1})
         self.assertEqual(p.subs['act'].d, {c1: 1})
         self.assertEqual(p.subs['post'].d, {})
@@ -198,16 +198,16 @@ class TestProducer(unittest.TestCase):
         c1 = DSCallback(None, sim=self.sim)
         p.add_subscriber(c0)
         p.add_subscriber(c1)
-        p.signal(e=1)
-        self.sim.signal.assert_has_calls([call(c0, e=1), call(c1, e=1)])
+        p.signal(1)
+        self.sim.signal.assert_has_calls([call(c0, 1), call(c1, 1)])
         notify_fcn = Mock(return_value=True)       
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(notify_fcn, sim=self.sim)
         c1 = DSCallback(notify_fcn, sim=self.sim)
         p.add_subscriber(c0)
         p.add_subscriber(c1)
-        p.signal(e=2)
-        self.sim.signal.assert_has_calls([call(c0, e=2),])
+        p.signal(2)
+        self.sim.signal.assert_has_calls([call(c0, 2),])
 
     def test3_producer_signal_act(self):
         self.sim.signal = Mock(return_value=True)
@@ -216,13 +216,13 @@ class TestProducer(unittest.TestCase):
         c1 = DSCallback(None, sim=self.sim)
         p.add_subscriber(c0)
         p.add_subscriber(c1)
-        p.signal(e=1)
-        self.sim.signal.assert_called_once_with(c0, e=1)
+        p.signal(1)
+        self.sim.signal.assert_called_once_with(c0, 1)
 
         self.sim.signal.reset_mock()
         p.add_subscriber(subscriber=c0)  # 2 times a subscriber
-        p.signal(e=2)
-        self.sim.signal.assert_called_once_with(c0, e=2)
+        p.signal(2)
+        self.sim.signal.assert_called_once_with(c0, 2)
 
     def test4_producer_signal_pre(self):
         self.sim.signal = Mock(return_value=True)
@@ -231,13 +231,13 @@ class TestProducer(unittest.TestCase):
         c1 = DSCallback(None, sim=self.sim)
         p.add_subscriber(c0, phase='pre')
         p.add_subscriber(c1, phase='pre')
-        p.signal(e=1)
-        self.sim.signal.assert_has_calls([call(c0, e=1), call(c1, e=1)])
+        p.signal(1)
+        self.sim.signal.assert_has_calls([call(c0, 1), call(c1, 1)])
 
         self.sim.signal.reset_mock()
         p.add_subscriber(c0, phase='pre')  # 2 times a subscriber
-        p.signal(e=2)
-        self.sim.signal.assert_has_calls([call(c0, e=2), call(c1, e=2)])
+        p.signal(2)
+        self.sim.signal.assert_has_calls([call(c0, 2), call(c1, 2)])
 
     def test5_producer_signal_post(self):
         self.sim.signal = Mock(return_value=True)
@@ -246,13 +246,13 @@ class TestProducer(unittest.TestCase):
         c1 = DSCallback(None, sim=self.sim)
         p.add_subscriber(c0, phase='post')
         p.add_subscriber(c1, phase='post')
-        p.signal(e=1)
-        self.sim.signal.assert_has_calls([call(c0, e=1), call(c1, e=1)])
+        p.signal(1)
+        self.sim.signal.assert_has_calls([call(c0, 1), call(c1, 1)])
 
         self.sim.signal.reset_mock()
         p.add_subscriber(c0, phase='post')  # 2 times a subscriber
-        p.signal(e=2)
-        self.sim.signal.assert_has_calls([call(c0, e=2), call(c1, e=2)])
+        p.signal(2)
+        self.sim.signal.assert_has_calls([call(c0, 2), call(c1, 2)])
 
 
     def test6_producer_signal_same(self):
@@ -276,12 +276,12 @@ class TestProducer(unittest.TestCase):
             else:
                 p.add_subscriber(phase=phase, subscriber=c1)
                 p.add_subscriber(phase=phase, subscriber=c0)
-            p.signal()
+            p.signal(None)
             calls = []
             if c0_called:
-                calls.append(call(c0))
+                calls.append(call(c0, None))
             if c1_called:
-                calls.append(call(c1))
+                calls.append(call(c1, None))
             self.sim.signal.assert_has_calls(calls, any_order=True)
 
 
@@ -303,12 +303,12 @@ class TestProducer(unittest.TestCase):
             p = DSProducer(sim=self.sim)
             p.add_subscriber(phase=c0_phase, subscriber=c0)
             p.add_subscriber(phase=c1_phase, subscriber=c1)
-            p.signal()
+            p.signal(None)
             calls = []
             if c0_called:
-                calls.append(call(c0))
+                calls.append(call(c0, None))
             if c1_called:
-                calls.append(call(c1))
+                calls.append(call(c1, None))
             self.sim.signal.assert_has_calls(calls, any_order=True)
 
 
@@ -317,13 +317,13 @@ class TestProducer(unittest.TestCase):
         self.sim = DSSimulation()
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(Mock(return_value=False), sim=self.sim)
-        c1 = DSCallback(lambda: p.add_subscriber(subscriber=c0), sim=self.sim)
+        c1 = DSCallback(lambda e: p.add_subscriber(subscriber=c0), sim=self.sim)
         p.add_subscriber(subscriber=c1)
         p.add_subscriber(subscriber=c0)
         self.assertEqual(p.subs['pre'].d, {})
         self.assertEqual(p.subs['act'].d, {c0: 1, c1: 1})
         self.assertEqual(p.subs['post'].d, {})
-        p.signal()
+        p.signal(None)
         c0.forward_method.assert_called_once()
         self.assertEqual(p.subs['pre'].d, {})
         self.assertEqual(p.subs['act'].d, {c0: 2, c1: 1})
@@ -335,13 +335,13 @@ class TestProducer(unittest.TestCase):
         self.sim = DSSimulation()
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(Mock(return_value=False), sim=self.sim)
-        c1 = DSCallback(lambda: p.remove_subscriber(subscriber=c1), sim=self.sim)
+        c1 = DSCallback(lambda e: p.remove_subscriber(subscriber=c1), sim=self.sim)
         p.add_subscriber(subscriber=c1)
         p.add_subscriber(subscriber=c0)
         self.assertEqual(p.subs['pre'].d, {})
         self.assertEqual(p.subs['act'].d, {c0: 1, c1: 1})
         self.assertEqual(p.subs['post'].d, {})
-        p.signal()
+        p.signal(None)
         c0.forward_method.assert_called_once()
         self.assertEqual(p.subs['pre'].d, {})
         self.assertEqual(p.subs['act'].d, {c0: 1})

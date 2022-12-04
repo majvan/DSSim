@@ -188,13 +188,13 @@ class TestException(unittest.TestCase):
 
     def __first_cyclic(self):
         yield 'Kick-on first'
-        self.sim.signal(self.process2, data='Signal from first process')
+        self.sim.signal(self.process2, 'Signal from first process')
         yield 'After signalling first'
         return 'Done first'
 
     def __second_cyclic(self):
         yield 'Kick-on second'
-        self.sim.signal(self.process1, data='Signal from second process')
+        self.sim.signal(self.process1, 'Signal from second process')
         yield 'After signalling second'
         return 'Done second'
 
@@ -207,7 +207,7 @@ class TestException(unittest.TestCase):
         self.sim._kick(process)
         exc_to_check = None
         try:
-            self.sim.signal(process, data='My data')
+            self.sim.signal(process, 'My data')
             # we should not get here, exception is expected
             self.assertTrue(1 == 2)
         except ZeroDivisionError as exc:
@@ -220,7 +220,7 @@ class TestException(unittest.TestCase):
         sim._kick(self.process1)
         sim._kick(self.process2)
         try:
-            self.sim.signal(self.process1, data='My data')
+            self.sim.signal(self.process1, 'My data')
             # we should not get here, exception is expected
             self.assertTrue(1 == 2)
         except ValueError as exc:
@@ -233,7 +233,7 @@ class TestException(unittest.TestCase):
         sim._kick(self.process1)
         sim._kick(self.process2)
         try:
-            self.sim.signal(self.process1, data='My data')
+            self.sim.signal(self.process1, 'My data')
             # we should not get here, exception is expected
             self.assertTrue(1 == 2)
         except ValueError as exc:
@@ -330,7 +330,7 @@ class TestConditionChecking(unittest.TestCase):
         sim.signal_object = Mock()
         # sim.check_condition.side_effect = lambda *a, **kw: call_order.append(call(*a, **kw))
         # sim.signal_object.side_effect = lambda *a, **kw: call_order.append(call(*a, **kw))
-        sim.signal('process1', obj=None)
+        sim.signal('process1', None)
         sim.check_condition.assert_called_once()
         sim.signal_object.assert_not_called()
 
@@ -343,10 +343,10 @@ class TestConditionChecking(unittest.TestCase):
         sim.signal_object = Mock(side_effect=lambda *a, **kw: add_to_call_order('signal_object', *a, **kw))
         # sim.check_condition.side_effect = 
         # sim.signal_object.side_effect = lambda *a, **kw: call_order.append(call(*a, **kw))
-        sim.signal('process2', obj=None)
+        sim.signal('process2', None)
         sim.check_condition.assert_called_once()
         sim.signal_object.assert_called_once()
-        self.assertEqual(call_order, [call('check_condition', 'process2', {'obj': None}), call('signal_object', 'process2', {'obj': None})])
+        self.assertEqual(call_order, [call('check_condition', 'process2', None), call('signal_object', 'process2', None)])
 
     def test5_check_and_wait(self):
         ''' Test check_and_wait function. First it should call check and if check does not pass, it should call wait '''
@@ -381,37 +381,37 @@ class TestConditionChecking(unittest.TestCase):
         p = my_process()
         retval = self.sim._kick(p)
         # self.assertTrue(retval == 1)  # kick does not return value
-        retval = self.sim.signal(p)
+        retval = self.sim.signal(p, None)
         self.assertTrue(retval == 2)
-        retval = self.sim.signal(p)
+        retval = self.sim.signal(p, None)
         self.assertTrue(retval == 3)
 
         p = DSProcess(my_process(), sim=self.sim)
         retval = self.sim._kick(p)
         # self.assertTrue(retval == 1)  # kick does not return value
-        retval = self.sim.signal(p)
+        retval = self.sim.signal(p, None)
         self.assertTrue(retval == 2)
-        retval = self.sim.signal(p)
+        retval = self.sim.signal(p, None)
         self.assertTrue(retval == 3)
 
         p = my_process()
         p = self.sim.schedule(0, p)
         # kick does not return value
-        retval = self.sim.signal(p)
+        retval = self.sim.signal(p, None)
         self.assertTrue(retval == 1)
-        retval = self.sim.signal(p)
+        retval = self.sim.signal(p, None)
         self.assertTrue(retval == 2)
-        retval = self.sim.signal(p)
+        retval = self.sim.signal(p, None)
         self.assertTrue(retval == 3)
 
         p = DSProcess(my_process(), sim=self.sim)
         p = self.sim.schedule(0, p)
         # kick does not return value
-        retval = self.sim.signal(p)
+        retval = self.sim.signal(p, None)
         self.assertTrue(retval == 1)
-        retval = self.sim.signal(p)
+        retval = self.sim.signal(p, None)
         self.assertTrue(retval == 2)
-        retval = self.sim.signal(p)
+        retval = self.sim.signal(p, None)
         self.assertTrue(retval == 3)
 
 
@@ -485,10 +485,10 @@ class TestSim(unittest.TestCase):
         while True:
             event = yield
             if isinstance(event, DSAbortException):
-                self.__time_process_event(self.sim.time, abort=True, **event.info)
+                self.__time_process_event(self.sim.time, {'abort': True, 'info': event.info})
                 break
             else:
-                self.__time_process_event(self.sim.time, **event)
+                self.__time_process_event(self.sim.time, event)
 
     def __my_wait_process(self):
         try:
@@ -537,8 +537,8 @@ class TestSim(unittest.TestCase):
         self.sim._kick(self.sim.time_process)  # kick on the time process
         self.__time_process_event.assert_called_once_with('kick-on')
         self.__time_process_event.reset_mock()
-        self.sim.signal(self.sim.time_process, data=1)
-        self.__time_process_event.assert_called_once_with(0, data=1)
+        self.sim.signal(self.sim.time_process, {'data': 1})
+        self.__time_process_event.assert_called_once_with(0, {'data': 1})
         self.__time_process_event.reset_mock()
 
     def test2_time_process(self):
@@ -547,8 +547,8 @@ class TestSim(unittest.TestCase):
         self.assertIsNotNone(sim.time_process)
         p = SomeObj()
         p.signal = Mock()
-        sim.signal(sim.time_process, producer=p, data=1)
-        p.signal.assert_called_once_with(producer=p, data=1)
+        sim.signal(sim.time_process, {'producer': p, 'object': 1})
+        p.signal.assert_called_once_with(1)
         p.signal.reset_mock()
 
     def test3_scheduling_events(self):
@@ -608,11 +608,11 @@ class TestSim(unittest.TestCase):
         self.assertEqual(event_obj, {'producer': parent_process, 'data': 1})
         self.sim.run(2.5)
         retval = self.sim.signal_object(event_obj['producer'], event_obj)
-        self.__time_process_event.assert_called_once_with(2.5, producer=event_obj['producer'], data=1)
+        self.__time_process_event.assert_called_once_with(2.5, {'producer': event_obj['producer'], 'data': 1})
         self.__time_process_event.reset_mock()
 
         retval = self.sim.abort(parent_process, testing=-1)
-        self.__time_process_event.assert_called_once_with(2.5, abort=True, testing=-1)
+        self.__time_process_event.assert_called_once_with(2.5, {'abort': True, 'info': {'testing': -1}})
         self.__time_process_event.reset_mock()
 
     def test6_scheduling(self):
@@ -637,15 +637,12 @@ class TestSim(unittest.TestCase):
         producer = SomeObj()
         producer.signal = Mock()
         self.sim.parent_process = Mock()
-        self.sim.schedule_event(1, {'producer': producer, 'data': 1}, self.sim.time_process)
-        self.sim.schedule_event(2, {'producer': producer, 'data': 2}, self.sim.time_process)
-        self.sim.schedule_event(3, {'producer': producer, 'data': 3}, self.sim.time_process)
+        self.sim.schedule_event(1, {'producer': producer, 'object': 1}, self.sim.time_process)
+        self.sim.schedule_event(2, {'producer': producer, 'object': 2}, self.sim.time_process)
+        self.sim.schedule_event(3, {'producer': producer, 'object': 3}, self.sim.time_process)
         num_events = self.sim.run()
         self.assertEqual(num_events, 3)
-        calls = [
-            call(producer=producer, data=1),
-            call(producer=producer, data=2),
-            call(producer=producer, data=3),]
+        calls = [call(1), call(2), call(3),]
         producer.signal.assert_has_calls(calls)
         producer.signal.reset_mock()
         num_events = len(self.sim.time_queue)
@@ -655,14 +652,12 @@ class TestSim(unittest.TestCase):
         self.sim = DSSimulation()
         producer = SomeObj()
         producer.signal = Mock()
-        self.sim.schedule_event(1, {'producer': producer, 'data': 1}, self.sim.time_process)
-        self.sim.schedule_event(2, {'producer': producer, 'data': 2}, self.sim.time_process)
-        self.sim.schedule_event(3, {'producer': producer, 'data': 3}, self.sim.time_process)
+        self.sim.schedule_event(1, {'producer': producer, 'object': 1}, self.sim.time_process)
+        self.sim.schedule_event(2, {'producer': producer, 'object': 2}, self.sim.time_process)
+        self.sim.schedule_event(3, {'producer': producer, 'object': 3}, self.sim.time_process)
         num_events = self.sim.run(2.5)
         self.assertEqual(num_events, 2)
-        calls = [
-            call(producer=producer, data=1),
-            call(producer=producer, data=2),]
+        calls = [call(1), call(2),]
         producer.signal.assert_has_calls(calls)
         producer.signal.reset_mock()
         num_events = len(self.sim.time_queue)

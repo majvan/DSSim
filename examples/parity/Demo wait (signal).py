@@ -46,7 +46,7 @@ class Prince(DSProcessComponent):
         yield from self.sim.wait(_abs(self.live_till))
         king, lastkingdied = None, self.sim.time
         print(self.sim.time, self, "Le roi est mort.")
-        king_died.signal(msg='king died')
+        king_died.signal('king died')
 
 
 sim = DSSimulation()

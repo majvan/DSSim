@@ -36,9 +36,9 @@ class DSProcessComponent(DSComponent):
         self.scheduled_process = retval
         self.__class__._dscomponent_instances += 1
 
-    def signal(self, event_object):
-        self.scheduled_process.signal(object=event_object)
-        #self.sim.schedule_event(0, {'object': event_object}, self.scheduled_process)
+    def signal(self, event):
+        self.scheduled_process.signal({'object': event})
+        #self.sim.schedule_event(0, {'object': event}, self.scheduled_process)
 
     def wait(self, timeout=float('inf')):
         try:

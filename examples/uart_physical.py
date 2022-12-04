@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.simulation import DSComponent, DSCallback, DSSimulation
+from dssim.simulation import DSComponent, DSKWCallback, DSSimulation
 from dssim.pubsub import DSProducer
 from dssim.components.uart import UARTPhys
 
@@ -29,20 +29,20 @@ class MCU(DSComponent):
         ''' This function has to be called after producers are registered '''
         # Register ISR routine. The routine is on link layer because physical layer does not
         # export any IRQ (there is not much value to register that a bit was received).
-        self.uart0.rx_link.add_subscriber(DSCallback(self.rx_isr, name=self.name + '.rx_isr', sim=self.sim))
+        self.uart0.rx_link.add_subscriber(DSKWCallback(self.rx_isr, name=self.name + '.rx_isr', sim=self.sim))
 
         #  Bit banging with GPIO to send 0x55 = 85
-        self.gpio0.schedule(0 / self.baudrate, line=0)  # start
-        self.gpio0.schedule(1 / self.baudrate, line=1)  # bit 0
-        self.gpio0.schedule(2 / self.baudrate, line=0)
-        self.gpio0.schedule(3 / self.baudrate, line=1)
-        self.gpio0.schedule(4 / self.baudrate, line=0)
-        self.gpio0.schedule(5 / self.baudrate, line=1)
-        self.gpio0.schedule(6 / self.baudrate, line=0)
-        self.gpio0.schedule(7 / self.baudrate, line=1)
-        self.gpio0.schedule(8 / self.baudrate, line=0)  # bit 7
-        self.gpio0.schedule(9 / self.baudrate, line=1)  # parity
-        self.gpio0.schedule(10 / self.baudrate, line=1)  # stop
+        self.gpio0.schedule_kw(0 / self.baudrate, line=0)  # start
+        self.gpio0.schedule_kw(1 / self.baudrate, line=1)  # bit 0
+        self.gpio0.schedule_kw(2 / self.baudrate, line=0)
+        self.gpio0.schedule_kw(3 / self.baudrate, line=1)
+        self.gpio0.schedule_kw(4 / self.baudrate, line=0)
+        self.gpio0.schedule_kw(5 / self.baudrate, line=1)
+        self.gpio0.schedule_kw(6 / self.baudrate, line=0)
+        self.gpio0.schedule_kw(7 / self.baudrate, line=1)
+        self.gpio0.schedule_kw(8 / self.baudrate, line=0)  # bit 7
+        self.gpio0.schedule_kw(9 / self.baudrate, line=1)  # parity
+        self.gpio0.schedule_kw(10 / self.baudrate, line=1)  # stop
 
     def rx_isr(self, producer, byte, parity):
         # received a byte. Note that on the physical level the parity is not checked, just reported

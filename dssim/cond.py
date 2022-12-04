@@ -119,7 +119,7 @@ class DSFilter(DSCondition):
                 else:
                     signaled, value = True, self.cond.value
             else:
-                self.sim.signal(self.cond, **event)
+                self.sim.signal(self.cond, event)
         elif callable(self.cond) and self.cond(event):
             signaled, value = True, event
         elif self is event:
@@ -134,7 +134,7 @@ class DSFilter(DSCondition):
     def _process_finished(self, *args, **kwargs):
         # Following forces re-evaluation by injecting new event
         self.cond.finish_tx.remove_subscriber(self.subscriber, 'pre')
-        self.sim.signal(self.parent_process, producer=self.cond, finished=True)
+        self.sim.signal(self.parent_process, {'producer': self.cond, 'finished': True})
 
     def cond_value(self, event):
         return self.value

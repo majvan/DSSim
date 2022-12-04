@@ -39,10 +39,10 @@ class MCU(DSComponent):
             yield from self.sim.wait(delay)
             n += 1
             print('Event', n, 'produced @', self.sim.time)
-            self._producer.signal(n=n)  # feed the producer with some event
+            self._producer.signal(n)  # feed the producer with some event
             self.stat['generated'] += 1
 
-    def _on_output(self, n, **others):
+    def _on_output(self, n):
         print('Event', n, 'came @', self.sim.time)
         self.stat['received'] += 1
 

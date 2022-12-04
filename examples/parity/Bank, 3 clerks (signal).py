@@ -30,7 +30,7 @@ class CustomerGenerator(DSProcessComponent):
 class Customer(DSProcessComponent):
     def process(self):
         waitingline.append(self)
-        signaler.signal(msg='there is some work to do')  # the observers and consumers are being notified
+        signaler.signal('there is some work to do')  # the observers and consumers are being notified
 
 
 class Clerk(DSProcessComponent):

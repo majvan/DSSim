@@ -12,7 +12,7 @@ class SingleProducerMultipleConsumers(DSComponent):
 
     def producer(self):
         while True:
-            self.p.signal(o=f'hello from producer')
+            self.p.signal('hello from producer')
             yield from self.sim.wait(1)
 
     def consumer(self, order):

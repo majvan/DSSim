@@ -26,7 +26,7 @@ from dssim.simulation import DSComponent
 class DSAbstractProducer(DSComponent):
     ''' Provides base abstract class for producers '''
 
-    def encapsulate_data_to_transport(self, **event_data):
+    def encapsulate_data_to_transport(self, event):
         ''' Encapsulates data to an object suitable for transport layer.
 
         We use simple dict for transport object.
@@ -36,11 +36,9 @@ class DSAbstractProducer(DSComponent):
         when a event is notified from an internal producer, we can make it
         to look as it was called from the official TX.
         '''
-        producer = event_data.get('producer', self)
-        event_data['producer'] = producer
-        return event_data
+        return {'producer': self, 'object': event}
 
-    def schedule(self, time_delta, consumer_process=None, **event_data):
+    def schedule(self, time_delta, event, consumer_process=None):
         ''' Schedule future event with parametrized event '''
 
         # We will schedule all the future events into time_process and not directly
@@ -60,8 +58,12 @@ class DSAbstractProducer(DSComponent):
         # Though both events happen in the same sim.time, the execution is typically
         # expected to run sequentially.
 
-        dsevent = self.encapsulate_data_to_transport(**event_data)
+        dsevent = self.encapsulate_data_to_transport(event)
         self.sim.schedule_event(time_delta, dsevent, self.sim.time_process)
+
+    def schedule_kw(self, time_delta, consumer_process=None, **event):
+        ''' Schedules an event which is defined as key-values. '''
+        return self.schedule(time_delta, event, consumer_process)
 
     @abstractmethod
     def add_subscriber(self, subscriber, phase):
@@ -198,26 +200,31 @@ class DSProducer(DSAbstractProducer):
             retval = yield from self.sim.wait(timeout, cond=cond, val=val)
         return retval
 
-    def signal(self, **event_data):
+    def signal(self, event):
         ''' Send signal object to the subscribers '''
 
         # Emit the signal to all pre-observers
         for subscriber, refs in self.subs['pre']:
-            self.sim.signal(subscriber, **event_data) if refs else None
+            self.sim.signal(subscriber, event) if refs else None
 
         # Emit the signal to all consumers and stop with the first one
         # which accepted the signal
         for subscriber, refs in self.subs['act']:
-            if refs and self.sim.signal(subscriber, **event_data):
+            if refs and self.sim.signal(subscriber, event):
                 self.subs['act'].rewind()  # this will rewind for round robin
                 break
         else:
             # Emit the signal to all post-observers
             for subscriber, refs in self.subs['post']:
-                self.sim.signal(subscriber, **event_data) if refs else None
+                self.sim.signal(subscriber, event) if refs else None
 
         # cleanup- remove items with zero references
         # We do not cleanup in remove_subscriber, because remove_subscriber could
         # be called from the notify(...) and that could produce an error 
         for queue in self.subs.values():
             queue.cleanup()
+
+    def signal_kw(self, **event):
+        ''' Signal a key-value event as dict '''
+        return self.signal(event)
+        

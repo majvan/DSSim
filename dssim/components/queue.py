@@ -35,7 +35,7 @@ class Queue(DSComponent):
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         if len(self) + len(obj) <= self.capacity:
             self.queue += list(obj)
-            self.tx_changed.schedule(0, info='queue changed')
+            self.tx_changed.schedule(0, 'queue changed')
             retval = obj
         else:
             retval = None
@@ -47,14 +47,14 @@ class Queue(DSComponent):
             retval = yield from self.sim.check_and_wait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)  # wait while first element does not match the cond
         if retval is not None:
             self.queue += list(obj)
-            self.tx_changed.schedule(0, info='queue changed')
+            self.tx_changed.schedule(0, 'queue changed')
         return retval
 
     def get_nowait(self, amount=1, cond=lambda e: True):
         if len(self) >= amount and cond(self.queue[:amount]):
             retval = self.queue[:amount]
             self.queue = self.queue[amount + 1:]
-            self.tx_changed.schedule(0, info='queue changed')
+            self.tx_changed.schedule(0, 'queue changed')
         else:
             retval = None
         return retval
@@ -66,7 +66,7 @@ class Queue(DSComponent):
         if retval is not None:
             retval = self.queue[:amount]
             self.queue = self.queue[amount:]
-            self.tx_changed.schedule(0, info='queue changed')
+            self.tx_changed.schedule(0, 'queue changed')
         return retval
 
     def pop(self, index=0, default=None):
@@ -74,7 +74,7 @@ class Queue(DSComponent):
         if len(self.queue) > index:
             try:
                 retval = self.queue.pop(index)
-                self.tx_changed.schedule(0, info='queue changed')
+                self.tx_changed.schedule(0, 'queue changed')
             except IndexError as e:
                 retval = default
         return retval
@@ -88,7 +88,7 @@ class Queue(DSComponent):
             self.queue = [e for e in self.queue if not ((callable(cond) and cond(e) or (cond == e)))]
             # now find what we may emit: "queue changed"
             if length != len(self.queue):
-                self.tx_changed.schedule(0, info='queue changed')
+                self.tx_changed.schedule(0, 'queue changed')
 
     def __len__(self):
         return len(self.queue)
@@ -98,7 +98,7 @@ class Queue(DSComponent):
 
     def __setitem__(self, index, data):
         self.queue[index] = data
-        self.tx_changed.schedule(0, info='queue changed')
+        self.tx_changed.schedule(0, 'queue changed')
 
     def __iter__(self):
         return iter(self.queue)

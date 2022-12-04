@@ -132,7 +132,8 @@ class DSSimulation:
         while True:
             event = yield from self._wait_for_event()
             # Get producer which really produced the event and signal to associated consumers
-            event['producer'].signal(**event)
+            producer, object = event['producer'], event['object']
+            producer.signal(object)
 
     def create_metadata(self, process):
         if isinstance(process, DSProcess) or isinstance(process, DSCallback):
@@ -255,7 +256,7 @@ class DSSimulation:
             self.parent_process = pid
         return retval
 
-    def signal(self, schedulable, **event):
+    def signal(self, schedulable, event):
         ''' Send an event object to a consumer process. Convert event from parameters to object. '''
 
         # We will be sending signal (event) to a schedulable, which has some condition set
@@ -469,14 +470,21 @@ class DSCallback(DSComponent):
         self.create_metadata()
 
     def send(self, data):
-        ''' The function calls all the registered methods from objects after passing filter. '''
-        retval = self.forward_method(**data)
+        ''' The function calls the registered callback. '''
+        retval = self.forward_method(data)
         return retval
 
     def create_metadata(self):
         self.meta = _ProcessMetadata()
         return self.meta
 
+
+class DSKWCallback(DSCallback):
+
+    def send(self, data):
+        ''' The function calls registered callback providing that the event is dict. '''
+        retval = self.forward_method(**data)
+        return retval
 
 
 class DSProcess(DSComponent):
@@ -553,14 +561,14 @@ class DSProcess(DSComponent):
         return self
 
     def schedule(self, time):
-        ''' This api is to schedule directly task.schedule(3) '''
+        ''' This api is to schedule directly task.schedule(...) '''
         return self.sim.schedule(time, self)
 
-    def signal(self, **event):
-        return self.sim.signal(self.scheduled_generator, **event)
+    def signal(self, event):
+        return self.sim.signal(self.scheduled_generator, event)
 
-    def signal_object(self, event_object):
-        self.sim.signal(self.scheduled_generator, event_object)
+    def signal_kw(self, **event):
+        return self.sim.signal(self.scheduled_generator, event)
 
     def started(self):
         return inspect.getgeneratorstate(self.scheduled_generator) != inspect.GEN_CREATED
@@ -570,11 +578,11 @@ class DSProcess(DSComponent):
 
     def _finish(self):
         self.sim.cleanup(self)
-        self.finish_tx.schedule(0, finished='Ok')
+        self.finish_tx.schedule(0, 'Ok')
 
     def _fail(self):
         self.sim.cleanup(self)
-        self.finish_tx.schedule(0, finished='Fail')
+        self.finish_tx.schedule(0, 'Fail')
 
     def join(self, timeout=float('inf')):
         with self.sim.observe_pre(self.finish_tx):

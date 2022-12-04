@@ -14,31 +14,29 @@
 '''
 The example is showing a code parity with example from salabim project
 '''
-from dssim.simulation import DSSimulation
-from dssim.processcomponent import DSProcessComponent
-from dssim.components.resource import Resource
+import dssim.parity.salabim as sim
 import random
 
 
-class CustomerGenerator(DSProcessComponent):
+class CustomerGenerator(sim.Component):
     def process(self):
         while True:
             Customer()
             yield from self.wait(random.uniform(5, 15))
 
 
-class Customer(DSProcessComponent):
+class Customer(sim.Component):
     def process(self):
         yield from self.get(clerks)  # Get for me one clerk (=resource). If not available, wait
-        print(f"{self.sim.time} Customer in process with clerk")
+        print(f"{env.now()} Customer in process with clerk")
         yield from self.wait(30)
         yield from self.put(clerks)  # Put the clerk back to the resources, but wait while the resource is full (it is not, the capacity is infinity).
 
 
-sim = DSSimulation() 
+env = sim.Environment() 
 CustomerGenerator()
-clerks = Resource(amount=3, name="clerks")
-sim.run(50000)
+clerks = sim.Resource(amount=3, name="clerks")
+env.run(50000)
 
 # clerks.print_statistics()
 # clerks.print_info()
