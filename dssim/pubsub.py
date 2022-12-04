@@ -26,44 +26,31 @@ from dssim.simulation import DSComponent
 class DSAbstractProducer(DSComponent):
     ''' Provides base abstract class for producers '''
 
-    def encapsulate_data_to_transport(self, event):
-        ''' Encapsulates data to an object suitable for transport layer.
-
-        We use simple dict for transport object.
-
-        At the beginning we allow caller to define (fake) the provider.
-        That could be a little useful to better debugging (of digital system), i.e.
-        when a event is notified from an internal producer, we can make it
-        to look as it was called from the official TX.
-        '''
-        return {'producer': self, 'object': event}
-
-    def schedule(self, time_delta, event, consumer_process=None):
+    def schedule(self, time_delta, event):
         ''' Schedule future event with parametrized event '''
 
-        # We will schedule all the future events into time_process and not directly
-        # to the attached subscribers. The reason is simple- in the time of the event
+        # We will schedule all the future events into our producer and not to the
+        # attached subscribers. The reason is simple- in the time of the event
         # evaluation (in the future) the set of attached subscribers can be different.
 
-        # Another reason is that signalling directly from a component can create
-        # cyclic signalling dependency (an event from processA signals processB, it
-        # executes immediately and tries to send signal to processA). Decoupling with
-        # schedule could be a solution.
+        # Another usage of this method is with zero time_delta. In that case it can
+        # defer the direct consumer calls back to the simulation and preventing thus
+        # cyclic signalling dependency (an event from processA sends directly to
+        # processB, it executes immediately and tries to send signal to processA).
+        # Decoupling with zero time schedule could be a solution.
 
         # The last caveat of signalling is the order of execution. For instance, if
         # processA gets signal i.e. "char A available on serial line", executes and
         # frees serial line which in turn triggers signal i.e. "char B available
         # on serial line" which now triggers processB, then the processB executes
         # and preempts processA to finish its "char A" execution first.
-        # Though both events happen in the same sim.time, the execution is typically
-        # expected to run sequentially.
+        # Though both events happen in the same sim.time, the execution process is
+        # typically expected to run sequentially.
+        self.sim.schedule_event(time_delta, event, self)
 
-        dsevent = self.encapsulate_data_to_transport(event)
-        self.sim.schedule_event(time_delta, dsevent, self.sim.time_process)
-
-    def schedule_kw(self, time_delta, consumer_process=None, **event):
+    def schedule_kw(self, time_delta, **event):
         ''' Schedules an event which is defined as key-values. '''
-        return self.schedule(time_delta, event, consumer_process)
+        return self.schedule(time_delta, event)
 
     @abstractmethod
     def add_subscriber(self, subscriber, phase):
@@ -76,7 +63,7 @@ class DSAbstractProducer(DSComponent):
         raise NotImplementedError('Abstract method, use derived classes')
 
     @abstractmethod
-    def signal(self, **event_data):
+    def signal(self, event):
         ''' Emit signal to associated subscribers '''
         raise NotImplementedError('Abstract method, use derived classes')
 
@@ -175,6 +162,14 @@ class NotifierPriority():
         self.d = new_prio_dict
 
 
+class _ProducerMetadata():
+    def __init__(self):
+        # The producer is signaled when a deferred event from the same producer appears.
+        # In such case the simulator checks for the condition and if met, it calls the producer's send method.
+        # Thus, the condition is always meet. Another conditions are checked when calling callbacks
+        self.cond = lambda e: True
+
+
 class DSProducer(DSAbstractProducer):
     ''' Full feature producer which can signal events to the attached consumers. '''
     def __init__(self, notifier=NotifierDict, **kwargs):
@@ -184,6 +179,10 @@ class DSProducer(DSAbstractProducer):
             'act': notifier(),
             'post': notifier(),
         }
+        self.create_metadata()
+
+    def create_metadata(self):
+        return _ProducerMetadata()
 
     def add_subscriber(self, subscriber, phase='act', **kwargs):
         if subscriber:
@@ -199,6 +198,9 @@ class DSProducer(DSAbstractProducer):
         with self.sim.consume(self):
             retval = yield from self.sim.wait(timeout, cond=cond, val=val)
         return retval
+
+    def send(self, event):
+        self.signal(event)
 
     def signal(self, event):
         ''' Send signal object to the subscribers '''
@@ -226,5 +228,5 @@ class DSProducer(DSAbstractProducer):
 
     def signal_kw(self, **event):
         ''' Signal a key-value event as dict '''
-        return self.signal(event)
+        self.signal(event)
         

@@ -513,7 +513,6 @@ class TestSim(unittest.TestCase):
 
     def test0_init_reset(self):
         sim = DSSimulation()
-        self.assertIsNotNone(sim.time_process)
         self.assertEqual(sim.parent_process, None)
         self.assertEqual(len(sim.time_queue), 0)
         self.assertEqual(sim.time, 0)
@@ -524,34 +523,11 @@ class TestSim(unittest.TestCase):
         self.assertEqual(sim.time, 1)
         self.assertEqual(len(sim.time_queue), 1)
         sim.restart(0.9)
-        self.assertIsNotNone(sim.time_process)
         self.assertEqual(sim.parent_process, None)
         self.assertEqual(len(sim.time_queue), 0)
         self.assertEqual(sim.time, 0.9)
 
-    def test1_simple_event(self):
-        ''' Assert kicking and pushing events '''
-        self.sim = DSSimulation()
-        self.assertIsNotNone(self.sim.time_process)
-        self.sim.time_process = self.__my_time_process()
-        self.sim._kick(self.sim.time_process)  # kick on the time process
-        self.__time_process_event.assert_called_once_with('kick-on')
-        self.__time_process_event.reset_mock()
-        self.sim.signal(self.sim.time_process, {'data': 1})
-        self.__time_process_event.assert_called_once_with(0, {'data': 1})
-        self.__time_process_event.reset_mock()
-
-    def test2_time_process(self):
-        ''' Assert correct time process and pushing events to time process '''
-        sim = DSSimulation()
-        self.assertIsNotNone(sim.time_process)
-        p = SomeObj()
-        p.signal = Mock()
-        sim.signal(sim.time_process, {'producer': p, 'object': 1})
-        p.signal.assert_called_once_with(1)
-        p.signal.reset_mock()
-
-    def test3_scheduling_events(self):
+    def test2_scheduling_events(self):
         ''' Assert working with time queue when pushing events '''
         sim = DSSimulation()
         sim.time_queue.add_element = Mock()
@@ -566,7 +542,7 @@ class TestSim(unittest.TestCase):
         with self.assertRaises(ValueError):
             sim.schedule_event(-0.5, event_obj)
 
-    def test4_deleting_events(self):
+    def test3_deleting_events(self):
         ''' Assert deleting from time queue when deleting events '''
         sim = DSSimulation()
         sim.time_queue.delete = Mock()
@@ -575,47 +551,7 @@ class TestSim(unittest.TestCase):
         sim.time_queue.delete.assert_called_once_with(condition)
         sim.time_queue.delete.reset_mock()
 
-    def test5_scheduling(self):
-        ''' Assert working with time queue when pushing events '''
-        self.sim = DSSimulation()
-        my_process = self.__my_time_process()
-        # schedule a process
-        with self.assertRaises(ValueError):
-            # negative time
-            self.sim.schedule(-0.5, my_process)
-        with self.assertRaises(ValueError):
-            # missing producer
-            self.sim.schedule(1, self.__my_handler())
-
-        parent_process = self.sim.schedule(0, my_process)
-        self.assertNotEqual(parent_process, my_process)
-        self.__time_process_event.assert_not_called()
-        self.sim.run(0.5)
-        self.__time_process_event.called_once_with('kick-on')
-        self.__time_process_event.reset_mock()
-        # schedule an event
-        with self.assertRaises(ValueError):
-            # negative time
-            self.sim.schedule_event(-0.5, {'producer': parent_process, 'data': 1})
-        with self.assertRaises(ValueError):
-            # missing producer
-            self.sim.schedule_event(1, {'data': 1}, self.sim.time_process)
-
-        self.assertEqual(self.sim.time, 0.5)
-        self.sim.schedule_event(2, {'producer': parent_process, 'data': 1}, self.sim.time_process)
-        time, (process, event_obj) = self.sim.time_queue.pop()
-        self.assertEqual((time, process), (2.5, self.sim.time_process))
-        self.assertEqual(event_obj, {'producer': parent_process, 'data': 1})
-        self.sim.run(2.5)
-        retval = self.sim.signal_object(event_obj['producer'], event_obj)
-        self.__time_process_event.assert_called_once_with(2.5, {'producer': event_obj['producer'], 'data': 1})
-        self.__time_process_event.reset_mock()
-
-        retval = self.sim.abort(parent_process, testing=-1)
-        self.__time_process_event.assert_called_once_with(2.5, {'abort': True, 'info': {'testing': -1}})
-        self.__time_process_event.reset_mock()
-
-    def test6_scheduling(self):
+    def test4_scheduling(self):
         ''' Assert the delay of scheduled process '''
         self.sim = DSSimulation()
         my_process = self.__my_time_process()
@@ -626,42 +562,117 @@ class TestSim(unittest.TestCase):
         parent_process = self.sim.schedule(2, my_process)
         self.assertEqual(len(self.sim.time_queue), 1)
 
+    def test5_scheduling(self):
+        self.sim = DSSimulation()
+        producer = SomeObj()
+        producer.send = Mock()
+        event_obj = SomeObj()
+        retval = self.sim.signal_object(producer, event_obj)
+        producer.send.assert_called_once_with(event_obj)
+
+    def test6_scheduling(self):
+        ''' Assert working with time queue when pushing events '''
+        self.sim = DSSimulation()
+        my_process = self.__my_time_process()
+        # schedule a process
+        with self.assertRaises(ValueError):
+            # negative time
+            self.sim.schedule(-0.5, my_process)
+
+        parent_process = self.sim.schedule(0, my_process)
+        self.assertNotEqual(parent_process, my_process)
+        self.__time_process_event.assert_not_called()
+        self.sim.run(0.5)
+        self.__time_process_event.assert_called_once_with('kick-on')
+        self.__time_process_event.reset_mock()
+        # schedule an event
+        with self.assertRaises(ValueError):
+            # negative time
+            self.sim.schedule_event(-0.5, {'producer': parent_process, 'data': 1})
+
+        self.assertEqual(self.sim.time, 0.5)
+        event_obj = {'producer': parent_process, 'data': 1}
+        self.sim.schedule_event(2, event_obj, my_process)
+        time, (process, event) = self.sim.time_queue.pop()
+        self.assertEqual((time, process), (2.5, my_process))
+        self.assertEqual(event, event_obj)
+        self.sim.run(2.5)
+
+        process = SomeObj()
+        process.send = Mock()
+        retval = self.sim.abort(parent_process, testing=-1)
+        self.__time_process_event.assert_called_once_with(2.5, {'abort': True, 'info': {'testing': -1}})
+        self.__time_process_event.reset_mock()
+
     def test7_schedulable_fcn(self):
         self.sim = DSSimulation()
         # The following has to pass without raising an error
         self.sim._kick(self.__my_schedulable_handler())
 
-    def test8_run_infinite_process(self):
-        ''' Assert event loop behavior '''
+    def test8_run_process(self):
+        ''' Assert event loop behavior for process '''
         self.sim = DSSimulation()
-        producer = SomeObj()
-        producer.signal = Mock()
         self.sim.parent_process = Mock()
-        self.sim.schedule_event(1, {'producer': producer, 'object': 1}, self.sim.time_process)
-        self.sim.schedule_event(2, {'producer': producer, 'object': 2}, self.sim.time_process)
-        self.sim.schedule_event(3, {'producer': producer, 'object': 3}, self.sim.time_process)
+        my_process = self.__my_time_process()
+        parent_process = self.sim.schedule(0, my_process)
+
+        self.sim.run(0.5) # kick on the process
+        self.sim.schedule_event(1, 3, my_process)
+        self.sim.schedule_event(2, 2, my_process)
+        self.sim.schedule_event(3, 1, my_process)
+        num_events = self.sim.run(0.5)
+        self.__time_process_event.assert_called_once_with('kick-on')
+        self.assertEqual(num_events, 1)
+        self.__time_process_event.reset_mock()
+
+        self.sim.num_events = 0
         num_events = self.sim.run()
         self.assertEqual(num_events, 3)
-        calls = [call(1), call(2), call(3),]
-        producer.signal.assert_has_calls(calls)
-        producer.signal.reset_mock()
+        calls = [call(1.5, 3), call(2.5, 2), call(3.5, 1),]
+        self.__time_process_event.assert_has_calls(calls)
         num_events = len(self.sim.time_queue)
         self.assertEqual(num_events, 0)
+        self.__time_process_event.reset_mock()
 
-    def test9_run_finite_process(self):
-        self.sim = DSSimulation()
-        producer = SomeObj()
-        producer.signal = Mock()
-        self.sim.schedule_event(1, {'producer': producer, 'object': 1}, self.sim.time_process)
-        self.sim.schedule_event(2, {'producer': producer, 'object': 2}, self.sim.time_process)
-        self.sim.schedule_event(3, {'producer': producer, 'object': 3}, self.sim.time_process)
+        self.sim.restart()
+        self.sim.schedule_event(1, 3, my_process)
+        self.sim.schedule_event(2, 2, my_process)
+        self.sim.schedule_event(3, 1, my_process)
         num_events = self.sim.run(2.5)
         self.assertEqual(num_events, 2)
-        calls = [call(1), call(2),]
-        producer.signal.assert_has_calls(calls)
-        producer.signal.reset_mock()
+        calls = [call(1, 3), call(2, 2),]
+        self.__time_process_event.assert_has_calls(calls)
         num_events = len(self.sim.time_queue)
         self.assertEqual(num_events, 1)
+        self.__time_process_event.reset_mock()
+
+
+    def test9_run_producer(self):
+        self.sim = DSSimulation()
+        producer = SomeObj()
+        producer.send = Mock()
+        self.sim.schedule_event(1, 3, producer)
+        self.sim.schedule_event(2, 2, producer)
+        self.sim.schedule_event(3, 1, producer)
+        num_events = self.sim.run()
+        self.assertEqual(num_events, 3)
+        calls = [call(3), call(2), call(1),]
+        producer.send.assert_has_calls(calls)
+        num_events = len(self.sim.time_queue)
+        self.assertEqual(num_events, 0)
+        producer.send.reset_mock()
+
+        self.sim.restart()
+        self.sim.schedule_event(1, 3, producer)
+        self.sim.schedule_event(2, 2, producer)
+        self.sim.schedule_event(3, 1, producer)
+        num_events = self.sim.run(2.5)
+        self.assertEqual(num_events, 2)
+        calls = [call(3), call(2),]
+        producer.send.assert_has_calls(calls)
+        num_events = len(self.sim.time_queue)
+        self.assertEqual(num_events, 1)
+
 
     def test10_waiting(self):
         self.sim = DSSimulation()

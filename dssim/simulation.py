@@ -121,22 +121,10 @@ class DSSimulation:
         self.num_events = 0
         self.time = time
         self.parent_process = None
-        self.time_process = self._time_process()
         self._process_metadata = {}
-        self._kick(self.time_process)
-
-    def _time_process(self):
-        ''' For the events which were produced with a non-process producer, we run
-        additional process which signals them in the scheduled time.
-        '''
-        while True:
-            event = yield from self._wait_for_event()
-            # Get producer which really produced the event and signal to associated consumers
-            producer, object = event['producer'], event['object']
-            producer.signal(object)
 
     def create_metadata(self, process):
-        if isinstance(process, DSProcess) or isinstance(process, DSCallback):
+        if hasattr(process, 'create_metadata'):
             retval = process.create_metadata()
         else:
             retval = _ProcessMetadata()
@@ -144,9 +132,8 @@ class DSSimulation:
         return retval
 
     def get_process_metadata(self, process):
-        if isinstance(process, DSProcess) or isinstance(process, DSCallback):
-            retval = process.meta  # DSProcess / DSCallback themselves store a metadata
-        else:
+        retval = getattr(process, 'meta', None)
+        if not retval:
             retval = self._process_metadata.get(process, None)
             retval = retval or self.create_metadata(process)
         return retval
@@ -164,12 +151,8 @@ class DSSimulation:
         return time
 
     def schedule_event(self, time, event, process=None):
-        ''' Schedules an event object into timequeue. '''
+        ''' Schedules an event object into timequeue. Finally the target process will be signalled. '''
         time = self._compute_time(time)
-        if (process == self.time_process) and 'producer' not in event:
-            raise ValueError('The event, if processed by time_process, is missing '
-                             'encapsulation of producer. '
-                             'Use DSProducer to schedule an event on time_process.')
         consumer = process or self.parent_process  # schedule to a process or to itself
         self.time_queue.add_element(time, (consumer, event))
         return event
@@ -597,13 +580,13 @@ def print_cyclic_signal_exception(exc):
     '''
     exc_type, exc_value, exc_traceback = sys.exc_info()
     print('Error:', exc)
-    print('\nAn already running schedulable (DSProcess / generator) was\n'
+    print('\nAn already running schedulable (DSProcess / generator) hedule_was\n'
           'signalled and therefore Python cannot handle such state.\n'
           'There are two possible solutions for this issue:\n'
           '1. You rewrite the code to remove cyclic signalling of processes.\n'
           '   This is recommended at least to try because this issue might\n'
           '   signify a real design flaw in the simulation / implementation.\n'
-          '2. Instead of calling sim.signal(process, **event)\n'
+          '2. Instead of calling sim.signal(process, event)\n'
           '   you schedule the event into the queue with zero delta time.\n'
           '   Example of the modification:\n'
           '   Previous code:\n'
