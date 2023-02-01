@@ -34,8 +34,8 @@ class EventForwarder:
         self.testunit = test_unit_running_sim
         self.receiving_process = receiving_process
 
-    def signal(self, **data):
-        self.testunit.sim.signal(self.receiving_process, **data)
+    def send(self, **data):
+        self.testunit.sim.send(self.receiving_process, **data)
 
 class TestDSSchedulable(unittest.TestCase):
 
@@ -188,13 +188,13 @@ class TestException(unittest.TestCase):
 
     def __first_cyclic(self):
         yield 'Kick-on first'
-        self.sim.signal(self.process2, 'Signal from first process')
+        self.sim.send(self.process2, 'Signal from first process')
         yield 'After signalling first'
         return 'Done first'
 
     def __second_cyclic(self):
         yield 'Kick-on second'
-        self.sim.signal(self.process1, 'Signal from second process')
+        self.sim.send(self.process1, 'Signal from second process')
         yield 'After signalling second'
         return 'Done second'
 
@@ -207,7 +207,7 @@ class TestException(unittest.TestCase):
         self.sim._kick(process)
         exc_to_check = None
         try:
-            self.sim.signal(process, 'My data')
+            self.sim.send(process, 'My data')
             # we should not get here, exception is expected
             self.assertTrue(1 == 2)
         except ZeroDivisionError as exc:
@@ -220,7 +220,7 @@ class TestException(unittest.TestCase):
         sim._kick(self.process1)
         sim._kick(self.process2)
         try:
-            self.sim.signal(self.process1, 'My data')
+            self.sim.send(self.process1, 'My data')
             # we should not get here, exception is expected
             self.assertTrue(1 == 2)
         except ValueError as exc:
@@ -233,7 +233,7 @@ class TestException(unittest.TestCase):
         sim._kick(self.process1)
         sim._kick(self.process2)
         try:
-            self.sim.signal(self.process1, 'My data')
+            self.sim.send(self.process1, 'My data')
             # we should not get here, exception is expected
             self.assertTrue(1 == 2)
         except ValueError as exc:
@@ -324,16 +324,16 @@ class TestConditionChecking(unittest.TestCase):
         self.assertEqual(retval, True)
     
     def test4_early_check(self):
-        ''' Test if signal calls first check_condition and then signal_object '''
+        ''' Test if signal calls first check_condition and then send_object '''
         sim = DSSimulation()
         sim.check_condition = Mock(return_value=False)  # it will not allow to accept the event
-        sim.signal_object = Mock()
+        sim.send_object = Mock()
         consumer = Mock()
         # sim.check_condition.side_effect = lambda *a, **kw: call_order.append(call(*a, **kw))
-        # sim.signal_object.side_effect = lambda *a, **kw: call_order.append(call(*a, **kw))
-        sim.signal(consumer, None)
+        # sim.send_object.side_effect = lambda *a, **kw: call_order.append(call(*a, **kw))
+        sim.send(consumer, None)
         sim.check_condition.assert_called_once()
-        sim.signal_object.assert_not_called()
+        sim.send_object.assert_not_called()
 
         call_order = []
         sim = DSSimulation()
@@ -341,13 +341,13 @@ class TestConditionChecking(unittest.TestCase):
             call_order.append(call(fcn_name, *args, **kwargs))
             return True
         sim.check_condition = Mock(side_effect=lambda *a, **kw: add_to_call_order('check_condition', *a, **kw))  # it will allow to accept the event
-        sim.signal_object = Mock(side_effect=lambda *a, **kw: add_to_call_order('signal_object', *a, **kw))
+        sim.send_object = Mock(side_effect=lambda *a, **kw: add_to_call_order('send_object', *a, **kw))
         # sim.check_condition.side_effect = 
-        # sim.signal_object.side_effect = lambda *a, **kw: call_order.append(call(*a, **kw))
-        sim.signal(consumer, None)
+        # sim.send_object.side_effect = lambda *a, **kw: call_order.append(call(*a, **kw))
+        sim.send(consumer, None)
         sim.check_condition.assert_called_once()
-        sim.signal_object.assert_called_once()
-        self.assertEqual(call_order, [call('check_condition', consumer, None), call('signal_object', consumer, None)])
+        sim.send_object.assert_called_once()
+        self.assertEqual(call_order, [call('check_condition', consumer, None), call('send_object', consumer, None)])
 
     def test5_check_and_wait(self):
         ''' Test check_and_wait function. First it should call check and if check does not pass, it should call wait '''
@@ -382,37 +382,37 @@ class TestConditionChecking(unittest.TestCase):
         p = my_process()
         retval = self.sim._kick(p)
         # self.assertTrue(retval == 1)  # kick does not return value
-        retval = self.sim.signal(p, None)
+        retval = self.sim.send(p, None)
         self.assertTrue(retval == 2)
-        retval = self.sim.signal(p, None)
+        retval = self.sim.send(p, None)
         self.assertTrue(retval == 3)
 
         p = DSProcess(my_process(), sim=self.sim)
         retval = self.sim._kick(p)
         # self.assertTrue(retval == 1)  # kick does not return value
-        retval = self.sim.signal(p, None)
+        retval = self.sim.send(p, None)
         self.assertTrue(retval == 2)
-        retval = self.sim.signal(p, None)
+        retval = self.sim.send(p, None)
         self.assertTrue(retval == 3)
 
         p = my_process()
         p = self.sim.schedule(0, p)
         # kick does not return value
-        retval = self.sim.signal(p, None)
+        retval = self.sim.send(p, None)
         self.assertTrue(retval == 1)
-        retval = self.sim.signal(p, None)
+        retval = self.sim.send(p, None)
         self.assertTrue(retval == 2)
-        retval = self.sim.signal(p, None)
+        retval = self.sim.send(p, None)
         self.assertTrue(retval == 3)
 
         p = DSProcess(my_process(), sim=self.sim)
         p = self.sim.schedule(0, p)
         # kick does not return value
-        retval = self.sim.signal(p, None)
+        retval = self.sim.send(p, None)
         self.assertTrue(retval == 1)
-        retval = self.sim.signal(p, None)
+        retval = self.sim.send(p, None)
         self.assertTrue(retval == 2)
-        retval = self.sim.signal(p, None)
+        retval = self.sim.send(p, None)
         self.assertTrue(retval == 3)
 
 
@@ -568,7 +568,7 @@ class TestSim(unittest.TestCase):
         producer = SomeObj()
         producer.send = Mock()
         event_obj = SomeObj()
-        retval = self.sim.signal_object(producer, event_obj)
+        retval = self.sim.send_object(producer, event_obj)
         producer.send.assert_called_once_with(event_obj)
 
     def test6_scheduling(self):

@@ -126,7 +126,7 @@ def ww_person_generator():
 @DSSchedulable
 def alien_person_generator():
     person = Person('Mars', 0, max_waiting_time=10000)
-    print(f'{sim.time:<5} New Mars: Queueing {person} with max. waiting time {p.max_waiting_time} at position {len(q)}.')
+    print(f'{sim.time:<5} New Mars: Queueing {person} with max. waiting time {person.max_waiting_time} at position {len(q)}.')
     queued = q.put_nowait(person=person)
     if not queued:
         print(f'{sim.time:<5} New Mars: queue too long, {person} gave up and did not queue.')

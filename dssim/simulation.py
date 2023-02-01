@@ -182,13 +182,6 @@ class DSSimulation:
             time += self.time
         return time
 
-    def schedule_event(self, time, event, process=None):
-        ''' Schedules an event object into timequeue. Finally the target process will be signalled. '''
-        time = self._compute_time(time)
-        consumer = process or self.parent_process  # schedule to a process or to itself
-        self.time_queue.add_element(time, (consumer, event))
-        return event
-
     def delete(self, cond):
         ''' An interface method to delete events on the queue '''
         self.time_queue.delete(cond)
@@ -238,7 +231,7 @@ class DSSimulation:
         retval, event = self._check_cond(cond, event)
         return retval
 
-    def signal_object(self, schedulable, event):
+    def send_object(self, schedulable, event):
         ''' Send an event object to a schedulable consumer '''
 
         retval = False
@@ -271,7 +264,7 @@ class DSSimulation:
             self.parent_process = pid
         return retval
 
-    def signal(self, schedulable, event):
+    def send(self, schedulable, event):
         ''' Send an event object to a consumer process. Convert event from parameters to object. '''
 
         # We will be sending signal (event) to a schedulable, which has some condition set
@@ -281,12 +274,27 @@ class DSSimulation:
         # pre_check means that the check of condition for the schedulable was already done
         if not self.check_condition(schedulable, event):
             return False  # not signalled
-        retval = self.signal_object(schedulable, event)
+        retval = self.send_object(schedulable, event)
         return retval
 
     def abort(self, schedulable, **info):
         ''' Send abort exception to a consumer process. Convert event from parameters to object. '''
-        self.signal_object(schedulable, DSAbortException(self.parent_process, **info))
+        self.send_object(schedulable, DSAbortException(self.parent_process, **info))
+
+    def signal(self, process, event, time=0):
+        ''' Schedules an event object into timequeue. Finally the target process will be signalled. '''
+        time = self._compute_time(time)
+        consumer = process or self.parent_process  # schedule to a process or to itself
+        self.time_queue.add_element(time, (consumer, event))
+        return event
+
+    def schedule_event(self, time, event, process=None):
+        ''' Schedules an event object into timequeue. Finally the target process will be signalled. '''
+        time = self._compute_time(time)
+        consumer = process or self.parent_process  # schedule to a process or to itself
+        self.time_queue.add_element(time, (consumer, event))
+        return event
+
 
     def _scheduled_fcn(self, time, schedulable):
         ''' Start a schedulable process with possible delay '''
@@ -305,7 +313,7 @@ class DSSimulation:
             # _check_cond and returning or raising an event only if the condition matches,
             # otherwise we would be waiting in an infinite loop here.
             # However we do an early evaluation of conditions- they are checked before
-            # calling signal_object and we know that the conditions to return (or to raise an
+            # calling send_object and we know that the conditions to return (or to raise an
             # exception) are satisfied. See the code there for more info.
 
             # Convert exception signal to a real exception
@@ -401,8 +409,7 @@ class DSSimulation:
             self.num_events += 1
             self.time = tevent
             self.time_queue.pop()
-            if self.check_condition(process, event_obj):
-                self.signal_object(process, event_obj)
+            self.send(process, event_obj)
 
         retval_time = self.time
         self.time = up_to
@@ -661,7 +668,7 @@ def print_cyclic_signal_exception(exc):
             method = frame.f_code.co_name
             line = frame.f_lineno
             filename = frame.f_code.co_filename
-        elif frame.f_code.co_name == 'signal_object':
+        elif frame.f_code.co_name == 'send_object':
             from_process = frame.f_locals['pid']
             to_process = frame.f_locals['schedulable']
             event = frame.f_locals['event']

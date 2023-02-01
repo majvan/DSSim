@@ -152,18 +152,18 @@ class DSProducer(DSComponent, IConsumer):
 
         # Emit the signal to all pre-observers
         for subscriber, refs in self.subs['pre']:
-            self.sim.signal(subscriber, event) if refs else None
+            self.sim.send(subscriber, event) if refs else None
 
         # Emit the signal to all consumers and stop with the first one
         # which accepted the signal
         for subscriber, refs in self.subs['act']:
-            if refs and self.sim.signal(subscriber, event):
+            if refs and self.sim.send(subscriber, event):
                 self.subs['act'].rewind()  # this will rewind for round robin
                 break
         else:
             # Emit the signal to all post-observers
             for subscriber, refs in self.subs['post']:
-                self.sim.signal(subscriber, event) if refs else None
+                self.sim.send(subscriber, event) if refs else None
 
         # cleanup- remove items with zero references
         # We do not cleanup in remove_subscriber, because remove_subscriber could

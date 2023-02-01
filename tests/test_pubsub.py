@@ -84,7 +84,7 @@ class TestProducer(unittest.TestCase):
         self.consumer_called = []
         self.sim = SimMock()
         self.sim.time_process = SimMock()
-        self.sim.signal = Mock(return_value=True) # always returns true
+        self.sim.send = Mock(return_value=True) # always returns true
         self.sim.schedule = Mock(return_value=1000) # new process id retval
         self.sim.schedule_event = Mock()
 
@@ -129,7 +129,7 @@ class TestProducer(unittest.TestCase):
         self.assertEqual(p.subs['post'].d, {c2: 2, c1: 1})
 
     def test1_producer_remove(self):
-        p = DSProducer(sim=self.sim)
+        p = DSProducer(sim=DSSimulation())
         c0 = SomeObj()
         c0.send = Mock(return_value=False)
         c1 = SomeObj()
@@ -192,14 +192,14 @@ class TestProducer(unittest.TestCase):
         self.assertEqual(p.subs['post'].d, {})
 
     def test2_producer_signal_act_retval(self):
-        self.sim.signal = Mock(return_value=False)
+        self.sim.send = Mock(return_value=False)
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
         p.add_subscriber(c0)
         p.add_subscriber(c1)
         p.send(1)
-        self.sim.signal.assert_has_calls([call(c0, 1), call(c1, 1)])
+        self.sim.send.assert_has_calls([call(c0, 1), call(c1, 1)])
         notify_fcn = Mock(return_value=True)       
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(notify_fcn, sim=self.sim)
@@ -207,58 +207,58 @@ class TestProducer(unittest.TestCase):
         p.add_subscriber(c0)
         p.add_subscriber(c1)
         p.send(2)
-        self.sim.signal.assert_has_calls([call(c0, 2),])
+        self.sim.send.assert_has_calls([call(c0, 2),])
 
     def test3_producer_signal_act(self):
-        self.sim.signal = Mock(return_value=True)
+        self.sim.send = Mock(return_value=True)
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
         p.add_subscriber(c0)
         p.add_subscriber(c1)
         p.send(1)
-        self.sim.signal.assert_called_once_with(c0, 1)
+        self.sim.send.assert_called_once_with(c0, 1)
 
-        self.sim.signal.reset_mock()
+        self.sim.send.reset_mock()
         p.add_subscriber(subscriber=c0)  # 2 times a subscriber
         p.send(2)
-        self.sim.signal.assert_called_once_with(c0, 2)
+        self.sim.send.assert_called_once_with(c0, 2)
 
     def test4_producer_signal_pre(self):
-        self.sim.signal = Mock(return_value=True)
+        self.sim.send = Mock(return_value=True)
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
         p.add_subscriber(c0, phase='pre')
         p.add_subscriber(c1, phase='pre')
         p.send(1)
-        self.sim.signal.assert_has_calls([call(c0, 1), call(c1, 1)])
+        self.sim.send.assert_has_calls([call(c0, 1), call(c1, 1)])
 
-        self.sim.signal.reset_mock()
+        self.sim.send.reset_mock()
         p.add_subscriber(c0, phase='pre')  # 2 times a subscriber
         p.send(2)
-        self.sim.signal.assert_has_calls([call(c0, 2), call(c1, 2)])
+        self.sim.send.assert_has_calls([call(c0, 2), call(c1, 2)])
 
     def test5_producer_signal_post(self):
-        self.sim.signal = Mock(return_value=True)
+        self.sim.send = Mock(return_value=True)
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
         p.add_subscriber(c0, phase='post')
         p.add_subscriber(c1, phase='post')
         p.send(1)
-        self.sim.signal.assert_has_calls([call(c0, 1), call(c1, 1)])
+        self.sim.send.assert_has_calls([call(c0, 1), call(c1, 1)])
 
-        self.sim.signal.reset_mock()
+        self.sim.send.reset_mock()
         p.add_subscriber(c0, phase='post')  # 2 times a subscriber
         p.send(2)
-        self.sim.signal.assert_has_calls([call(c0, 2), call(c1, 2)])
+        self.sim.send.assert_has_calls([call(c0, 2), call(c1, 2)])
 
 
     def test6_producer_signal_same(self):
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
-        self.sim.signal = Mock(return_value=False)
+        self.sim.send = Mock(return_value=False)
         tests = ( 
             ('pre', 'c0c1', True, True),
             ('pre', 'c1c0', True, True),
@@ -268,7 +268,7 @@ class TestProducer(unittest.TestCase):
             ('post', 'c1c0', True, True),
         )
         for phase, order, c0_called, c1_called in tests:
-            self.sim.signal.reset_mock()
+            self.sim.send.reset_mock()
             p = DSProducer(sim=self.sim)
             if order == 'c0c1':
                 p.add_subscriber(phase=phase, subscriber=c0)
@@ -282,13 +282,13 @@ class TestProducer(unittest.TestCase):
                 calls.append(call(c0, None))
             if c1_called:
                 calls.append(call(c1, None))
-            self.sim.signal.assert_has_calls(calls, any_order=True)
+            self.sim.send.assert_has_calls(calls, any_order=True)
 
 
     def test7_producer_signal_combi(self):
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
-        self.sim.signal = Mock(return_value=False)
+        self.sim.send = Mock(return_value=False)
 
         tests = ( 
             ('pre', 'act', True, True),
@@ -299,7 +299,7 @@ class TestProducer(unittest.TestCase):
             ('post', 'act', False, True),
         )
         for c0_phase, c1_phase, c0_called, c1_called in tests:
-            self.sim.signal.reset_mock()
+            self.sim.send.reset_mock()
             p = DSProducer(sim=self.sim)
             p.add_subscriber(phase=c0_phase, subscriber=c0)
             p.add_subscriber(phase=c1_phase, subscriber=c1)
@@ -309,7 +309,7 @@ class TestProducer(unittest.TestCase):
                 calls.append(call(c0, None))
             if c1_called:
                 calls.append(call(c1, None))
-            self.sim.signal.assert_has_calls(calls, any_order=True)
+            self.sim.send.assert_has_calls(calls, any_order=True)
 
 
     def test8_producer_add_subscriber_in_send_hook(self):

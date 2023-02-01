@@ -31,7 +31,7 @@ class Studio(DSComponent):
             yield from sim.wait(randint(20, 40))
             print('Speaker finished')
             self.stat['finish'] += 1
-            self.sim.signal(self.moderator, 'finished')
+            self.sim.send(self.moderator, 'finished')
         except DSAbortException as e:
             print(e.info['msg'])
             self.stat['abort'] += 1

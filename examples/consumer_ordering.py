@@ -1,4 +1,4 @@
-from dssim.simulation import DSComponent, DSSimulation
+from dssim.simulation import DSComponent, DSSimulation, DSProcess
 from dssim.pubsub import NotifierDict, NotifierRoundRobin, NotifierPriority, DSProducer
 
 class SingleProducerMultipleConsumers(DSComponent):
@@ -7,7 +7,7 @@ class SingleProducerMultipleConsumers(DSComponent):
         self.p = DSProducer(name=f'{self.name}.generator', notifier=notifier_method, sim=self.sim)
         self.sim.schedule(1, self.producer())
         for order in range(6):
-            self.sim.schedule(0, self.consumer(order))
+            DSProcess(self.consumer(order), name=self.name+f'.consumer{order}', sim=self.sim).schedule(0)
         self.log = []
 
     def producer(self):
@@ -22,17 +22,17 @@ class SingleProducerMultipleConsumers(DSComponent):
                 self.log.append((self.sim.time, order))
                 print(f'{self.sim.time} Consumer {order} notified with {data}')
 
-sim = DSSimulation()
-system = SingleProducerMultipleConsumers(NotifierDict, sim=sim)
+sim = DSSimulation(name='dssim0')
+system = SingleProducerMultipleConsumers(NotifierDict, name='SPMC', sim=sim)
 sim.run(4)
 assert system.log == [(1, 0), (1, 1), (1, 2), (2, 0), (2, 1), (2, 2), (3, 0), (3, 1), (3, 2)]
 
-sim = DSSimulation()
-system = SingleProducerMultipleConsumers(NotifierRoundRobin, sim=sim)
+sim = DSSimulation(name='dssim1')
+system = SingleProducerMultipleConsumers(NotifierRoundRobin, name='SPMC', sim=sim)
 sim.run(4)
 assert system.log == [(1, 0), (1, 1), (1, 2), (2, 3), (2, 4), (2, 5), (2, 0), (2, 1), (2, 2), (3, 3), (3, 4), (3, 5), (3, 0), (3, 1), (3, 2)]
 
-sim = DSSimulation()
-system = SingleProducerMultipleConsumers(NotifierPriority, sim=sim)
+sim = DSSimulation(name='dssim2')
+system = SingleProducerMultipleConsumers(NotifierPriority, name='SPMC', sim=sim)
 sim.run(4)
 assert system.log == [(1, 0), (1, 3), (1, 1), (1, 4), (1, 2), (2, 0), (2, 3), (2, 1), (2, 4), (2, 2), (3, 0), (3, 3), (3, 1), (3, 4), (3, 2)]

@@ -68,4 +68,4 @@ if __name__ == '__main__':
 
     assert cpu0.uart0.stat['tx_counter'] == 100173 == cpu1.uart0.stat['rx_counter']
     assert cpu0.uart0.stat['rx_counter'] == 100172 == cpu1.uart0.stat['tx_counter']
-    assert sim.num_events == 200345
+    assert sim.num_events == 400690
