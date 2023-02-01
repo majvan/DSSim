@@ -262,20 +262,20 @@ class UARTPhys(UARTPhysBase):
         # schedule set of next events
         time = 0
         line = 0
-        self.tx.schedule_kw(time, producer=self.tx, line=0)
+        self.tx.schedule_kw_event(time, producer=self.tx, line=0)
         time += self.startbit * self.bittime
         for bit in bits:
             if bit != line:
                 line = bit
-                self.tx.schedule_kw(time, producer=self.tx, line=line)
+                self.tx.schedule_kw_event(time, producer=self.tx, line=line)
             time += self.bittime
         if parity_bit is not None:
             if parity_bit != line:
                 line = parity_bit
-                self.tx.schedule_kw(time, producer=self.tx, line=line)
+                self.tx.schedule_kw_event(time, producer=self.tx, line=line)
             time += self.bittime
         if line != 1:
-            self.tx.schedule_kw(time, producer=self.tx, line=1)
+            self.tx.schedule_kw_event(time, producer=self.tx, line=1)
         yield from self.sim.wait(self.bytetime)
         self.stat['tx_counter'] += 1  # TX bytes counter
         self._send_next()
@@ -368,7 +368,7 @@ class UARTPhysBasic(UARTPhysBase):
                              )
 
     def _send_now(self, byte, parity, *other):
-        self.tx.schedule_kw(self.bytetime, producer=self.tx, byte=byte, parity=parity)
+        self.tx.schedule_kw_event(self.bytetime, producer=self.tx, byte=byte, parity=parity)
 
     def _on_tx_byte_event(self, byte, parity, producer=None, **event_data):
         self.stat['tx_counter'] += 1
@@ -534,7 +534,7 @@ class UARTLink(DSComponent):
             if self.transmitting:
                 num = 0
             else:
-                self.tx.schedule_kw(self.bytetime, producer=self.tx, byte=byte, parity=parity)
+                self.tx.schedule_kw_event(self.bytetime, producer=self.tx, byte=byte, parity=parity)
                 self.transmitting = True
                 num = 1
         else:

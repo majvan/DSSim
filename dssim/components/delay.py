@@ -33,4 +33,4 @@ class Delay(DSComponent):
 
     def _on_event(self, producer, **event):
         ''' Consumer which feeds the output after the programmed delay '''
-        self.tx.schedule(self.delay, producer=self.rx, **event)
+        self.tx.schedule_kw_event(self.delay, producer=self.rx, **event)

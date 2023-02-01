@@ -32,17 +32,17 @@ class MCU(DSComponent):
         self.uart0.rx_link.add_subscriber(DSKWCallback(self.rx_isr, name=self.name + '.rx_isr', sim=self.sim))
 
         #  Bit banging with GPIO to send 0x55 = 85
-        self.gpio0.schedule_kw(0 / self.baudrate, line=0)  # start
-        self.gpio0.schedule_kw(1 / self.baudrate, line=1)  # bit 0
-        self.gpio0.schedule_kw(2 / self.baudrate, line=0)
-        self.gpio0.schedule_kw(3 / self.baudrate, line=1)
-        self.gpio0.schedule_kw(4 / self.baudrate, line=0)
-        self.gpio0.schedule_kw(5 / self.baudrate, line=1)
-        self.gpio0.schedule_kw(6 / self.baudrate, line=0)
-        self.gpio0.schedule_kw(7 / self.baudrate, line=1)
-        self.gpio0.schedule_kw(8 / self.baudrate, line=0)  # bit 7
-        self.gpio0.schedule_kw(9 / self.baudrate, line=1)  # parity
-        self.gpio0.schedule_kw(10 / self.baudrate, line=1)  # stop
+        self.gpio0.schedule_kw_event(0 / self.baudrate, line=0)  # start
+        self.gpio0.schedule_kw_event(1 / self.baudrate, line=1)  # bit 0
+        self.gpio0.schedule_kw_event(2 / self.baudrate, line=0)
+        self.gpio0.schedule_kw_event(3 / self.baudrate, line=1)
+        self.gpio0.schedule_kw_event(4 / self.baudrate, line=0)
+        self.gpio0.schedule_kw_event(5 / self.baudrate, line=1)
+        self.gpio0.schedule_kw_event(6 / self.baudrate, line=0)
+        self.gpio0.schedule_kw_event(7 / self.baudrate, line=1)
+        self.gpio0.schedule_kw_event(8 / self.baudrate, line=0)  # bit 7
+        self.gpio0.schedule_kw_event(9 / self.baudrate, line=1)  # parity
+        self.gpio0.schedule_kw_event(10 / self.baudrate, line=1)  # stop
 
     def rx_isr(self, producer, byte, parity):
         # received a byte. Note that on the physical level the parity is not checked, just reported

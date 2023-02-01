@@ -32,7 +32,7 @@ class State(DSComponent):
     def __setitem__(self, key, value):
         if (key not in self.state) or self.state[key] != value:
             self.state[key] = value
-            self.tx_changed.schedule(0, 'resource changed')
+            self.tx_changed.schedule_event(0, 'resource changed')
             return True
         return False
 

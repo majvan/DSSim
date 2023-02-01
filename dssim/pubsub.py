@@ -18,55 +18,8 @@ Observer: an object which takes (snifss) signals from producers
 Consumer: an object which takes signal from producer and then stops
   further spread.
 '''
-from collections.abc import Iterable
 from abc import abstractmethod
-from dssim.simulation import DSComponent
-
-
-class DSAbstractProducer(DSComponent):
-    ''' Provides base abstract class for producers '''
-
-    def schedule(self, time_delta, event):
-        ''' Schedule future event with parametrized event '''
-
-        # We will schedule all the future events into our producer and not to the
-        # attached subscribers. The reason is simple- in the time of the event
-        # evaluation (in the future) the set of attached subscribers can be different.
-
-        # Another usage of this method is with zero time_delta. In that case it can
-        # defer the direct consumer calls back to the simulation and preventing thus
-        # cyclic signalling dependency (an event from processA sends directly to
-        # processB, it executes immediately and tries to send signal to processA).
-        # Decoupling with zero time schedule could be a solution.
-
-        # The last caveat of signalling is the order of execution. For instance, if
-        # processA gets signal i.e. "char A available on serial line", executes and
-        # frees serial line which in turn triggers signal i.e. "char B available
-        # on serial line" which now triggers processB, then the processB executes
-        # and preempts processA to finish its "char A" execution first.
-        # Though both events happen in the same sim.time, the execution process is
-        # typically expected to run sequentially.
-        self.sim.schedule_event(time_delta, event, self)
-
-    def schedule_kw(self, time_delta, **event):
-        ''' Schedules an event which is defined as key-values. '''
-        return self.schedule(time_delta, event)
-
-    @abstractmethod
-    def add_subscriber(self, subscriber, phase):
-        ''' Add a subscriber to the list of subscribers connected to this producer '''
-        raise NotImplementedError('Abstract method, use derived classes')
-
-    @abstractmethod
-    def remove_subscriber(self, subscriber, phase):
-        ''' Remove subscriber from the list of subscribers connected to this producer '''
-        raise NotImplementedError('Abstract method, use derived classes')
-
-    @abstractmethod
-    def signal(self, event):
-        ''' Emit signal to associated subscribers '''
-        raise NotImplementedError('Abstract method, use derived classes')
-
+from dssim.simulation import DSComponent, IConsumer, IProducer
 
 class NotifierDict():
     def __init__(self):
@@ -170,8 +123,8 @@ class _ProducerMetadata():
         self.cond = lambda e: True
 
 
-class DSProducer(DSAbstractProducer):
-    ''' Full feature producer which can signal events to the attached consumers. '''
+class DSProducer(DSComponent, IConsumer, IProducer):
+    ''' Full feature producer which consume signal events and resends it to the attached consumers. '''
     def __init__(self, notifier=NotifierDict, **kwargs):
         super().__init__(**kwargs)
         self.subs = {
@@ -194,13 +147,8 @@ class DSProducer(DSAbstractProducer):
             subs = self.subs[phase]
             subs.dec(subscriber, **kwargs)
 
-    def wait(self, timeout=float('inf'), cond=lambda e:True, val=True):
-        with self.sim.consume(self):
-            retval = yield from self.sim.wait(timeout, cond=cond, val=val)
-        return retval
-
     def send(self, event):
-        self.signal(event)
+        return self.signal(event)
 
     def signal(self, event):
         ''' Send signal object to the subscribers '''
@@ -229,4 +177,27 @@ class DSProducer(DSAbstractProducer):
     def signal_kw(self, **event):
         ''' Signal a key-value event as dict '''
         self.signal(event)
+
+    def schedule_event(self, time, event):
+        # We will schedule all the future events into our producer and not to the
+        # attached subscribers. The reason is simple- in the time of the event
+        # evaluation (in the future) the set of attached subscribers can be different.
+
+        # Another usage of this method is with zero time_delta. In that case it can
+        # defer the direct consumer calls back to the simulation and preventing thus
+        # cyclic signalling dependency (an event from processA sends directly to
+        # processB, it executes immediately and tries to send signal to processA).
+        # Decoupling with zero time schedule could be a solution.
+
+        # The last caveat of signalling is the order of execution. For instance, if
+        # processA gets signal i.e. "char A available on serial line", executes and
+        # frees serial line which in turn triggers signal i.e. "char B available
+        # on serial line" which now triggers processB, then the processB executes
+        # and preempts processA to finish its "char A" execution first.
+        # Though both events happen in the same sim.time, the execution process is
+        # typically expected to run sequentially.
+        return self.sim.schedule_event(time, event, self)
+
+    def schedule_kw_event(self, time, **event):
+        return self.sim.schedule_event(time, event, self)
         

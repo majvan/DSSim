@@ -5,9 +5,9 @@ class SingleProducerMultipleConsumers(DSComponent):
     def __init__(self, notifier_method, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.p = DSProducer(name=f'{self.name}.generator', notifier=notifier_method, sim=self.sim)
-        sim.schedule(1, self.producer())
+        self.sim.schedule(1, self.producer())
         for order in range(6):
-            sim.schedule(0, self.consumer(order))
+            self.sim.schedule(0, self.consumer(order))
         self.log = []
 
     def producer(self):

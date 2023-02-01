@@ -84,6 +84,36 @@ class _ProcessMetadata:
         self.cond = cond
 
 
+class IConsumer:
+    @abstractmethod
+    def send(self, event):
+        ''' Receive event.
+        The name 'send' is required as python's generator.send() is de-facto consumer, too.
+        '''
+        raise NotImplementedError('Abstract method, use derived classes')
+
+class IProducer:
+    @abstractmethod
+    def signal(self, event):
+        ''' Signal event. '''
+        raise NotImplementedError('Abstract method, use derived classes')
+
+    @abstractmethod
+    def signal_kw(self, **event):
+        ''' Signal key-value event type as kwargs. '''
+        raise NotImplementedError('Abstract method, use derived classes')
+
+    @abstractmethod
+    def schedule_event(self, time, event):
+        ''' Signal event later. '''
+        raise NotImplementedError('Abstract method, use derived classes')
+
+    @abstractmethod
+    def schedule_kw_event(self, time, event):
+        ''' Signal event later. '''
+        raise NotImplementedError('Abstract method, use derived classes')
+
+
 class DSSimulation:
     ''' The simulation is a which schedules the nearest (in time) events. '''
     sim_singleton = None
@@ -440,9 +470,8 @@ def DSSchedulable(api_func):
     
     return scheduled_func
 
-from dssim.pubsub import DSProducer
 
-class DSCallback(DSComponent):
+class DSCallback(DSComponent, IConsumer):
     ''' A callback interface.
     The callback interface is called from the simulator when a process sends events.
     '''
@@ -450,28 +479,28 @@ class DSCallback(DSComponent):
         super().__init__(**kwargs)
         # TODO: check if forward method is not a generator / process; otherwise throw an error
         self.forward_method = forward_method
-        self.cond = cond
-        self.create_metadata()
+        self.create_metadata(cond)
 
-    def send(self, data):
+    def send(self, event):
         ''' The function calls the registered callback. '''
-        retval = self.forward_method(data)
+        retval = self.forward_method(event)
         return retval
 
-    def create_metadata(self):
-        self.meta = _ProcessMetadata()
+    def create_metadata(self, cond):
+        self.meta = _ProcessMetadata(cond)
         return self.meta
 
 
 class DSKWCallback(DSCallback):
 
-    def send(self, data):
+    def send(self, event):
         ''' The function calls registered callback providing that the event is dict. '''
-        retval = self.forward_method(**data)
+        retval = self.forward_method(**event)
         return retval
 
+from dssim.pubsub import DSProducer
 
-class DSProcess(DSComponent):
+class DSProcess(DSComponent, IConsumer, IProducer):
     ''' Typical task used in the simulations.
     This class "extends" generator function for additional info.
     The best practise is to use DSProcess instead of generators.
@@ -554,6 +583,12 @@ class DSProcess(DSComponent):
     def signal_kw(self, **event):
         return self.sim.signal(self.scheduled_generator, event)
 
+    def schedule_event(self, time, event):
+        return self.sim.schedule_event(time, event, self)
+
+    def schedule_kw_event(self, time, **event):
+        return self.sim.schedule_event(time, event, self)
+
     def started(self):
         return inspect.getgeneratorstate(self.scheduled_generator) != inspect.GEN_CREATED
 
@@ -562,11 +597,11 @@ class DSProcess(DSComponent):
 
     def _finish(self):
         self.sim.cleanup(self)
-        self.finish_tx.schedule(0, 'Ok')
+        self.finish_tx.schedule_event(0, 'Ok')
 
     def _fail(self):
         self.sim.cleanup(self)
-        self.finish_tx.schedule(0, 'Fail')
+        self.finish_tx.schedule_event(0, 'Fail')
 
     def join(self, timeout=float('inf')):
         with self.sim.observe_pre(self.finish_tx):

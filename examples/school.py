@@ -93,7 +93,7 @@ class Family(DSProcessComponent):
             yield from self.sim.wait(24 * 60 - now)  # wait till midnight
             yield from self.sim.wait(7 * 60 + 45)  # wait till 7:45
             for pupil in pupils:
-                school_process = self.sim.schedule(0, DSProcess(pupil.go_to_school(school, randint(6, 8)), sim=self.sim))
+                school_process = DSProcess(pupil.go_to_school(school, randint(6, 8)), sim=self.sim).schedule(0)
 
 if __name__ == '__main__':
     sim = DSSimulation()

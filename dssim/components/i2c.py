@@ -138,7 +138,7 @@ class I2CMasterBasic(DSComponent):
             'stopbits': stopbits,
         })
         time_required = (startbits + addrbits + len(data) * 9 + stopbits) * self.bittime
-        self.tx.schedule(
+        self.tx.schedule_kw_event(
             time_required,
             addr=addr,
             rnw=rnw,
@@ -215,7 +215,7 @@ class I2CSlaveBasic(DSComponent):
         self.stat['tx_message_counter'] += 1
         if data:
             self.stat['tx_byte_counter'] += len(data)
-        self.tx.schedule(
+        self.tx.schedule_kw_event(
             0,  # the data has already been sent by master, we just inform the master in return
             addr=self.addr,
             rnw=self.rx_buffer['rnw'],

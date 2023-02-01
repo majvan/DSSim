@@ -43,7 +43,7 @@ class Resource(DSComponent):
             retval = None
         else:
             self.amount += amount
-            self.tx_changed.schedule(0, 'resource changed')
+            self.tx_changed.schedule_event(0, 'resource changed')
         return amount
 
     def put(self, timeout=float('inf'), amount=1):
@@ -51,14 +51,14 @@ class Resource(DSComponent):
         with self.sim.consume(self.tx_changed):
             retval = yield from self.sim.check_and_wait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
         self.amount += amount
-        self.tx_changed.schedule(0, 'resource changed')
+        self.tx_changed.schedule_event(0, 'resource changed')
 
     def get_nowait(self, amount=1):
         if amount > self.amount:
             retval = None
         else:
             self.amount -= amount
-            self.tx_changed.schedule(0, 'resource changed')
+            self.tx_changed.schedule_event(0, 'resource changed')
         return amount
 
     def get(self, timeout=float('inf'), amount=1):
@@ -67,5 +67,5 @@ class Resource(DSComponent):
             retval = yield from self.sim.check_and_wait(timeout, cond=lambda e:self.amount >= amount)
         if retval is not None:
             self.amount -= amount
-            self.tx_changed.schedule(0, 'resource changed')
+            self.tx_changed.schedule_event(0, 'resource changed')
         return retval
