@@ -37,7 +37,7 @@ class TestCallback(unittest.TestCase):
 
     def test0_consumer(self):
         my_consumer_fcn = Mock()
-        c = DSCallback(my_consumer_fcn, sim=object())
+        c = DSCallback(my_consumer_fcn, sim=SomeObj())
         c.send({'data': 1})
         my_consumer_fcn.assert_called_once_with({'data': 1})
         my_consumer_fcn.reset_mock()
@@ -51,7 +51,7 @@ class TestCallback(unittest.TestCase):
                 self.args = args
                 self.kwargs = kwargs
         obj = ObjWithCallback()
-        c = DSCallback(obj.cb, sim=object())
+        c = DSCallback(obj.cb, sim=SomeObj())
         c.send({'data': 1})
         self.assertEqual(obj.args, ({'data': 1},))
         self.assertEqual(obj.kwargs, {})
@@ -61,7 +61,7 @@ class TestCallback(unittest.TestCase):
 
     def test2_consumer_with_filter(self):
         my_consumer_fcn = Mock()
-        c = DSCallback(my_consumer_fcn, cond=lambda e:e['data'] > 0, sim=object())
+        c = DSCallback(my_consumer_fcn, cond=lambda e:e['data'] > 0, sim=SomeObj())
         c.send({'data': 1})
         my_consumer_fcn.assert_called_once_with({'data': 1})
         my_consumer_fcn.reset_mock()

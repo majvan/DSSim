@@ -396,23 +396,23 @@ class DSComponent:
     If the name is not specified, it is created from the simulation instance
     and class name.
     '''
-    _names = {}
-
     def __init__(self, *args, name=None, sim=None, **kwargs):
         # It is recommended that core components specify the sim argument, i.e. sim should not be None
         self.sim = sim or DSSimulation.sim_singleton
+        if not isinstance(getattr(self.sim, 'names', None), dict):
+            self.sim.names = {}
         temp_name = name or f'{self.__class__}'
         if self.sim is None:
             raise ValueError(f'Interface {temp_name} does not have sim parameter set and no DSSimulation was created yet.')
         if name is None:
-            name = f'{self.sim}{temp_name}'
-            counter = DSComponent._names.get(name, 0)
-            DSComponent._names[name] = counter + 1
+            name = temp_name
+            counter = self.sim.names.get(name, 0)
+            self.sim.names[name] = counter + 1
             name = name + f'{counter}'
-        elif name in DSComponent._names:
-            raise ValueError('Interface with such name already registered.')
+        elif name in self.sim.names:
+            raise ValueError(f'Interface with name {name} already registered in the simulation instance {self.sim.name}.')
         else:
-            DSComponent._names[name] = 0
+            self.sim.names[name] = 0
         self.name = name
 
     def __repr__(self):
