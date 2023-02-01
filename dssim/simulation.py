@@ -372,8 +372,9 @@ class DSSimulation:
             if self.check_condition(process, event_obj):
                 self.signal_object(process, event_obj)
 
+        retval_time = self.time
         self.time = up_to
-        return self.num_events
+        return retval_time, self.num_events
 
     def observe_pre(self, *components, **kwargs):
         return DSSubscriberContextManager(self.parent_process, 'pre', components, **kwargs)

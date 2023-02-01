@@ -620,26 +620,26 @@ class TestSim(unittest.TestCase):
         self.sim.schedule_event(1, 3, my_process)
         self.sim.schedule_event(2, 2, my_process)
         self.sim.schedule_event(3, 1, my_process)
-        num_events = self.sim.run(0.5)
+        retval = self.sim.run(0.5)
         self.__time_process_event.assert_called_once_with('kick-on')
-        self.assertEqual(num_events, 1)
+        self.assertEqual(retval, (0.5, 1))
         self.__time_process_event.reset_mock()
 
         self.sim.num_events = 0
-        num_events = self.sim.run()
-        self.assertEqual(num_events, 3)
+        retval = self.sim.run()
+        self.assertEqual(retval, (3.5, 3))
         calls = [call(1.5, 3), call(2.5, 2), call(3.5, 1),]
         self.__time_process_event.assert_has_calls(calls)
-        num_events = len(self.sim.time_queue)
-        self.assertEqual(num_events, 0)
+        retval = len(self.sim.time_queue)
+        self.assertEqual(retval, 0)
         self.__time_process_event.reset_mock()
 
         self.sim.restart()
         self.sim.schedule_event(1, 3, my_process)
         self.sim.schedule_event(2, 2, my_process)
         self.sim.schedule_event(3, 1, my_process)
-        num_events = self.sim.run(2.5)
-        self.assertEqual(num_events, 2)
+        retval = self.sim.run(2.5)
+        self.assertEqual(retval, (2, 2))
         calls = [call(1, 3), call(2, 2),]
         self.__time_process_event.assert_has_calls(calls)
         num_events = len(self.sim.time_queue)
@@ -654,8 +654,8 @@ class TestSim(unittest.TestCase):
         self.sim.schedule_event(1, 3, producer)
         self.sim.schedule_event(2, 2, producer)
         self.sim.schedule_event(3, 1, producer)
-        num_events = self.sim.run()
-        self.assertEqual(num_events, 3)
+        retval = self.sim.run()
+        self.assertEqual(retval, (3, 3))
         calls = [call(3), call(2), call(1),]
         producer.send.assert_has_calls(calls)
         num_events = len(self.sim.time_queue)
@@ -666,8 +666,8 @@ class TestSim(unittest.TestCase):
         self.sim.schedule_event(1, 3, producer)
         self.sim.schedule_event(2, 2, producer)
         self.sim.schedule_event(3, 1, producer)
-        num_events = self.sim.run(2.5)
-        self.assertEqual(num_events, 2)
+        retval = self.sim.run(2.5)
+        self.assertEqual(retval, (2, 2))
         calls = [call(3), call(2),]
         producer.send.assert_has_calls(calls)
         num_events = len(self.sim.time_queue)
@@ -685,8 +685,8 @@ class TestSim(unittest.TestCase):
         self.sim.schedule_event(1, {'producer': producer, 'data': 1}, process)
         self.sim.schedule_event(2, {'producer': producer, 'data': 2}, process)
         self.sim.schedule_event(3, {'producer': producer, 'data': 3}, process)
-        num_events = self.sim.run(5)
-        self.assertEqual(num_events, 4)  # 3 events scheduled here + 1 timeout scheduled by the __my_wait_process
+        retval = self.sim.run(5)
+        self.assertEqual(retval, (3, 4))  # 3 events scheduled here + 1 timeout scheduled by the __my_wait_process
         # first event is dropped, because though it was taken by the time_process, the process condition was
         # to wait till timeout
         calls = [
