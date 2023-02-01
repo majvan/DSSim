@@ -14,11 +14,11 @@
 '''
 A queue of events with runtime flexibility of put / get events.
 '''
-from dssim.simulation import DSComponent, IConsumer, IProducer
+from dssim.simulation import DSComponent, IConsumer
 from dssim.pubsub import DSProducer
 
 
-class Queue(DSComponent, IConsumer, IProducer):
+class Queue(DSComponent, IConsumer):
     ''' The (FIFO) queue of events is a SW component which can dynamically
     be used to put an event in and get (or wait for- if the queue is empty)
     a queued event.
@@ -32,13 +32,13 @@ class Queue(DSComponent, IConsumer, IProducer):
         self.queue = []
 
     def send(self, event):
-        return self.signal(event)
+        return self.put_nowait(event) is not None
 
     def signal(self, event):
-        return self.put_nowait(event) is not None
+        return self.sim.signal(self, event)
     
     def signal_kw(self, **event):
-        return self.put_nowait(event) is not None
+        return self.sim.signal(self, event)
 
     def schedule_event(self, time, event):
         return self.sim.schedule_event(time, event, self)

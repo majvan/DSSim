@@ -19,7 +19,7 @@ Consumer: an object which takes signal from producer and then stops
   further spread.
 '''
 from abc import abstractmethod
-from dssim.simulation import DSComponent, IConsumer, IProducer
+from dssim.simulation import DSComponent, IConsumer
 
 class NotifierDict():
     def __init__(self):
@@ -123,7 +123,7 @@ class _ProducerMetadata():
         self.cond = lambda e: True
 
 
-class DSProducer(DSComponent, IConsumer, IProducer):
+class DSProducer(DSComponent, IConsumer):
     ''' Full feature producer which consume signal events and resends it to the attached consumers. '''
     def __init__(self, notifier=NotifierDict, **kwargs):
         super().__init__(**kwargs)
@@ -148,9 +148,6 @@ class DSProducer(DSComponent, IConsumer, IProducer):
             subs.dec(subscriber, **kwargs)
 
     def send(self, event):
-        return self.signal(event)
-
-    def signal(self, event):
         ''' Send signal object to the subscribers '''
 
         # Emit the signal to all pre-observers
@@ -173,6 +170,11 @@ class DSProducer(DSComponent, IConsumer, IProducer):
         # be called from the notify(...) and that could produce an error 
         for queue in self.subs.values():
             queue.cleanup()
+
+    def signal(self, event):
+        ''' Send an event to the producer. The event will be processed by simulator
+        instance and then sent back to us by the send() method '''
+        self.sim.signal(self, event)
 
     def signal_kw(self, **event):
         ''' Signal a key-value event as dict '''

@@ -87,12 +87,14 @@ class _ProcessMetadata:
 class IConsumer:
     @abstractmethod
     def send(self, event):
-        ''' Receive event.
+        ''' Receive event. This interface should be used only by DSSimulator instance as
+        the main dispatcher for directly sending messages.
+        Bypassing DSSimulator by calling the consumer send() directly would bypass the
+        condition check and could also result into dependency issues.
         The name 'send' is required as python's generator.send() is de-facto consumer, too.
         '''
         raise NotImplementedError('Abstract method, use derived classes')
 
-class IProducer:
     @abstractmethod
     def signal(self, event):
         ''' Signal event. '''
@@ -486,6 +488,18 @@ class DSCallback(DSComponent, IConsumer):
         retval = self.forward_method(event)
         return retval
 
+    def signal(self, event):
+        return self.sim.signal(self, event)
+
+    def signal_kw(self, **event):
+        return self.sim.signal(self.scheduled_generator, event)
+
+    def schedule_event(self, time, event):
+        return self.sim.schedule_event(time, event, self)
+
+    def schedule_kw_event(self, time, **event):
+        return self.sim.schedule_event(time, event, self)
+
     def create_metadata(self, cond):
         self.meta = _ProcessMetadata(cond)
         return self.meta
@@ -500,7 +514,7 @@ class DSKWCallback(DSCallback):
 
 from dssim.pubsub import DSProducer
 
-class DSProcess(DSComponent, IConsumer, IProducer):
+class DSProcess(DSComponent, IConsumer):
     ''' Typical task used in the simulations.
     This class "extends" generator function for additional info.
     The best practise is to use DSProcess instead of generators.
@@ -548,6 +562,18 @@ class DSProcess(DSComponent, IConsumer, IProducer):
             raise
         return self.value
 
+    def signal(self, event):
+        return self.sim.signal(self, event)
+
+    def signal_kw(self, **event):
+        return self.sim.signal(self, event)
+
+    def schedule_event(self, time, event):
+        return self.sim.schedule_event(time, event, self)
+
+    def schedule_kw_event(self, time, **event):
+        return self.sim.schedule_event(time, event, self)
+
     def abort(self, producer=None, **info):
         ''' Aborts a task. Additional reasoning info can be provided. '''
         try:
@@ -576,18 +602,6 @@ class DSProcess(DSComponent, IConsumer, IProducer):
     def schedule(self, time):
         ''' This api is to schedule directly task.schedule(...) '''
         return self.sim.schedule(time, self)
-
-    def signal(self, event):
-        return self.sim.signal(self.scheduled_generator, event)
-
-    def signal_kw(self, **event):
-        return self.sim.signal(self.scheduled_generator, event)
-
-    def schedule_event(self, time, event):
-        return self.sim.schedule_event(time, event, self)
-
-    def schedule_kw_event(self, time, **event):
-        return self.sim.schedule_event(time, event, self)
 
     def started(self):
         return inspect.getgeneratorstate(self.scheduled_generator) != inspect.GEN_CREATED
@@ -622,13 +636,15 @@ def print_cyclic_signal_exception(exc):
           '1. You rewrite the code to remove cyclic signalling of processes.\n'
           '   This is recommended at least to try because this issue might\n'
           '   signify a real design flaw in the simulation / implementation.\n'
-          '2. Instead of calling sim.signal(process, event)\n'
+          '2. Instead of calling sim.send(process, event)\n'
           '   you schedule the event into the queue with zero delta time.\n'
           '   Example of the modification:\n'
           '   Previous code:\n'
-          '   sim.signal(process, status="Ok")\n'
+          '   sim.send(process, status="Ok")\n'
           '   New code:\n'
-          '   sim.schedule_event(0, {"status": "Ok"}, process)\n\n')
+          '   sim.signal({"status": "Ok"}, process)\n\n'
+          '   Possibly, you used send() method on a component. Consider using\n'
+          '   signal() instead on the component.\n\n')
     while True:
         if not exc_traceback.tb_next:
             break

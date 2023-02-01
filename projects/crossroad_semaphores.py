@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dssim.simulation import DSSchedulable, DSComponent
-from dssim.pubsub import DSProducer, DSProcessConsumer, DSConsumer
+from dssim.pubsub import DSProducer, DSProcessConsumer, DSKWCallback
 from dssim.components.limiter import Limiter
 from random import uniform
 
@@ -40,7 +40,7 @@ class CarGenerator(DSProducer):
         ''' See below a comment why this is defined. '''
         self._limiter.set_throughput(throughput)
 
-class CarRecorder(DSConsumer):
+class CarRecorder(DSKWCallback):
     def __init__(self, name):
         super().__init__(None, name=name)
         self.recorded = []

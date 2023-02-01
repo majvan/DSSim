@@ -328,14 +328,15 @@ class TestConditionChecking(unittest.TestCase):
         sim = DSSimulation()
         sim.check_condition = Mock(return_value=False)  # it will not allow to accept the event
         sim.signal_object = Mock()
+        consumer = Mock()
         # sim.check_condition.side_effect = lambda *a, **kw: call_order.append(call(*a, **kw))
         # sim.signal_object.side_effect = lambda *a, **kw: call_order.append(call(*a, **kw))
-        sim.signal('process1', None)
+        sim.signal(consumer, None)
         sim.check_condition.assert_called_once()
         sim.signal_object.assert_not_called()
 
         call_order = []
-        sim=DSSimulation()
+        sim = DSSimulation()
         def add_to_call_order(fcn_name, *args, **kwargs):
             call_order.append(call(fcn_name, *args, **kwargs))
             return True
@@ -343,10 +344,10 @@ class TestConditionChecking(unittest.TestCase):
         sim.signal_object = Mock(side_effect=lambda *a, **kw: add_to_call_order('signal_object', *a, **kw))
         # sim.check_condition.side_effect = 
         # sim.signal_object.side_effect = lambda *a, **kw: call_order.append(call(*a, **kw))
-        sim.signal('process2', None)
+        sim.signal(consumer, None)
         sim.check_condition.assert_called_once()
         sim.signal_object.assert_called_once()
-        self.assertEqual(call_order, [call('check_condition', 'process2', None), call('signal_object', 'process2', None)])
+        self.assertEqual(call_order, [call('check_condition', consumer, None), call('signal_object', consumer, None)])
 
     def test5_check_and_wait(self):
         ''' Test check_and_wait function. First it should call check and if check does not pass, it should call wait '''
