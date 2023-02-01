@@ -37,7 +37,7 @@ class Clerk(DSProcessComponent):
     def process(self, i):
         while True:
             if len(waitingline) == 0:
-                msg = yield from signaler.wait()  # create a consumer and wait for any signal from the producer
+                msg = yield from signaler.wait(cond=lambda e:True)  # create a consumer and wait for any signal from the producer
             customer = waitingline.pop()
             print(f"{self.sim.time} Customer in process with clerk {i}")
             yield from self.wait(30)

@@ -67,7 +67,7 @@ class Visitor(DSProcessComponent):
         self.fromfloor = floors[from_]
         self.tofloor = floors[to]
         self.direction = getdirection(self.fromfloor, self.tofloor)
-        print(f'Generating visitor {self} from {from_} to {to}')
+        print(f'Generating {self} from {from_} to {to}')
 
 
     def process(self):
@@ -103,7 +103,7 @@ class Car(DSProcessComponent):
                 for visitor in self.visitors:
                     if visitor.tofloor == self.floor:
                         visitor.leave(self.visitors)
-                        print(f'Visitor {visitor} left {self} at floor {self.floor.n}')
+                        print(f'{visitor} left {self} at floor {self.floor.n}')
                         visitor.signal('out from car')
                 yield from self.sim.wait(exit_time)
 
@@ -122,7 +122,7 @@ class Car(DSProcessComponent):
                             if len(self.visitors) < self.capacity:
                                 visitor.leave(self.floor.visitors)
                                 visitor.enter_nowait(self.visitors)
-                                print(f'Visitor {visitor} enter {self} at floor {self.floor.n}')
+                                print(f'{visitor} enter {self} at floor {self.floor.n}')
                         yield from self.sim.wait(enter_time)
                     if self.floor.count_in_direction(self.direction) > 0:
                         if not (self.floor, self.direction) in requests:
@@ -147,7 +147,7 @@ class Car(DSProcessComponent):
                 self.nextfloor = floors[self.floor.n + self.direction]
                 yield from self.sim.wait(move_time)
                 self.floor = self.nextfloor
-                print(f'Car {self} on floor {self.floor.n}')
+                print(f'{self} on floor {self.floor.n}')
 
     def count_to_floor(self, tofloor):
         n = 0
