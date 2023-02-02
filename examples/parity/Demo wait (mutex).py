@@ -15,7 +15,7 @@ This is demo of the trigger/waitfor mechanism,
 just to allow one waiter to be honored.
 """
 from dssim.simulation import DSSimulation, DSAbsTime as _abs
-from dssim.pubsub import DSProducer
+from dssim.components.resource import Mutex
 from dssim.processcomponent import DSProcessComponent
 import random
 
@@ -29,30 +29,27 @@ class PrinceGenerator(DSProcessComponent):
 
 class Prince(DSProcessComponent):
     def process(self):
-        global king, kings, lastkingdied
+        global kings, lastkingdied
         self.live_till = self.sim.time + random.randint(60, 90)
         print(self.sim.time, self, "going to live till", self.live_till)
-        if king is None:  # there is no king, so this prince will become king, immediately
+        if not kingdom.locked():  # there is no king, so this prince will become king, immediately
             kings.append(("no king", lastkingdied, self.sim.time, self.sim.time - lastkingdied))
-        with self.sim.consume(king_died):  # we consume event and noone else gets notified
-            event = yield from self.sim.check_and_wait(_abs(self.live_till), cond=lambda e: True)  # any message will interrupt, because only king died messages are sent here
+        with kingdom:  # The mutex will be released automatically. Useful for missing locked mutex by exception
+            event = yield from kingdom.lock(_abs(self.live_till))  # we have to obtain lock anyway
             if not event:  # timeout returns None event
                 print(self.sim.time, self, "dies before getting to the throne")
                 return
-        king = self
-        print(self.sim.time, self, "Vive le roi!")
-        kings.append((self.name, self.sim.time, self.live_till, self.live_till - self.sim.time))
-        yield from self.sim.wait(_abs(self.live_till))
-        king, lastkingdied = None, self.sim.time
-        print(self.sim.time, self, "Le roi est mort.")
-        king_died.signal('king died')
+            print(self.sim.time, self, "Vive le roi!")
+            kings.append((self.name, self.sim.time, self.live_till, self.live_till - self.sim.time))
+            yield from self.sim.wait(_abs(self.live_till))
+            lastkingdied = self.sim.time
+            print(self.sim.time, self, "Le roi est mort.")
 
 
 sim = DSSimulation()
 lastkingdied = sim.time
 kings = []
-king_died = DSProducer(name='king died')  # we do not need State for this, all we need is simple notification routing
-king = None
+kingdom = Mutex(name='kingdom')  # we do not need State for this, all we need is simple notification routing
 PrinceGenerator()
 
 sim.run(5000)

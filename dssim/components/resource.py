@@ -18,6 +18,7 @@ in the pool, just an abstract pool level information (e.g. amount of water in a 
 '''
 from dssim.simulation import DSComponent, DSSchedulable
 from dssim.pubsub import DSProducer
+from contextlib import contextmanager
 
 
 class Resource(DSComponent):
@@ -47,7 +48,7 @@ class Resource(DSComponent):
         return amount
 
     def put(self, timeout=float('inf'), amount=1):
-        ''' Put an event into queue. The event can be consumed anytime in the future. '''
+        ''' Put amount into the resource pool.  '''
         with self.sim.consume(self.tx_changed):
             retval = yield from self.sim.check_and_wait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
         self.amount += amount
@@ -69,3 +70,31 @@ class Resource(DSComponent):
             self.amount -= amount
             self.tx_changed.schedule_event(0, 'resource changed')
         return retval
+
+
+class Mutex(Resource):
+    def __init__(self, *args, **kwargs):
+        super().__init__(1, 1, args, **kwargs)
+        self.last_owner = None
+
+    def lock(self, timeout=float('inf')):
+        retval = yield from self.get(timeout)
+        if retval is not None:
+            # store the info that the mutext is owned by us
+            self.last_owner = self.sim.parent_process
+        return retval
+    
+    def locked(self):
+        return self.amount == 0
+
+    def release(self):
+        if self.amount == 0:
+            return self.put_nowait(1)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # release the mutex only if we own the acquired mutex
+        if self.last_owner == self.sim.parent_process:
+            self.release()
