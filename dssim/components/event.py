@@ -38,11 +38,11 @@ class Event(DSComponent):
         ''' Clear the event '''
         self.signalled = False
 
-    def wait(self, timeout=float('inf')):
+    async def wait(self, timeout=float('inf')):
         ''' Wait till event is signalled. If the event is already signalled, return immediately. '''
         if self.signalled:
             return True
         self.waiting_tasks.append(self.sim.parent_process)
         with self.sim.monitor(self._tx):
-            obj = yield from self.sim.wait(timeout, cond=lambda e:True)
+            obj = await self.sim.wait(timeout, cond=lambda e:True)
         return obj

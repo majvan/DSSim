@@ -16,9 +16,8 @@ A resource is an object representing a pool of abstract resources with amount fi
 Compared to queue, resource works with non-integer amounts but it does not contain object
 in the pool, just an abstract pool level information (e.g. amount of water in a tank).
 '''
-from dssim.simulation import DSComponent, DSSchedulable
+from dssim.simulation import DSComponent, Awaitable
 from dssim.pubsub import DSProducer
-from contextlib import contextmanager
 
 
 class Resource(DSComponent):
@@ -47,10 +46,10 @@ class Resource(DSComponent):
             self.tx_changed.schedule_event(0, 'resource changed')
         return amount
 
-    def put(self, timeout=float('inf'), amount=1):
+    async def put(self, timeout=float('inf'), amount=1):
         ''' Put amount into the resource pool.  '''
         with self.sim.consume(self.tx_changed):
-            retval = yield from self.sim.check_and_wait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
+            retval = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
         self.amount += amount
         self.tx_changed.schedule_event(0, 'resource changed')
 
@@ -62,10 +61,10 @@ class Resource(DSComponent):
             self.tx_changed.schedule_event(0, 'resource changed')
         return amount
 
-    def get(self, timeout=float('inf'), amount=1):
+    async def get(self, timeout=float('inf'), amount=1):
         ''' Get resource. If the resource has not enough amount, wait to have enough requested amount. '''
         with self.sim.consume(self.tx_changed):
-            retval = yield from self.sim.check_and_wait(timeout, cond=lambda e:self.amount >= amount)
+            retval = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount >= amount)
         if retval is not None:
             self.amount -= amount
             self.tx_changed.schedule_event(0, 'resource changed')
@@ -76,14 +75,19 @@ class Mutex(Resource):
     def __init__(self, *args, **kwargs):
         super().__init__(1, 1, args, **kwargs)
         self.last_owner = None
+        self.context_manager_timeout = None
 
-    def lock(self, timeout=float('inf')):
-        retval = yield from self.get(timeout)
+    async def lock(self, timeout=float('inf')):
+        retval = await self.get(timeout)
         if retval is not None:
             # store the info that the mutext is owned by us
             self.last_owner = self.sim.parent_process
         return retval
     
+    def open(self, timeout=float('inf')):
+        self.context_manager_timeout = timeout
+        return self
+
     def locked(self):
         return self.amount == 0
 
@@ -91,10 +95,24 @@ class Mutex(Resource):
         if self.amount == 0:
             return self.put_nowait(1)
 
-    def __enter__(self):
-        return self
+    async def __aenter__(self):
+        if self.context_manager_timeout is None:
+            raise ValueError(f'You try to use context manager "async with {self}" but you need to use open() function for that.')
+        event = await self.lock(self.context_manager_timeout)
+        self.context_manager_timeout = None
+        return event
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
         # release the mutex only if we own the acquired mutex
         if self.last_owner == self.sim.parent_process:
             self.release()
+
+    def __enter__(self):
+        # Unfortunately, it is not possible to yield here. So the caller has to yield from lock() after with
+        return self
+
+    def __aexit__(self, exc_type, exc_val, exc_tb):
+        # release the mutex only if we own the acquired mutex
+        if self.last_owner == self.sim.parent_process:
+            self.release()
+        return Awaitable()

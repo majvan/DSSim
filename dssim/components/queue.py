@@ -56,10 +56,10 @@ class Queue(DSComponent, IConsumer):
             retval = None
         return retval
 
-    def put(self, timeout=float('inf'), *obj):
+    async def put(self, timeout=float('inf'), *obj):
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         with self.sim.consume(self.tx_changed):
-            retval = yield from self.sim.check_and_wait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)  # wait while first element does not match the cond
+            retval = await self.sim.check_and_wait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)  # wait while first element does not match the cond
         if retval is not None:
             self.queue += list(obj)
             self.tx_changed.schedule_event(0, 'queue changed')
@@ -74,10 +74,10 @@ class Queue(DSComponent, IConsumer):
             retval = None
         return retval
 
-    def get(self, timeout=float('inf'), amount=1, cond=lambda e: True):
+    async def get(self, timeout=float('inf'), amount=1, cond=lambda e: True):
         ''' Get an event from queue. If the queue is empty, wait for the closest event. '''
         with self.sim.consume(self.tx_changed):
-            retval = yield from self.sim.check_and_wait(timeout, cond=lambda e:len(self) >= amount and cond(self.queue[0]))  # wait while first element does not match the cond
+            retval = await self.sim.check_and_wait(timeout, cond=lambda e:len(self) >= amount and cond(self.queue[0]))  # wait while first element does not match the cond
         if retval is not None:
             retval = self.queue[:amount]
             self.queue = self.queue[amount:]

@@ -258,7 +258,7 @@ class UARTPhys(UARTPhysBase):
         # within other process than _rx_sampler
         self._rx_sampler.signal_kw(producer=producer, line=line)
 
-    def _send_bits(self, bits, parity_bit=None):
+    async def _send_bits(self, bits, parity_bit=None):
         # schedule set of next events
         time = 0
         line = 0
@@ -276,17 +276,17 @@ class UARTPhys(UARTPhysBase):
             time += self.bittime
         if line != 1:
             self.tx.schedule_kw_event(time, producer=self.tx, line=1)
-        yield from self.sim.wait(self.bytetime)
+        await self.sim.wait(self.bytetime)
         self.stat['tx_counter'] += 1  # TX bytes counter
         self._send_next()
 
-    def _scan_bits(self):
+    async def _scan_bits(self):
         # Assuming flag == 'line', then flag_details == line state
         while True:
             # wait for start bit
-            yield from self.sim.wait(cond=lambda e: e['line'] == 0)
+            await self.sim.wait(cond=lambda e: e['line'] == 0)
             # wait till end of start bit
-            evt = yield from self.sim.wait(
+            evt = await self.sim.wait(
                 (self.startbit - 0.5) * self.bittime,
                 lambda e: e['line'] == 1
             )
@@ -296,20 +296,20 @@ class UARTPhys(UARTPhysBase):
                 continue
             rx_bits = []
             for _ in range(self.bits):
-                yield from self.sim.wait(self.bittime)
+                await self.sim.wait(self.bittime)
                 rx_bits.append(self.rx_line_state)
             if self.parity in ('E', 'O'):
-                yield from self.sim.wait(self.bittime)
+                await self.sim.wait(self.bittime)
                 rx_parity_bit = self.rx_line_state
             else:
                 rx_parity_bit = None
             # wait for stop bit
-            yield from self.sim.wait(self.bittime)
+            await self.sim.wait(self.bittime)
             if self.rx_line_state != 1:
                 self.stat['noise_counter'] += 1
                 continue
             # wait till end of stop bit
-            evt = yield from self.sim.wait(
+            evt = await self.sim.wait(
                 (self.stopbit - 0.5 - 0.1) * self.bittime,
                 lambda e: e['line'] == 0,
             )

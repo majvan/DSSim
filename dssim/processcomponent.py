@@ -28,10 +28,12 @@ class DSProcessComponent(DSComponent):
             name = type(self).__name__ + '.' + str(self._dscomponent_instances)
         super().__init__(self, name=name, *args, **kwargs)
         kwargs.pop('name', None), kwargs.pop('sim', None)  # remove the two arguments
-        if not inspect.isgeneratorfunction(self.process):
+        if inspect.isfunction(self.process):
             process = DSProcess(DSSchedulable(self.process)(*args, **kwargs), name=self.name+'.process', sim=self.sim)
-        else:
+        elif inspect.isgeneratorfunction(self.process) or inspect.iscoroutinefunction(self.process):
             process = DSProcess(self.process(*args, **kwargs), name=self.name+'.process', sim=self.sim)
+        else:
+            raise ValueError(f'The attribute {self.__class__}.process is is not method, generator, neither coroutine.')
         retval = process.schedule(0)
         self.scheduled_process = retval
         self.__class__._dscomponent_instances += 1
@@ -40,18 +42,18 @@ class DSProcessComponent(DSComponent):
         self.scheduled_process.signal({'object': event})
         #self.sim.schedule_event(0, {'object': event}, self.scheduled_process)
 
-    def wait(self, timeout=float('inf')):
+    async def wait(self, timeout=float('inf')):
         try:
-            retval = yield from self.sim.wait(timeout, cond=lambda e: True)
+            retval = await self.sim.wait(timeout, cond=lambda e: True)
             if retval is not None:
                 retval = retval['object']
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
 
-    def enter(self, queue, timeout=float('inf')):
+    async def enter(self, queue, timeout=float('inf')):
         try:
-            retval = yield from queue.put(timeout, self)
+            retval = await queue.put(timeout, self)
             if retval is not None:
                 retval = retval['object']
         except DSAbortException as exc:
@@ -65,9 +67,9 @@ class DSProcessComponent(DSComponent):
     def leave(self, queue,timeout=float('inf')):
         queue.remove(self)
 
-    def pop(self, queue, timeout=float('inf')):
+    async def pop(self, queue, timeout=float('inf')):
         try:
-            retval = yield from queue.get(timeout)
+            retval = await queue.get(timeout)
             assert len(retval) == 1
             if retval is not None:
                 retval = retval[0]
@@ -81,10 +83,18 @@ class DSProcessComponent(DSComponent):
             retval = retval[0]['object']
         return retval
 
-    def get(self, resource, amount=1, timeout=float('inf')):
+    async def get(self, resource, amount=1, timeout=float('inf')):
+        retval = await resource.get(timeout, amount)
+        return retval
+            
+    async def put(self, resource, *amount, timeout=float('inf')):
+        retval = await resource.put(timeout, *amount)
+        return retval
+
+    def gget(self, resource, amount=1, timeout=float('inf')):
         retval = yield from resource.get(timeout, amount)
         return retval
             
-    def put(self, resource, *amount, timeout=float('inf')):
-        retval = yield from resource.put(timeout, *amount)
+    def gput(self, resource, *amount, timeout=float('inf')):
+        retval = yield from resource.gput(timeout, *amount)
         return retval

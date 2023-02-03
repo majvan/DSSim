@@ -42,10 +42,10 @@ class IntegralLimiter(DSComponent):
         ''' Feed consumer handler '''
         self.buffer.append(event)
 
-    def push(self):
+    async def push(self):
         ''' Push another event after events accumlated over time '''
         while True:
-            yield from self.sim.wait(self.report_period)
+            await self.sim.wait(self.report_period)
             self.accumulated_rate += self.report_period * self.throughput
             limited_num = int(self.accumulated_rate)
             self.accumulated_rate -= limited_num
@@ -97,13 +97,13 @@ class Limiter(DSComponent):
             self.buffer.append(event)
             self.pusher.signal(True)
 
-    def _push(self):
+    async def _push(self):
         ''' Push another event after computed throughtput time '''
         previous_time = float('-inf')
         while True:
             # State 1: waiting for first event
             while len(self.buffer) <= 0:
-                yield from self.sim.wait(cond=lambda e: True)
+                await self.sim.wait(cond=lambda e: True)
                 self.report_period = self._update_period
             # State 2: waiting while having something in the buffer
             next_time = self.sim.time
@@ -114,6 +114,6 @@ class Limiter(DSComponent):
                     previous_time = self.sim.time
                     next_time = previous_time + self.report_period
                 wait_next = next_time - self.sim.time
-                yield from self.sim.wait(wait_next, cond=lambda e: True)
+                await self.sim.wait(wait_next, cond=lambda e: True)
                 self.report_period = self._update_period
                 next_time = previous_time + self.report_period

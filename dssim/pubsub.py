@@ -203,7 +203,7 @@ class DSProducer(DSComponent, IConsumer):
     def schedule_kw_event(self, time, **event):
         return self.sim.schedule_event(time, event, self)
         
-    def wait(self, timeout=float('inf'), cond=lambda e: False, val=True):
+    async def wait(self, timeout=float('inf'), cond=lambda e: False, val=True):
         with self.sim.consume(self):
-            retval = yield from self.sim.wait(timeout, cond, val)
+            retval = await self.sim.wait(timeout, cond, val)
         return retval

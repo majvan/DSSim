@@ -28,13 +28,13 @@ class Timer(DSComponent):
         self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
         self.proc = DSProcess(self.process(), name=self.name+'.process', sim=self.sim).schedule(0)
 
-    def process(self):
+    async def process(self):
         ''' Methods schedules new event depending on the counter '''
         remaining = self.period
         while True:
             if status == 'RUNNING':
                 last = self.sim.time
-                interrupt = yield from self.sim.wait(remaining, lambda e:True)  # wait with timeout
+                interrupt = await self.sim.wait(remaining, lambda e:True)  # wait with timeout
                 remaining = max(last + self.period - self.sim.time, 0)
                 if interrupt is None:  # timed out
                     tick_nr = tick_nr + 1
@@ -43,9 +43,9 @@ class Timer(DSComponent):
                     if self.counter <= 0:
                         self.status = 'STOPPED'
             elif self.status == 'PAUSED':
-                interrupt = yield from self.sim.wait(lambda e:True)  # wait for any state change
+                interrupt = await self.sim.wait(lambda e:True)  # wait for any state change
             else:  # self.status == 'STOPPED':
-                interrupt = yield from self.sim.wait(lambda e:True)  # wait for any state change
+                interrupt = await self.sim.wait(lambda e:True)  # wait for any state change
                 remaining = self.period
 
     def start(self, period=None, repeats=None):

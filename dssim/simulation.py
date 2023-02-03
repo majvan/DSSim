@@ -20,6 +20,7 @@ from collections.abc import Iterable
 import inspect
 from dssim.timequeue import TimeQueue
 from abc import abstractmethod
+import asyncio as myasyncio
 
 
 class DSAbortException(Exception):
@@ -44,6 +45,14 @@ class DSCondition:
 class DSAbsTime:
     def __init__(self, value):
         self.value = value
+
+class Awaitable:
+    def __init__(self, val=None):
+        self.val = val
+
+    def __await__(self):
+        retval = yield self.val
+        return retval
 
 
 class DSSubscriberContextManager:
@@ -116,7 +125,7 @@ class IConsumer:
         raise NotImplementedError('Abstract method, use derived classes')
 
 
-class DSSimulation:
+class DSSimulation(myasyncio.AbstractEventLoop):
     ''' The simulation is a which schedules the nearest (in time) events. '''
     sim_singleton = None
 
@@ -201,13 +210,17 @@ class DSSimulation:
 
         if hasattr(schedulable, '_schedule'):
             new_process = schedulable._schedule(time)
-        else:
+        elif inspect.iscoroutine(schedulable):
             new_process = self._scheduled_fcn(time, schedulable)
+        elif inspect.isgenerator(schedulable):
+            new_process = self._scheduled_gfcn(time, schedulable)
+        else:
+            raise ValueError(f'The assigned code {schedulable} is not generator, neither coroutine.')
         self.parent_process = new_process
         # The following will change the process default metadata cond
         self._kick(new_process)
         # Restore the default metadata cond by creating a new default one.
-        # It is useful for processes which will not use yield from sim.wait(...)
+        # It is useful for processes which will not use await sim.wait(...)
         self.create_metadata(new_process)
 
         self.parent_process = old_process
@@ -296,16 +309,25 @@ class DSSimulation:
         return event
 
 
-    def _scheduled_fcn(self, time, schedulable):
+    async def _scheduled_fcn(self, time, schedulable):
         ''' Start a schedulable process with possible delay '''
         try:
-            yield from self.wait(time)
+            await self.wait(time)
+        except DSAbortException as exc:
+            return
+        retval = await schedulable
+        return retval
+
+    def _scheduled_gfcn(self, time, schedulable):
+        ''' Start a schedulable process with possible delay '''
+        try:
+            yield from self.gwait(time)
         except DSAbortException as exc:
             return
         retval = yield from schedulable
         return retval
 
-    def _wait_for_event(self, val=None):
+    def _gwait_for_event(self, val=None):
         try:
             # Pass value to the feeder and wait for next event
             event = yield val
@@ -325,7 +347,7 @@ class DSSimulation:
             raise
         return event
 
-    def wait(self, timeout=float('inf'), cond=lambda e: False, val=True):
+    def gwait(self, timeout=float('inf'), cond=lambda e: False, val=True):
         ''' Wait for an event from producer for max. timeout time. The criteria which events to be
         accepted is given by cond. An accepted event returns from the wait function. An event which
         causes cond to be False is ignored and the function is waiting.
@@ -351,7 +373,7 @@ class DSSimulation:
         # Get the condition object (lambda / object / ...) from the process metadata
         metaobj.cond = cond
 
-        event = yield from self._wait_for_event(val)
+        event = yield from self._gwait_for_event(val)
 
         if event is not None and time != float('inf'):
             # If we terminated before timeout and the timeout event is on time queue- remove it
@@ -362,7 +384,7 @@ class DSSimulation:
             cond.cond_cleanup()
         return event
 
-    def check_and_wait(self, timeout=float('inf'), cond=lambda e: False, val=True):
+    def check_and_gwait(self, timeout=float('inf'), cond=lambda e: False, val=True):
         # This function can be used to run a pre-check for such conditions, which are
         # invariant to the passed event, for instance to check for a state of an object
         # so if the state matches, it returns immediately
@@ -374,7 +396,79 @@ class DSSimulation:
             if hasattr(cond, 'cond_cleanup'):
                 cond.cond_cleanup()
             return event  # return event immediately
-        retval = yield from self.wait(timeout, cond, val)
+        retval = yield from self.gwait(timeout, cond, val)
+        return retval
+
+    async def _wait_for_event(self, val=None):
+        try:
+            # Pass value to the feeder and wait for next event
+            event = await Awaitable(val)
+            # We received an event. In the lazy evaluation case, we would be now calling
+            # _check_cond and returning or raising an event only if the condition matches,
+            # otherwise we would be waiting in an infinite loop here.
+            # However we do an early evaluation of conditions- they are checked before
+            # calling send_object and we know that the conditions to return (or to raise an
+            # exception) are satisfied. See the code there for more info.
+
+            # Convert exception signal to a real exception
+            if isinstance(event, Exception):
+                raise event
+        except Exception as exc:
+            # If we got any exception, we will not use the other events anymore
+            self.delete(lambda e: e == (self.parent_process, None))
+            raise
+        return event
+
+    async def wait(self, timeout=float('inf'), cond=lambda e: False, val=True):
+        ''' Wait for an event from producer for max. timeout time. The criteria which events to be
+        accepted is given by cond. An accepted event returns from the wait function. An event which
+        causes cond to be False is ignored and the function is waiting.
+        '''
+
+        # Get from simulation the current process ID. The current process ID is the ID of
+        # the process which is parent - the most highest one in the yield stack structure.
+        # With such process the scheduler on timeout will kick the parent process,
+        # not a locally yield-ing subprocess.
+        # The reason why it is important is that if scheduler kicked the subprocess's
+        # _wait_for_event method, the return from the subprocess would not defer here, but rather
+        # just ended and disappeared in scheduler. But we need that the scheduler is said to plan
+        # another timeout for this process.
+        schedulable = self.parent_process
+    
+        # Re-compute abs/relative time to abs for the timeout
+        time = self._compute_time(timeout)
+        # Schedule the timeout to the time queue. The condition is only for higher performance
+        if time != float('inf'):
+            self.time_queue.add_element(time, (schedulable, None))
+
+        metaobj = self.get_process_metadata(schedulable)
+        # Get the condition object (lambda / object / ...) from the process metadata
+        metaobj.cond = cond
+
+        event = await self._wait_for_event(val)
+
+        if event is not None and time != float('inf'):
+            # If we terminated before timeout and the timeout event is on time queue- remove it
+            self.delete(lambda e: e == (schedulable, None))
+        if hasattr(cond, 'cond_value'):
+            event = cond.cond_value(event)
+        if hasattr(cond, 'cond_cleanup'):
+            cond.cond_cleanup()
+        return event
+
+    async def check_and_wait(self, timeout=float('inf'), cond=lambda e: False, val=True):
+        # This function can be used to run a pre-check for such conditions, which are
+        # invariant to the passed event, for instance to check for a state of an object
+        # so if the state matches, it returns immediately
+        # Otherwise it jumps to the waiting process.
+        _, event = self._check_cond(cond, self._TestObject())
+        if event:
+            if hasattr(cond, 'cond_value'):
+                event = cond.cond_value(event)
+            if hasattr(cond, 'cond_cleanup'):
+                cond.cond_cleanup()
+            return event  # return event immediately
+        retval = await self.wait(timeout, cond, val)
         return retval
 
     def _kick(self, schedulable):
@@ -544,7 +638,7 @@ class DSProcess(DSComponent, IConsumer):
     def __next__(self):
         ''' Gets next state, without pushing any particular event. '''
         try:
-            self.value = next(self.scheduled_generator)
+            self.value = self.scheduled_generator.send(None)
         except StopIteration as e:
             self.value = e.value
             self._finish()
@@ -595,15 +689,26 @@ class DSProcess(DSComponent, IConsumer):
         self.meta = _ProcessMetadata()
         return self.meta
 
-    def _scheduled_fcn(self, time):
+    def _scheduled_gfcn(self, time):
         ''' Start a schedulable process with possible delay '''
-        yield from self.sim.wait(time)
+        yield from self.sim.gwait(time)
         retval = yield from self.generator
+        return retval
+
+    async def _scheduled_fcn(self, time):
+        ''' Start a schedulable process with possible delay '''
+        await self.sim.wait(time)
+        retval = await self.generator
         return retval
 
     def _schedule(self, time):
         ''' This api is used with sim.schedule(...) '''
-        self.scheduled_generator = self._scheduled_fcn(time)
+        if inspect.iscoroutine(self.generator):
+            self.scheduled_generator = self._scheduled_fcn(time)
+        elif inspect.isgenerator(self.generator):
+            self.scheduled_generator = self._scheduled_gfcn(time)
+        else:
+            raise ValueError(f'The assigned code {self.generator} to the process {self} is not generator, neither coroutine.')
         return self
 
     def schedule(self, time):
@@ -614,7 +719,13 @@ class DSProcess(DSComponent, IConsumer):
         return inspect.getgeneratorstate(self.scheduled_generator) != inspect.GEN_CREATED
 
     def finished(self):
-        return inspect.getgeneratorstate(self.scheduled_generator) == inspect.GEN_CLOSED
+        if inspect.iscoroutine(self.scheduled_generator):
+            retval = inspect.getcoroutinestate(self.scheduled_generator) == inspect.CORO_CLOSED
+        elif inspect.isgenerator(self.scheduled_generator):
+            retval = inspect.getgeneratorstate(self.scheduled_generator) == inspect.GEN_CLOSED
+        else:
+            raise ValueError(f'The assigned code {self.generator} to the process {self} is not generator, neither coroutine.')
+        return retval
 
     def _finish(self):
         self.sim.cleanup(self)
@@ -624,9 +735,14 @@ class DSProcess(DSComponent, IConsumer):
         self.sim.cleanup(self)
         self.finish_tx.schedule_event(0, 'Fail')
 
-    def join(self, timeout=float('inf')):
+    async def join(self, timeout=float('inf')):
         with self.sim.observe_pre(self.finish_tx):
-            retval = yield from self.sim.check_and_wait(cond=lambda e:self.finished())
+            retval = await self.sim.check_and_wait(cond=lambda e:self.finished())
+        return retval
+
+    def gjoin(self, timeout=float('inf')):
+        with self.sim.observe_pre(self.finish_tx):
+            retval = yield from self.sim.check_and_gwait(cond=lambda e:self.finished())
         return retval
 
 _exiting = False  # global var to prevent repeating nested exception frames
