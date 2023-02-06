@@ -297,7 +297,7 @@ class DSSimulation(myasyncio.AbstractEventLoop):
     def signal(self, process, event, time=0):
         ''' Schedules an event object into timequeue. Finally the target process will be signalled. '''
         time = self._compute_time(time)
-        consumer = process or self.parent_process  # schedule to a process or to itself
+        consumer = process if process is not None else self.parent_process  # schedule to a process or to itself
         self.time_queue.add_element(time, (consumer, event))
         return event
 
