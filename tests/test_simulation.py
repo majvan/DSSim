@@ -68,11 +68,16 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertEqual(retval, 'Success')
 
     def test1_schedulable_fcn_as_process(self):
-        process = DSProcess(self.__fcn(), sim=DSSimulation())
+        sim = DSSimulation()
+        process = DSProcess(self.__fcn(), sim=sim)
         try:
             next(process)
         except StopIteration as e:
             retval = e.value
+        self.assertEqual(retval, 'Success')
+
+        process = DSProcess(self.__fcn(), sim=sim)
+        retval = sim.send(process, None)
         self.assertEqual(retval, 'Success')
         self.assertEqual(process.value, 'Success')
 
@@ -89,7 +94,8 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertEqual(retval, 'Success')
 
     def test3_generator_as_process(self):
-        process = DSProcess(self.__generator(), sim=DSSimulation())
+        sim = DSSimulation()
+        process = DSProcess(self.__generator(), sim=sim)
         retval = next(process)
         self.assertEqual(retval, 'First return')
         retval = next(process)
@@ -99,7 +105,16 @@ class TestDSSchedulable(unittest.TestCase):
         except StopIteration as e:
             retval = e.value
         self.assertEqual(retval, 'Success')
+
+        process = DSProcess(self.__generator(), sim=sim)
+        retval = next(process)
+        self.assertEqual(retval, 'First return')
+        retval = next(process)
+        self.assertEqual(retval, 'Second return')
+        retval = sim.send(process, None)
+        self.assertEqual(retval, 'Success')
         self.assertEqual(process.value, 'Success')
+
 
     def test4_send_to_generator(self):
         process = self.__generator()
@@ -120,7 +135,8 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertEqual(retval2, None)
 
     def test5_send_to_process(self):
-        process = DSProcess(self.__generator(), sim=DSSimulation())
+        sim = DSSimulation()
+        process = DSProcess(self.__generator(), sim=sim)
         retval = next(process)
         self.assertEqual(retval, 'First return')
         retval = process.send('anything0')
@@ -130,16 +146,19 @@ class TestDSSchedulable(unittest.TestCase):
         except StopIteration as e:
             retval2 = e.value
         self.assertEqual(retval2, 'Success')
+
+        sim = DSSimulation()
+        process = DSProcess(self.__generator(), sim=sim)
+        retval = next(process)
+        self.assertEqual(retval, 'First return')
+        retval = process.send('anything0')
+        self.assertEqual(retval, 'Second return')
+        retval = sim.schedule_event(1, 'anything0', process)
+        sim.run()
         self.assertEqual(process.value, 'Success')
 
-        try:
-            retval = process.send('anything2')
-        except StopIteration as e:
-            retval2 = e.value
-        self.assertEqual(retval2, None)
-        self.assertEqual(process.value, None)
 
-    def test6_send_to_generator(self):
+    def test6_send_abort_to_generator(self):
         process = self.__loopback_generator()
         retval = next(process)
         retval = process.send('from_test0')
@@ -147,7 +166,7 @@ class TestDSSchedulable(unittest.TestCase):
         retval = process.send(DSAbortException(producer='test'))
         self.assertTrue(isinstance(retval, DSAbortException))
 
-    def test7_send_to_generator_as_process(self):
+    def test7_send_abort_to_generator_as_process(self):
         process = DSProcess(self.__loopback_generator(), sim=DSSimulation())
         retval = next(process)
         retval = process.send('from_test0')
@@ -174,7 +193,7 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertEqual(process_waiting.value, 'Join called')
         with self.assertRaises(StopIteration):
             retval = next(process)
-        self.assertEqual(process.value, 'Success')
+        # self.assertEqual(process.value, 'Success')  # This will not work as the process.value is set only with simulation run
         retval = next(process_waiting)
         self.assertEqual(process_waiting.value, 'After process finished')
 
@@ -265,31 +284,37 @@ class TestConditionChecking(unittest.TestCase):
 
     def test1_check_storing_cond_in_metadata(self):
         ''' By calling wait, the metadata.cond should be stored '''
-        def my_process(value):
+        def my_process():
             if True:
                 return 100
             yield 101
 
         sim = DSSimulation()
         sim._wait_for_event = my_process
-        process = DSProcess(self.__my_process(), sim=sim)
+        process = DSProcess(my_process(), sim=sim)
         sim.parent_process = process
+        waitable = sim.gwait(cond='condition')
+        retval = next(waitable)
+        self.assertTrue(retval)
         try:
-            retval = next(sim.wait(cond='condition'))
+            retval = next(waitable)
         except StopIteration as e:
             retval = e.value
-        self.assertTrue(retval == 100)
+        self.assertEqual(retval, None)
         self.assertTrue(process.meta.cond == 'condition')
 
         condition = SomeObj()
         condition.cond_value = lambda e: 'condition value was computed in lambda'
         condition.cond_cleanup = Mock()
+        waitable = sim.gwait(cond=condition)
+        retval = next(waitable)
+        self.assertTrue(retval)
         try:
-            retval = next(sim.wait(cond=condition))
+            retval = next(waitable)
         except StopIteration as e:
             retval = e.value
+        self.assertEqual(retval, 'condition value was computed in lambda')
         self.assertTrue(process.meta.cond == condition)
-        self.assertTrue(retval == 'condition value was computed in lambda')
         condition.cond_cleanup.assert_called_once()
     
     def test2_check_cond(self):
@@ -354,10 +379,10 @@ class TestConditionChecking(unittest.TestCase):
         sim = DSSimulation()
         retval = 'abc'
         # The generator sim.check_and_wait yields in the middle with the value back, which is by default "True"
-        retval = next(sim.check_and_wait(cond=lambda c:False))
+        retval = next(sim.check_and_gwait(cond=lambda c:False))
         self.assertTrue(retval == True)
         try:
-            retval = next(sim.check_and_wait(cond=lambda c:True))
+            retval = next(sim.check_and_gwait(cond=lambda c:True))
         except StopIteration as e:
             retval = e.value
         self.assertTrue(isinstance(retval, object)) # we get back the object which was created in the check_and_wait function
@@ -366,7 +391,7 @@ class TestConditionChecking(unittest.TestCase):
         condition.cond_value = lambda e: 'condition value was computed in lambda'
         condition.cond_cleanup = Mock()
         try:
-            retval = next(sim.check_and_wait(cond=condition))
+            retval = next(sim.check_and_gwait(cond=condition))
         except StopIteration as e:
             retval = e.value
         self.assertTrue(retval == 'condition value was computed in lambda')
@@ -375,7 +400,7 @@ class TestConditionChecking(unittest.TestCase):
     def test6_wait_return(self):
         def my_process():
             yield 1
-            yield from self.sim.wait(cond=lambda e:True, val=2)
+            yield from self.sim.gwait(cond=lambda e:True, val=2)
             return 3
 
         self.sim = DSSimulation()
@@ -493,11 +518,11 @@ class TestSim(unittest.TestCase):
 
     def __my_wait_process(self):
         try:
-            event = yield from self.sim.wait(2)
+            event = yield from self.sim.gwait(2)
             self.__time_process_event(self.sim.time, None)
-            event = yield from self.sim.wait(cond=lambda e: 'data' in e)
+            event = yield from self.sim.gwait(cond=lambda e: 'data' in e)
             self.__time_process_event(self.sim.time, **event)
-            event = yield from self.sim.wait(cond=lambda e: True)
+            event = yield from self.sim.gwait(cond=lambda e: True)
             self.__time_process_event(self.sim.time, **event)
         except Exception as e:
             return e
@@ -528,7 +553,7 @@ class TestSim(unittest.TestCase):
         self.assertEqual(len(sim.time_queue), 0)
         self.assertEqual(sim.time, 0.9)
 
-    def test2_scheduling_events(self):
+    def test1_scheduling_events(self):
         ''' Assert working with time queue when pushing events '''
         sim = DSSimulation()
         sim.time_queue.add_element = Mock()
@@ -543,7 +568,7 @@ class TestSim(unittest.TestCase):
         with self.assertRaises(ValueError):
             sim.schedule_event(-0.5, event_obj)
 
-    def test3_deleting_events(self):
+    def test2_deleting_events(self):
         ''' Assert deleting from time queue when deleting events '''
         sim = DSSimulation()
         sim.time_queue.delete = Mock()
@@ -552,7 +577,7 @@ class TestSim(unittest.TestCase):
         sim.time_queue.delete.assert_called_once_with(condition)
         sim.time_queue.delete.reset_mock()
 
-    def test4_scheduling(self):
+    def test3_scheduling(self):
         ''' Assert the delay of scheduled process '''
         self.sim = DSSimulation()
         my_process = self.__my_time_process()
@@ -563,7 +588,7 @@ class TestSim(unittest.TestCase):
         parent_process = self.sim.schedule(2, my_process)
         self.assertEqual(len(self.sim.time_queue), 1)
 
-    def test5_scheduling(self):
+    def test4_scheduling(self):
         self.sim = DSSimulation()
         producer = SomeObj()
         producer.send = Mock()
@@ -571,7 +596,7 @@ class TestSim(unittest.TestCase):
         retval = self.sim.send_object(producer, event_obj)
         producer.send.assert_called_once_with(event_obj)
 
-    def test6_scheduling(self):
+    def test5_scheduling(self):
         ''' Assert working with time queue when pushing events '''
         self.sim = DSSimulation()
         my_process = self.__my_time_process()
@@ -605,12 +630,12 @@ class TestSim(unittest.TestCase):
         self.__time_process_event.assert_called_once_with(2.5, {'abort': True, 'info': {'testing': -1}})
         self.__time_process_event.reset_mock()
 
-    def test7_schedulable_fcn(self):
+    def test6_schedulable_fcn(self):
         self.sim = DSSimulation()
         # The following has to pass without raising an error
         self.sim._kick(self.__my_schedulable_handler())
 
-    def test8_run_process(self):
+    def test7_run_process(self):
         ''' Assert event loop behavior for process '''
         self.sim = DSSimulation()
         self.sim.parent_process = Mock()
@@ -648,7 +673,7 @@ class TestSim(unittest.TestCase):
         self.__time_process_event.reset_mock()
 
 
-    def test9_run_producer(self):
+    def test8_run_producer(self):
         self.sim = DSSimulation()
         producer = SomeObj()
         producer.send = Mock()
@@ -675,7 +700,7 @@ class TestSim(unittest.TestCase):
         self.assertEqual(num_events, 1)
 
 
-    def test10_waiting(self):
+    def test9_waiting(self):
         self.sim = DSSimulation()
         # the following process will create events for the time queue process
         process = self.__my_wait_process()
@@ -687,7 +712,7 @@ class TestSim(unittest.TestCase):
         self.sim.schedule_event(2, {'producer': producer, 'data': 2}, process)
         self.sim.schedule_event(3, {'producer': producer, 'data': 3}, process)
         retval = self.sim.run(5)
-        self.assertEqual(retval, (3, 4))  # 3 events scheduled here + 1 timeout scheduled by the __my_wait_process
+        self.assertEqual(retval, (3, 4))  # 3 events scheduled here + 1 event = the process finished itself
         # first event is dropped, because though it was taken by the time_process, the process condition was
         # to wait till timeout
         calls = [
@@ -697,9 +722,24 @@ class TestSim(unittest.TestCase):
         ]
         self.__time_process_event.assert_has_calls(calls)
 
-    def test11_timeout_cleanup(self):
+    def testA_return_cleanup(self):
+        def my_process2(sim, alwaystrue=True):
+            if alwaystrue:
+                return 100
+            yield from sim.gwait(1)
+        sim = DSSimulation()
+        process = DSProcess(my_process2(sim), sim=sim)
+        sim.parent_process = process
+        sim._kick(process)
+        sim.schedule_event(1, {'data': 1}, process)
+        sim.schedule_event(2, {'data': 2}, process)
+        sim.schedule_event(3, {'data': 3}, process)
+        retval = sim.run()
+        self.assertEqual(retval, (1, 2))  # 2 events: first processed created a IterError, the second event = end of process
+
+    def testB_timeout_cleanup(self):
         def my_process(sim):
-            retval = yield from sim.wait(1)
+            retval = yield from sim.gwait(1)
             yield  # wait here with no interaction to the time_queue
 
         sim = DSSimulation()
@@ -708,11 +748,11 @@ class TestSim(unittest.TestCase):
         sim.schedule_event(4, 'some_event', process=process)
         retval = process.send(None)  # go to the waiting
         self.assertTrue(len(sim.time_queue) == 2)
-        retval = process.send('value')  # sending some event makesthat the waiting timeout will be removed
+        retval = process.send('value')  # sending some event makes that the waiting timeout will be removed
         # ensure that the some_event scheduled in the future for the process is still in queue
         self.assertTrue(len(sim.time_queue) == 1)
 
-    def test12_abort(self):
+    def testC_abort(self):
         self.sim = DSSimulation()
         # the following process will create events for the time queue process
         process = self.__my_wait_process()
@@ -734,4 +774,4 @@ class TestSim(unittest.TestCase):
         self.__time_process_event.assert_has_calls([])
         self.assertEqual(len(self.sim.time_queue), 1)  # there are still timeout event left from process
         self.sim.abort(process, testing=-1),  # abort after time
-        self.assertEqual(len(self.sim.time_queue), 0)  # test is the timeout event was removed after abort
+        self.assertEqual(len(self.sim.time_queue), 0)  # test if the timeout event was removed after abort

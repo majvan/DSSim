@@ -197,7 +197,7 @@ class DSSimulation(myasyncio.AbstractEventLoop):
 
     def schedule(self, time, schedulable):
         ''' Schedules the start of a (new) process. '''
-        if not isinstance(schedulable, Iterable):
+        if not isinstance(schedulable, Iterable) and not inspect.iscoroutine(schedulable):
             raise ValueError('The provided function is probably missing @DSSchedulable decorator')
         if time < 0:
             raise ValueError('The time is relative from now and cannot be negative')
@@ -265,9 +265,14 @@ class DSSimulation(myasyncio.AbstractEventLoop):
             self.parent_process = schedulable
             retval = schedulable.send(event)
         except StopIteration as exc:
-            retval = exc.value
-            self.cleanup(schedulable)
+            if hasattr(schedulable, 'finish'):
+                retval = schedulable.finish(exc)
+            else:
+                retval = exc.value
+                self.cleanup(schedulable)
         except ValueError as exc:
+            if hasattr(schedulable, 'fail'):
+                retval = schedulable.fail(exc)
             global _exiting
             if 'generator already executing' in str(exc) and not _exiting:
                 _exiting = True
@@ -474,7 +479,7 @@ class DSSimulation(myasyncio.AbstractEventLoop):
     def _kick(self, schedulable):
         ''' Provides first kick (run) of a schedulable process. '''
         try:
-            next(schedulable)
+            schedulable.send(None)  # next() would be enough for generators, but not for coroutines
         except StopIteration as exp:
             pass
 
@@ -489,7 +494,7 @@ class DSSimulation(myasyncio.AbstractEventLoop):
         # Remove all the events for this schedulable
         self.time_queue.delete(lambda e:e[0] is schedulable)
 
-    def run(self, up_to=None):
+    def run(self, up_to=None, future=object()):
         ''' This is the simulation machine. In a loop it takes first event and process it.
         The loop ends when the queue is empty or when the simulation time is over.
         '''
@@ -499,14 +504,19 @@ class DSSimulation(myasyncio.AbstractEventLoop):
             # Get the first event on the queue
             tevent, (process, event_obj) = self.time_queue.get0()
             if tevent >= up_to:
+                retval_time = self.time
+                self.time = up_to
+                break
+            if event_obj == future:
+                retval_time = self.time
                 break
             self.num_events += 1
             self.time = tevent
             self.time_queue.pop()
             self.send(process, event_obj)
-
-        retval_time = self.time
-        self.time = up_to
+        else:
+            retval_time = self.time
+            self.time = up_to
         return retval_time, self.num_events
 
     def observe_pre(self, *components, **kwargs):
@@ -518,6 +528,37 @@ class DSSimulation(myasyncio.AbstractEventLoop):
     def observe_post(self, *components, **kwargs):
         return DSSubscriberContextManager(self.parent_process, 'post', components, **kwargs)
 
+    ''' Following is a mixin for asyncio event loop'''
+    def run_forever(self):
+        retval = self.run()
+        return retval
+
+    def run_until_complete(self, future):
+        if inspect.iscoroutine(future):
+            future = DSProcess(future, sim=self)  # create a DSProcess, Task
+            future.schedule(0)
+        retval = self.run(future=future)
+        return retval
+    
+    def stop(self):
+        return
+
+    def is_running(self):
+        return False
+    
+    def is_closed(self):
+        return False
+    
+    def close(self):
+        return False
+    
+    def call_later(self, delay, callback, *args, context=None):
+        cb = DSSchedulable(DSCallback(callback(*args)))
+        self.schedule(delay, cb)
+    
+    def call_at(self, time, callback, *args, context=None):
+        cb = DSSchedulable(DSCallback(callback(*args)))
+        self.schedule(DSAbsTime(time), cb)
 
 class DSComponent:
     ''' DSComponent is any component which uses simulation (sim) environment.
@@ -637,30 +678,12 @@ class DSProcess(DSComponent, IConsumer):
 
     def __next__(self):
         ''' Gets next state, without pushing any particular event. '''
-        try:
-            self.value = self.scheduled_generator.send(None)
-        except StopIteration as e:
-            self.value = e.value
-            self._finish()
-            raise
-        except Exception as e:
-            self.value = e
-            self._fail()
-            raise
+        self.value = self.scheduled_generator.send(None)
         return self.value
 
     def send(self, event):
         ''' Pushes an event to the task and gets new state. '''
-        try:
-            self.value = self.scheduled_generator.send(event)
-        except StopIteration as e:
-            self.value = e.value
-            self._finish()
-            raise
-        except Exception as e:
-            self.value = e
-            self._fail()
-            raise
+        self.value = self.scheduled_generator.send(event)
         return self.value
 
     def signal(self, event):
@@ -680,9 +703,9 @@ class DSProcess(DSComponent, IConsumer):
         try:
             self.value = self.send(DSAbortException(producer, **info))
         except StopIteration as e:
-            self._finish()
+            self.finish(e)
         except Exception as e:
-            self._fail()
+            self.fail(e)
         return self.value
 
     def create_metadata(self):
@@ -727,11 +750,14 @@ class DSProcess(DSComponent, IConsumer):
             raise ValueError(f'The assigned code {self.generator} to the process {self} is not generator, neither coroutine.')
         return retval
 
-    def _finish(self):
+    def finish(self, exc):
+        self.value = exc.value
         self.sim.cleanup(self)
-        self.finish_tx.schedule_event(0, 'Ok')
+        # The last event is the process itself. This enables to wait for a process as an asyncio's Future 
+        self.finish_tx.schedule_event(0, self)
+        return self.value
 
-    def _fail(self):
+    def fail(self, exc):
         self.sim.cleanup(self)
         self.finish_tx.schedule_event(0, 'Fail')
 
