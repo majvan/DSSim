@@ -537,7 +537,10 @@ class DSSimulation(myasyncio.AbstractEventLoop):
         if inspect.iscoroutine(future):
             future = DSProcess(future, sim=self)  # create a DSProcess, Task
             future.schedule(0)
-        retval = self.run(future=future)
+        # The loop is required because we wait for event 'process' which is produced by the process finish().
+        # However, other components may use the process as an event for inter-process communication
+        while not future.finished():
+            retval = self.run(future=future)
         return retval
     
     def stop(self):
