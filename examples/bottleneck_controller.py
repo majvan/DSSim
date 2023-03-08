@@ -33,19 +33,19 @@ class MCU(DSComponent):
 
     def limit_controller(self):
         self.limiter.set_throughput(10)  # 0 sec
-        yield from self.sim.wait(1)
+        yield from self.sim.gwait(1)
         self.limiter.set_throughput(0)  # 1 sec
-        yield from self.sim.wait(1)
+        yield from self.sim.gwait(1)
         self.limiter.set_throughput(10)  # 2 sec
-        yield from self.sim.wait(1)
+        yield from self.sim.gwait(1)
         self.limiter.set_throughput(0)  # 3 sec
-        yield from self.sim.wait(1)
+        yield from self.sim.gwait(1)
         self.limiter.set_throughput(20)  # 4 sec
-        yield from self.sim.wait(1)
+        yield from self.sim.gwait(1)
         self.limiter.set_throughput(0)  # 5 sec
-        yield from self.sim.wait(1)
+        yield from self.sim.gwait(1)
         self.limiter.set_throughput(30)  # 6 sec
-        yield from self.sim.wait(1)
+        yield from self.sim.gwait(1)
         self.limiter.set_throughput(0)  # 7 sec
 
     def generator(self, rate):
@@ -53,7 +53,7 @@ class MCU(DSComponent):
         delay = 1 / rate
         while True:
             previous_time = self.sim.time
-            yield from self.sim.wait(delay)
+            yield from self.sim.gwait(delay)
             n += 1
             # print('Event', n, 'produced @', self.sim.time)
             self._producer.signal(n)  # feed the producer with some event

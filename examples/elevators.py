@@ -124,7 +124,7 @@ class Elevator(DSProcessComponent):
             with self.sim.consume(self.requests_tx):
                 obj = yield from self.sim.check_and_wait(cond=len(self.internal_requests) + len(self.external_requests) > 0)
             if self.sim.is_event(obj) and obj['event'] == 'from elevator':
-                yield from self.sim.wait(10)  # timeout for closing door
+                yield from self.sim.gwait(10)  # timeout for closing door
             self.last_floor_time = self.sim.time()
             while len(self.internal_requests) + len(self.external_requests) > 0:
                 # Policy to select the next destination based on the requests and direction
@@ -163,7 +163,7 @@ class Elevator(DSProcessComponent):
                     next_delta = self.next_time - self.sim.time
                 # Wait for the next change in the requests or for the event we reach the next floor
                 with self.sim.consume(self.requests_tx):
-                    obj = yield from self.sim.wait(next_delta, cond=lambda e:True)  # get any new request event
+                    obj = yield from self.sim.gwait(next_delta, cond=lambda e:True)  # get any new request event
                 if obj is None:
                     # new floor reached
                     self.last_floor = self.next_floor
@@ -171,7 +171,7 @@ class Elevator(DSProcessComponent):
                     self.external_requests.remove(self.last_floor)
                     self.internal_requests.remove(self.last_floor)
                     self.arrival_tx.signal(event='arrived')
-                    yield from self.sim.wait(10)  # timeout for closing door
+                    yield from self.sim.gwait(10)  # timeout for closing door
                     if len(self.container) == 0:
                         break
 

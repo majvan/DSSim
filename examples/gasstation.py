@@ -26,27 +26,27 @@ class Car(DSProcessComponent):
     def process(self):
         fuel_tank_level = randint(*FUEL_TANK_LEVEL)
         print(f'{sim.time} {self} waiting for a gas station...')
-        yield from self.get(gas_station)
+        yield from self.gget(gas_station)
         liters_required = FUEL_TANK_SIZE - fuel_tank_level
         print(f'{sim.time} {self} waiting for {liters_required} liters of fuel...')
         if (fuel_pump.amount - liters_required) / fuel_pump.capacity * 100 < THRESHOLD:
             print(f'{sim.time} {self} calling truck for the fuel...')
             TankTruck(sim=self.sim)
         print(f'{sim.time} {self} going to tank {liters_required} liters...')
-        yield from self.get(fuel_pump, liters_required)
+        yield from self.gget(fuel_pump, liters_required)
         print(f'{sim.time} {self} starting to tank {liters_required} liters...')
-        yield from self.sim.wait(int(liters_required / REFUELING_SPEED)) # int is not needed
+        yield from self.sim.gwait(int(liters_required / REFUELING_SPEED)) # int is not needed
         print(f'{sim.time} {self} filled tanking of {liters_required} liters and leaving.')
-        yield from self.put(gas_station)
+        yield from self.gput(gas_station)
 
 
 class TankTruck(DSProcessComponent):
     def process(self):
         print(f'{sim.time} {self} starting...')
-        yield from self.sim.wait(TANK_TRUCK_TIME)
+        yield from self.sim.gwait(TANK_TRUCK_TIME)
         amount = fuel_pump.capacity - fuel_pump.amount
         print(f'{sim.time} {self} at station, {fuel_pump.amount}/{fuel_pump.capacity} capacity, adding {amount} fuel...')
-        yield from self.put(fuel_pump, amount)
+        yield from self.gput(fuel_pump, amount)
         print(f'{sim.time} {self} leaving station after {amount} of new fuel, filled to {fuel_pump.amount}.')
         
 
@@ -57,7 +57,7 @@ class CarGenerator(DSProcessComponent):
 
     def process(self):
         while True:
-            yield from self.sim.wait(randint(*T_INTER))
+            yield from self.sim.gwait(randint(*T_INTER))
             Car(sim=self.sim)
 
 if __name__ == '__main__':

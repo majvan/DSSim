@@ -53,6 +53,14 @@ class Resource(DSComponent):
         self.amount += amount
         self.tx_changed.schedule_event(0, 'resource changed')
 
+    def gput(self, timeout=float('inf'), amount=1):
+        ''' Put amount into the resource pool.  '''
+        with self.sim.consume(self.tx_changed):
+            retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
+        self.amount += amount
+        self.tx_changed.schedule_event(0, 'resource changed')
+
+
     def get_nowait(self, amount=1):
         if amount > self.amount:
             retval = None
@@ -65,6 +73,15 @@ class Resource(DSComponent):
         ''' Get resource. If the resource has not enough amount, wait to have enough requested amount. '''
         with self.sim.consume(self.tx_changed):
             retval = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount >= amount)
+        if retval is not None:
+            self.amount -= amount
+            self.tx_changed.schedule_event(0, 'resource changed')
+        return retval
+
+    def gget(self, timeout=float('inf'), amount=1):
+        ''' Get resource. If the resource has not enough amount, wait to have enough requested amount. '''
+        with self.sim.consume(self.tx_changed):
+            retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount >= amount)
         if retval is not None:
             self.amount -= amount
             self.tx_changed.schedule_event(0, 'resource changed')

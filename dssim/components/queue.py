@@ -65,6 +65,15 @@ class Queue(DSComponent, IConsumer):
             self.tx_changed.schedule_event(0, 'queue changed')
         return retval
 
+    def gput(self, timeout=float('inf'), *obj):
+        ''' Put an event into queue. The event can be consumed anytime in the future. '''
+        with self.sim.consume(self.tx_changed):
+            retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)  # wait while first element does not match the cond
+        if retval is not None:
+            self.queue += list(obj)
+            self.tx_changed.schedule_event(0, 'queue changed')
+        return retval
+
     def get_nowait(self, amount=1, cond=lambda e: True):
         if len(self) >= amount and cond(self.queue[:amount]):
             retval = self.queue[:amount]
@@ -78,6 +87,16 @@ class Queue(DSComponent, IConsumer):
         ''' Get an event from queue. If the queue is empty, wait for the closest event. '''
         with self.sim.consume(self.tx_changed):
             retval = await self.sim.check_and_wait(timeout, cond=lambda e:len(self) >= amount and cond(self.queue[0]))  # wait while first element does not match the cond
+        if retval is not None:
+            retval = self.queue[:amount]
+            self.queue = self.queue[amount:]
+            self.tx_changed.schedule_event(0, 'queue changed')
+        return retval
+
+    def gget(self, timeout=float('inf'), amount=1, cond=lambda e: True):
+        ''' Get an event from queue. If the queue is empty, wait for the closest event. '''
+        with self.sim.consume(self.tx_changed):
+            retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e:len(self) >= amount and cond(self.queue[0]))  # wait while first element does not match the cond
         if retval is not None:
             retval = self.queue[:amount]
             self.queue = self.queue[amount:]

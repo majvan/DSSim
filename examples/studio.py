@@ -28,7 +28,7 @@ class Studio(DSComponent):
 
     def speaker_process(self):
         try:
-            yield from sim.wait(randint(20, 40))
+            yield from sim.gwait(randint(20, 40))
             print('Speaker finished')
             self.stat['finish'] += 1
             self.sim.send(self.moderator, 'finished')
@@ -39,7 +39,7 @@ class Studio(DSComponent):
     def moderator_process(self):
         for s in self.speakers:
             self.sim.schedule(0, s)  # Invite next speaker
-            result = yield from sim.wait(30, cond=lambda e: True)
+            result = yield from sim.gwait(30, cond=lambda e: True)
             if result is None:
                 # We finished with timeout
                 self.sim.abort(s, msg='No time left')

@@ -21,27 +21,26 @@ import random
 
 
 class PrinceGenerator(DSProcessComponent):
-    def process(self):
+    async def process(self):
         while True:
-            yield from self.sim.wait(int(random.expovariate(1/20)))  # every 10-20 years othere's a new heir of the throne
+            await self.sim.wait(int(random.expovariate(1/20)))  # every 10-20 years othere's a new heir of the throne
             Prince()
 
 
 class Prince(DSProcessComponent):
-    def process(self):
-        global kings, lastkingdied
+    async def process(self):
+        global kingdom, kings, lastkingdied
         self.live_till = self.sim.time + random.randint(60, 90)
         print(self.sim.time, self, "going to live till", self.live_till)
         if not kingdom.locked():  # there is no king, so this prince will become king, immediately
             kings.append(("no king", lastkingdied, self.sim.time, self.sim.time - lastkingdied))
-        with kingdom:  # The mutex will be released automatically. Useful for missing locked mutex by exception
-            event = yield from kingdom.lock(_abs(self.live_till))  # we have to obtain lock anyway
+        async with kingdom.open(_abs(self.live_till)) as event:  # The mutex will be released automatically after closing block.
             if not event:  # timeout returns None event
                 print(self.sim.time, self, "dies before getting to the throne")
                 return
             print(self.sim.time, self, "Vive le roi!")
             kings.append((self.name, self.sim.time, self.live_till, self.live_till - self.sim.time))
-            yield from self.sim.wait(_abs(self.live_till))
+            await self.sim.wait(_abs(self.live_till))
             lastkingdied = self.sim.time
             print(self.sim.time, self, "Le roi est mort.")
 

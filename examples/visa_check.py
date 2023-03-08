@@ -35,7 +35,7 @@ class Person(DSComponent):
 
     def wait_in_queue(self):
         try:
-            wait = yield from sim.wait(self.max_waiting_time)
+            wait = yield from sim.gwait(self.max_waiting_time)
             self.queue.remove({'person': self})  # remove myself from the queue and return the waiting process
             try:
                 first_person = None
@@ -70,7 +70,7 @@ class VisaCheck(DSComponent):
             except Exception as e:
                 pass
             print(f'{self.sim.time:<5} {self}: Waiting for a person; first one is {first_person}')
-            event = yield from self.queue.get(cond=lambda e:e['person'].info in self.info, timeout=self.max_waiting_time)
+            event = yield from self.queue.gget(cond=lambda e:e['person'].info in self.info, timeout=self.max_waiting_time)
             if event is None:
                 print(f'\033[0;31m{sim.time:<5} {self}: No person in the queue, closing.\033[0m')
                 return
@@ -85,7 +85,7 @@ class VisaCheck(DSComponent):
                 pass
 
             print(f'{sim.time:<5} {self}: Going to process {person} for {busy} minutes; first one is {first_person}')
-            yield from sim.wait(busy)
+            yield from sim.gwait(busy)
             print(f'{sim.time:<5} {self}: {person} done.')
             self.stat['processed'] += 1
 
@@ -105,7 +105,7 @@ def eu_person_generator():
             person.abort_waiting()
             print(f'{sim.time:<5} {person}: queue too long, giving up, I do not queue.')
         busy = randint(3, 6)
-        yield from sim.wait(busy)
+        yield from sim.gwait(busy)
         i += 1
 
 def ww_person_generator():
@@ -120,7 +120,7 @@ def ww_person_generator():
             person.abort_waiting()
             print(f'{sim.time:<5} {person}: queue too long, giving up, I do not queue.')
         busy = randint(3, 6)
-        yield from sim.wait(busy)
+        yield from sim.gwait(busy)
         i += 1
 
 @DSSchedulable

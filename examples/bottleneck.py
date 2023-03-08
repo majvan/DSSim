@@ -31,12 +31,12 @@ class MCU(DSComponent):
         ''' This function has to be called after producers are registered '''
         DSProcess(self.generator(average_rate=1.2), name=self.name+'.(internal) generator process', sim=self.sim).schedule(0)
 
-    def generator(self, average_rate):
+    async def generator(self, average_rate):
         n = 0
         average_sleep = 1 / average_rate
         while True:
             delay = uniform(0, 2 * average_sleep)
-            yield from self.sim.wait(delay)
+            await self.sim.wait(delay)
             n += 1
             print('Event', n, 'produced @', self.sim.time)
             self._producer.signal(n)  # feed the producer with some event

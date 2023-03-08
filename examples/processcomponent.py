@@ -7,7 +7,7 @@ class CustomerGenerator(DSProcessComponent):
     def process(self):
         while True:
             Customer()
-            yield from self.sim.wait(7) # randint(5, 15))
+            yield from self.sim.gwait(7) # randint(5, 15))
 
 class Customer(DSProcessComponent):
     def process(self):
@@ -18,7 +18,7 @@ class Customer(DSProcessComponent):
             #self.sim.print_trace("", "", "balked")
             return
         print(f'{sim.time} {self} waiting in line')
-        ret = yield from self.wait(50)  # wait maximum 50 for signal from clerk
+        ret = yield from self.gwait(50)  # wait maximum 50 for signal from clerk
         if ret is None:
             print(f'{sim.time} {self} reneged')
             self.leave(waitingline)
@@ -26,16 +26,16 @@ class Customer(DSProcessComponent):
             #self.sim.print_trace("", "", "reneged")
         else:
             print(f'{sim.time} {self} being serviced')
-            yield from self.wait()  # wait for service to be completed
+            yield from self.gwait()  # wait for service to be completed
 
 
 class Clerk(DSProcessComponent):
     def process(self):
         while True:
-            customer = yield from self.pop(waitingline)  # take somebody from waiting line
+            customer = yield from self.gpop(waitingline)  # take somebody from waiting line
             customer.signal('start clerk processing')  # get the customer out of it's hold(50)
             print(f'{sim.time} {self} starting processing {customer}')
-            yield from self.wait(30)  # process with customer 30
+            yield from self.gwait(30)  # process with customer 30
             print(f'{sim.time} {self} finished processing {customer}')
 
             customer.signal('stop clerk processing')  # get the customer out of it's hold(50)

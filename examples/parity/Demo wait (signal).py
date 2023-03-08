@@ -23,7 +23,7 @@ import random
 class PrinceGenerator(DSProcessComponent):
     def process(self):
         while True:
-            yield from self.sim.wait(int(random.expovariate(1/20)))  # every 10-20 years othere's a new heir of the throne
+            yield from self.sim.gwait(int(random.expovariate(1/20)))  # every 10-20 years othere's a new heir of the throne
             Prince()
 
 
@@ -42,7 +42,7 @@ class Prince(DSProcessComponent):
         king = self
         print(self.sim.time, self, "Vive le roi!")
         kings.append((self.name, self.sim.time, self.live_till, self.live_till - self.sim.time))
-        yield from self.sim.wait(_abs(self.live_till))
+        yield from self.sim.gwait(_abs(self.live_till))
         king, lastkingdied = None, self.sim.time
         print(self.sim.time, self, "Le roi est mort.")
         king_died.signal('king died')

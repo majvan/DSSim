@@ -46,7 +46,7 @@ class MyComponent(DSComponent):
             self.sm.signal(code)
             self.stat['tries'] += 1
             # 2 ms to generate the code, send it and check the status of unlock
-            yield from self.sim.wait(0.002)
+            yield from self.sim.gwait(0.002)
 
     def attacker2(self):
         ''' Attacker tries to guess that the code once becomes 1-1-1-1 '''
@@ -54,22 +54,22 @@ class MyComponent(DSComponent):
             self.sm.signal(1)
             self.stat['tries'] += 1
             # 500 us to generate the code, send it and check the status of unlock
-            yield from self.sim.wait(0.0005)
+            yield from self.sim.gwait(0.0005)
 
     def locker_state_machine(self):
         while True:
             lock_code = [randint(0, 100), randint(0, 100), randint(0, 100), randint(0, 100)]
             while True:
-                rv = yield from self.sim.wait(0.01, cond=lambda e: e == lock_code[0])
+                rv = yield from self.sim.gwait(0.01, cond=lambda e: e == lock_code[0])
                 if rv is None:
                     break
-                rv = yield from self.sim.wait(0.01, cond=lambda e: e == lock_code[1])
+                rv = yield from self.sim.gwait(0.01, cond=lambda e: e == lock_code[1])
                 if rv is None:
                     break
-                rv = yield from self.sim.wait(0.01, cond=lambda e: e == lock_code[2])
+                rv = yield from self.sim.gwait(0.01, cond=lambda e: e == lock_code[2])
                 if rv is None:
                     break
-                rv = yield from self.sim.wait(0.01, cond=lambda e: e == lock_code[3])
+                rv = yield from self.sim.gwait(0.01, cond=lambda e: e == lock_code[3])
                 if rv is None:
                     break
                 self.stat['success'] += 1

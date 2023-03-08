@@ -58,7 +58,7 @@ class VisitorGenerator(DSProcessComponent):
             else:
                 iat = 3600 / load
                 r = random.uniform(0.5, 1.5)
-                yield from self.sim.wait(r * iat)
+                yield from self.sim.gwait(r * iat)
 
 
 class Visitor(DSProcessComponent):
@@ -77,7 +77,7 @@ class Visitor(DSProcessComponent):
         for car in cars:
             car.signal('visitor waiting')
 
-        yield from self.sim.wait(cond=lambda e:True)
+        yield from self.sim.gwait(cond=lambda e:True)
 
 
 class Car(DSProcessComponent):
@@ -96,16 +96,16 @@ class Car(DSProcessComponent):
         while True:
             if self.direction == still:
                 if not requests:
-                    yield from self.sim.wait(cond=lambda e:True)
+                    yield from self.sim.gwait(cond=lambda e:True)
             if self.count_to_floor(self.floor) > 0:
-                yield from self.sim.wait(dooropen_time)
+                yield from self.sim.gwait(dooropen_time)
                 dooropen = True
                 for visitor in self.visitors:
                     if visitor.tofloor == self.floor:
                         visitor.leave(self.visitors)
                         print(f'{visitor} left {self} at floor {self.floor.n}')
                         visitor.signal('out from car')
-                yield from self.sim.wait(exit_time)
+                yield from self.sim.gwait(exit_time)
 
             if self.direction == still:
                 self.direction = up  # just random
@@ -115,7 +115,7 @@ class Car(DSProcessComponent):
                     del requests[self.floor, self.direction]
 
                     if not dooropen:
-                        yield from self.sim.wait(dooropen_time)
+                        yield from self.sim.gwait(dooropen_time)
                         dooropen = True
                     for visitor in self.floor.visitors:
                         if visitor.direction == self.direction:
@@ -123,7 +123,7 @@ class Car(DSProcessComponent):
                                 visitor.leave(self.floor.visitors)
                                 visitor.enter_nowait(self.visitors)
                                 print(f'{visitor} enter {self} at floor {self.floor.n}')
-                        yield from self.sim.wait(enter_time)
+                        yield from self.sim.gwait(enter_time)
                     if self.floor.count_in_direction(self.direction) > 0:
                         if not (self.floor, self.direction) in requests:
                             requests[self.floor, self.direction] = self.sim.time
@@ -140,12 +140,12 @@ class Car(DSProcessComponent):
                 else:
                     self.direction = still
             if dooropen:
-                yield from self.sim.wait(doorclose_time)
+                yield from self.sim.gwait(doorclose_time)
                 dooropen = False
 
             if self.direction != still:
                 self.nextfloor = floors[self.floor.n + self.direction]
-                yield from self.sim.wait(move_time)
+                yield from self.sim.gwait(move_time)
                 self.floor = self.nextfloor
                 print(f'{self} on floor {self.floor.n}')
 

@@ -51,9 +51,27 @@ class DSProcessComponent(DSComponent):
             self.scheduled_process.abort()
         return retval
 
+    def gwait(self, timeout=float('inf')):
+        try:
+            retval = yield from self.sim.gwait(timeout, cond=lambda e: True)
+            if retval is not None:
+                retval = retval['object']
+        except DSAbortException as exc:
+            self.scheduled_process.abort()
+        return retval
+
     async def enter(self, queue, timeout=float('inf')):
         try:
             retval = await queue.put(timeout, self)
+            if retval is not None:
+                retval = retval['object']
+        except DSAbortException as exc:
+            self.scheduled_process.abort()
+        return retval
+
+    def genter(self, queue, timeout=float('inf')):
+        try:
+            retval = yield from queue.gput(timeout, self)
             if retval is not None:
                 retval = retval['object']
         except DSAbortException as exc:
@@ -77,6 +95,16 @@ class DSProcessComponent(DSComponent):
             self.scheduled_process.abort()
         return retval
 
+    def gpop(self, queue, timeout=float('inf')):
+        try:
+            retval = yield from queue.gget(timeout)
+            assert len(retval) == 1
+            if retval is not None:
+                retval = retval[0]
+        except DSAbortException as exc:
+            self.scheduled_process.abort()
+        return retval
+
     def pop_nowait(self, queue):
         retval = queue.get_nowait()
         if retval is not None:
@@ -87,14 +115,14 @@ class DSProcessComponent(DSComponent):
         retval = await resource.get(timeout, amount)
         return retval
             
+    def gget(self, resource, amount=1, timeout=float('inf')):
+        retval = yield from resource.gget(timeout, amount)
+        return retval
+            
     async def put(self, resource, *amount, timeout=float('inf')):
         retval = await resource.put(timeout, *amount)
         return retval
 
-    def gget(self, resource, amount=1, timeout=float('inf')):
-        retval = yield from resource.get(timeout, amount)
-        return retval
-            
     def gput(self, resource, *amount, timeout=float('inf')):
         retval = yield from resource.gput(timeout, *amount)
         return retval
