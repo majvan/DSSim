@@ -20,7 +20,6 @@ from collections.abc import Iterable
 import inspect
 from dssim.timequeue import TimeQueue
 from abc import abstractmethod
-import asyncio as myasyncio
 
 
 class DSAbortException(Exception):
@@ -125,7 +124,7 @@ class IConsumer:
         raise NotImplementedError('Abstract method, use derived classes')
 
 
-class DSSimulation(myasyncio.AbstractEventLoop):
+class DSSimulation:
     ''' The simulation is a which schedules the nearest (in time) events. '''
     sim_singleton = None
 
@@ -494,7 +493,7 @@ class DSSimulation(myasyncio.AbstractEventLoop):
         # Remove all the events for this schedulable
         self.time_queue.delete(lambda e:e[0] is schedulable)
 
-    def run(self, up_to=None, future=object()):
+    def run(self, future=object(), up_to=None):
         ''' This is the simulation machine. In a loop it takes first event and process it.
         The loop ends when the queue is empty or when the simulation time is over.
         '''
@@ -528,40 +527,6 @@ class DSSimulation(myasyncio.AbstractEventLoop):
     def observe_post(self, *components, **kwargs):
         return DSSubscriberContextManager(self.parent_process, 'post', components, **kwargs)
 
-    ''' Following is a mixin for asyncio event loop'''
-    def run_forever(self):
-        retval = self.run()
-        return retval
-
-    def run_until_complete(self, future):
-        if inspect.iscoroutine(future):
-            future = DSProcess(future, sim=self)  # create a DSProcess, Task
-            future.schedule(0)
-        # The loop is required because we wait for event 'process' which is produced by the process finish().
-        # However, other components may use the process as an event for inter-process communication
-        while not future.finished():
-            retval = self.run(future=future)
-        return retval
-    
-    def stop(self):
-        return
-
-    def is_running(self):
-        return False
-    
-    def is_closed(self):
-        return False
-    
-    def close(self):
-        return False
-    
-    def call_later(self, delay, callback, *args, context=None):
-        cb = DSSchedulable(DSCallback(callback(*args)))
-        self.schedule(delay, cb)
-    
-    def call_at(self, time, callback, *args, context=None):
-        cb = DSSchedulable(DSCallback(callback(*args)))
-        self.schedule(DSAbsTime(time), cb)
 
 class DSComponent:
     ''' DSComponent is any component which uses simulation (sim) environment.
@@ -742,7 +707,13 @@ class DSProcess(DSComponent, IConsumer):
         return self.sim.schedule(time, self)
 
     def started(self):
-        return inspect.getgeneratorstate(self.scheduled_generator) != inspect.GEN_CREATED
+        if inspect.iscoroutine(self.scheduled_generator):
+            retval = inspect.getcoroutinestate(self.scheduled_generator) != inspect.CORO_CREATED
+        elif inspect.isgenerator(self.scheduled_generator):
+            retval = inspect.getgeneratorstate(self.scheduled_generator) != inspect.GEN_CREATED
+        else:
+            raise ValueError(f'The assigned code {self.generator} to the process {self} is not generator, neither coroutine.')
+        return retval
 
     def finished(self):
         if inspect.iscoroutine(self.scheduled_generator):

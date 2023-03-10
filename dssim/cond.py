@@ -59,7 +59,7 @@ class DSFilter(DSCondition):
         # that it timed out. If signal_timeout is True, such timeout would be understood
         # as a valid signal.
         self.signal_timeout = signal_timeout
-        if inspect.isgenerator(self.cond):
+        if inspect.isgenerator(self.cond) or inspect.iscoroutine(self.cond):
             # We create a new process from generator. This is required:
             # 1. (TODO: document!) Events scheduled only for the current process: they won't be taken by the new
             #    process.
