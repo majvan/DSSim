@@ -12,14 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-from dssim.simulation import DSSimulation, DSAbsTime, DSSchedulable, DSProcess, DSCallback, DSAbortException
+from dssim.simulation import DSSimulation, DSAbsTime, DSComponent, DSSchedulable, DSProcess, DSCallback, DSAbortException
+from dssim.pubsub import DSProducer
 from dssim.cond import DSFilterAggregated, DSFilter
 
 class CancelledError(DSAbortException):
-    pass
+    def __init__(self, msg=None):
+        super().__init__(None, msg=msg)
 
 
 class TimeoutError(Exception):
+    pass
+
+
+class InvalidStateError(Exception):
     pass
 
 
@@ -59,45 +65,119 @@ class DSAsyncSimulation(DSSimulation):
         cb = DSSchedulable(DSCallback(callback(*args)))
         self.schedule(DSAbsTime(time), cb)
 
+    def create_task(self, coro):
+        return DSAsyncProcess(coro, sim=self).schedule(0)
 
-class DSAsyncProcess(DSProcess):
-    ''' Following is a mixin for asyncio Task'''
-    def done(self):
-        return self.finished()
-    
-    def cancelled(self):
-        return self.finished() and isinstance(self.exc, CancelledError)
+    def create_future(self):
+        return DSFuture(sim=self)
+
+
+class DSFuture(DSComponent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.value, self.exc = None, None
+        self.finish_tx = DSProducer(name=self.name+'.finish tx', sim=self.sim)
+
+    def finished(self):
+        return (self.value, self.exc) != (None, None)
+
+    def abort(self, exc=None):
+        ''' Aborts a future with an exception. '''
+        if exc is None:
+            exc = DSAbortException(self.sim.parent_process)
+        try:
+            self.send(exc)
+        except StopIteration as e:
+            self.finish(e)
+        except Exception as e:
+            self.fail(e)
+
+    def __await__(self):
+        with self.sim.observe_pre(self.finish_tx):
+            retval = yield from self.sim.check_and_gwait(cond=lambda e:self.finished())
+        if self.exc is not None:
+            raise self.exc
+        return self.value    
 
     def result(self):
-        return self.value
+        if not self.finished():
+            raise InvalidStateError()
+        if self.exc is None:
+            return self.value
+        else:
+            raise self.exc
+			
+    def finish(self, value):
+        self.value = value
+        self.finish_tx.signal(value)
+		
+    def fail(self, exc):
+        self.exc = exc
+        self.finish_tx.signal(exc)
     
-    def exception(self):
-        return self.exc
+    def set_result(self, result):
+        if self.finished():
+            raise InvalidStateError()
+        self.finish(result)
 
-    def set_name(self, value):
-        self.name = value
+    def set_exception(self, exc):
+        if self.finished():
+            raise InvalidStateError()
+        self.fail(exc)
 
-    def get_name(self):
-        return self.name
-    
-    def cancel(self, msg=None):
-        self.abort(CancelledError())
+    def done(self):
+        return self.finished()
+
+    def cancelled(self):
+        return isinstance(self.exc, CancelledError)
 
     def add_done_callback(self, callback, * , context=None):
-        if isinstance(callback, function):
-            self.finish_tx.add_subscriber(DSCallback(callback))
-        elif isinstance(callback, DSCallback):
-            self.finish_tx.add_subscriber(callback)
+        if isinstance(callback, DSCallback):
+            self.finish_tx.add_subscriber(callback, phase='pre')
+        elif callable(callback):
+            self.finish_tx.add_subscriber(DSCallback(callback), phase='pre')
         else:
-            raise ValueError(f'Callback {callback} shall be a DSCallback or a function')
+            raise ValueError(f'Callback {callback} shall be a DSCallback or a callable')
 
     def remove_done_callback(self, callback):
         if isinstance(callback, function):
             callback = DSCallback(callback)
         self.finish_tx.remove_subscriber(callback)
 
-    def get_coro(self):
-        return self.scheduled_generator
+    def cancel(self, msg=None):
+        if self.finished():
+            return False
+        self.abort(CancelledError(msg))
+        return True
+    
+    def exception(self):
+        if not self.finished():
+            raise InvalidStateError()
+        elif isinstance(self.exc, CancelledError):
+            raise self.exc
+        else:
+            return self.exc
+        
+    def get_loop(self):
+        return self.sim
+
+
+class DSAsyncProcess(DSProcess):
+    ''' Following is an implementation of asyncio Task'''
+    
+    def abort(self, exc=None):
+        ''' Aborts a task with an exception. '''
+        if self.finished():
+            return None
+        if exc is None:
+            exc = DSAbortException(self.sim.parent_process)
+        try:
+            self.send(exc)
+        except StopIteration as e:
+            self.finish(e)
+        except Exception as e:
+            self.fail(e)
+        return (self.value, self.exc) != (None, None)
 
     def __await__(self):
         with self.sim.observe_pre(self.finish_tx):
@@ -105,6 +185,60 @@ class DSAsyncProcess(DSProcess):
         if self.exc is not None:
             raise self.exc
         return self.value
+
+    def result(self):
+        if not self.finished():
+            raise InvalidStateError()
+        if self.exc is None:
+            return self.value
+        else:
+            raise self.exc
+    
+    def done(self):
+        return self.finished()
+
+    def cancelled(self):
+        return isinstance(self.exc, CancelledError)
+
+    def add_done_callback(self, callback, * , context=None):
+        if isinstance(callback, DSCallback):
+            self.finish_tx.add_subscriber(callback, phase='pre')
+        elif callable(callback):
+            self.finish_tx.add_subscriber(DSCallback(callback), phase='pre')
+        else:
+            raise ValueError(f'Callback {callback} shall be a DSCallback or a callable')
+
+    def remove_done_callback(self, callback):
+        if isinstance(callback, function):
+            callback = DSCallback(callback)
+        self.finish_tx.remove_subscriber(callback)
+
+    def cancel(self, msg=None):
+        if self.finished():
+            return False
+        self.abort(CancelledError(msg))
+        return True
+    
+    def exception(self):
+        if not self.finished():
+            raise InvalidStateError()
+        elif isinstance(self.exc, CancelledError):
+            raise self.exc
+        else:
+            return self.exc
+        
+    def get_loop(self):
+        return self.sim
+
+    def get_coro(self):
+        return self.scheduled_generator
+
+    def set_name(self, value):
+        self.name = value
+
+    def get_name(self):
+        return self.name
+
 
 
 class TaskGroup:
@@ -131,17 +265,27 @@ def get_current_loop():
         set_current_loop(DSAsyncSimulation())
     return DSSimulation.sim_singleton
 
+def get_running_loop():
+    return DSSimulation.sim_singleton
+
+
 async def gather(*coros_or_futures, return_exceptions=False):
-    loop = get_current_loop()
+    loop = get_running_loop()
     filters = [DSFilter(c, sim=loop) for c in coros_or_futures]
     f = DSFilterAggregated(all, filters)
     retval = await loop.wait(cond=f)
     return [retval[f] for f in filters]  # values have to be sorted by input order
 
-async def sleep(time):
-    loop = get_current_loop()
-    retval = await loop.wait(time)
+async def sleep(delay, result=None):
+    loop = get_running_loop()
+    retval = await loop.wait(delay)
     return retval
+
+async def wait_for(aw, timeout):
+    loop = get_running_loop()
+    retval = await loop.wait(timeout, cond=aw)
+    return retval
+
 
 def run(coro_or_future):
     loop = get_current_loop()
@@ -149,5 +293,9 @@ def run(coro_or_future):
     return retval
 
 def create_task(coro):
-    loop = get_current_loop()
-    return DSAsyncProcess(coro, sim=loop).schedule(0)
+    loop = get_running_loop()
+    return loop.create_task(coro)
+
+def current_task():
+    loop = get_running_loop()
+    return loop.parent_process

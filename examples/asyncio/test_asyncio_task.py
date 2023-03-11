@@ -23,3 +23,4 @@ async def main():
     print(loop.time)
 
 asyncio.run(main())
+assert asyncio.get_current_loop().time == 2
