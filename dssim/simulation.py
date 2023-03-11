@@ -624,9 +624,51 @@ class DSKWCallback(DSCallback):
 
 from dssim.pubsub import DSProducer
 
-class DSProcess(DSComponent, IConsumer):
+class DSFuture(DSComponent):
+    ''' Typical future which can be used in the simulations.
+    This represents a base for all awaitables.
+    '''
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # We store the latest value or excpetion. Useful to check the status after finish.
+        self.value, self.exc = None, None
+        self.finish_tx = DSProducer(name=self.name+'.finish_tx', sim=self.sim)
+
+    def finished(self):
+        return (self.value, self.exc) != (None, None)
+
+    def abort(self, exc=None):
+        ''' Aborts an awaitable with an exception. '''
+        if exc is None:
+            exc = DSAbortException(self.sim.parent_process)
+        try:
+            self.send(exc)
+        except StopIteration as e:
+            self.finish(e)
+        except Exception as e:
+            self.fail(e)
+
+    def __await__(self):
+        with self.sim.observe_pre(self.finish_tx):
+            retval = yield from self.sim.check_and_gwait(cond=lambda e:self.finished())
+        if self.exc is not None:
+            raise self.exc
+        return self.value    
+
+    def finish(self, value):
+        self.value = value
+        self.sim.cleanup(self)
+        self.finish_tx.signal(value)
+		
+    def fail(self, exc):
+        self.exc = exc
+        self.sim.cleanup(self)
+        self.finish_tx.signal(exc)
+
+
+class DSProcess(DSFuture, IConsumer):
     ''' Typical task used in the simulations.
-    This class "extends" generator function for additional info.
+    This class "extends" generator / coroutine for additional info.
     The best practise is to use DSProcess instead of generators.
     '''
     def __init__(self, generator, *args, **kwargs):
@@ -635,9 +677,6 @@ class DSProcess(DSComponent, IConsumer):
         self.generator = generator
         self.scheduled_generator = generator
         self.create_metadata()
-        # We store the latest value. Useful to check the status after finish.
-        self.value, self.exc = None, None
-        self.finish_tx = DSProducer(name=self.name+'.finish tx', sim=self.sim)
 
     def __iter__(self):
         ''' Required to use the class to get events from it. '''
@@ -664,17 +703,6 @@ class DSProcess(DSComponent, IConsumer):
 
     def schedule_kw_event(self, time, **event):
         return self.sim.schedule_event(time, event, self)
-
-    def abort(self, exc=None):
-        ''' Aborts a task with an exception. '''
-        if exc is None:
-            exc = DSAbortException(self.sim.parent_process)
-        try:
-            self.send(exc)
-        except StopIteration as e:
-            self.finish(e)
-        except Exception as e:
-            self.fail(e)
 
     def create_metadata(self):
         self.meta = _ProcessMetadata()
@@ -716,6 +744,9 @@ class DSProcess(DSComponent, IConsumer):
         return retval
 
     def finished(self):
+        ''' The finished fcn can inherited from the futures. Another possibility is to compute it
+        from the state of routine.
+        '''
         if inspect.iscoroutine(self.scheduled_generator):
             retval = inspect.getcoroutinestate(self.scheduled_generator) == inspect.CORO_CLOSED
         elif inspect.isgenerator(self.scheduled_generator):
@@ -730,7 +761,7 @@ class DSProcess(DSComponent, IConsumer):
         # The last event is the process itself. This enables to wait for a process as an asyncio's Future 
         self.finish_tx.schedule_event(0, self)
         return self.value
-
+    
     def fail(self, exc):
         self.exc = exc
         self.sim.cleanup(self)
@@ -745,6 +776,7 @@ class DSProcess(DSComponent, IConsumer):
         with self.sim.observe_pre(self.finish_tx):
             retval = yield from self.sim.check_and_gwait(cond=lambda e:self.finished())
         return retval
+
 
 _exiting = False  # global var to prevent repeating nested exception frames
 
