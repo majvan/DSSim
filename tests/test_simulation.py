@@ -169,20 +169,28 @@ class TestDSSchedulable(unittest.TestCase):
     def test7_send_abort_to_generator_as_process(self):
         class MyExc(Exception):
             pass
+        def my_wait(sim):
+            i = 0
+            while True:
+                i = i + 1
+                yield from sim.gwait(cond=lambda c: True, val=i)
 
-        process = DSProcess(self.__loopback_generator(), sim=DSSimulation())
+        sim=DSSimulation()
+        process = DSProcess(my_wait(sim), sim=sim)
         retval = next(process)
         retval = process.send('from_test0')
-        self.assertEqual(retval, 'from_test0')
-        retval = process.abort()
-        self.assertTrue(isinstance(retval, DSAbortException))
-        self.assertTrue(isinstance(process.value, DSAbortException))
+        self.assertEqual(retval, 2)
+        self.assertEqual(process.value, 2)
+        self.assertEqual(process.exc, None)
+        process.abort()
+        self.assertTrue(isinstance(process.exc, DSAbortException))
+        self.assertEqual(process.value, 2)
 
-        process = DSProcess(self.__loopback_generator(), sim=DSSimulation())
+        process = DSProcess(my_wait(sim), sim=sim)
         retval = next(process)
-        retval = process.abort(MyExc())
-        self.assertTrue(isinstance(retval, MyExc))
-        self.assertTrue(isinstance(process.value, MyExc))
+        process.abort(MyExc())
+        self.assertTrue(isinstance(process.exc, MyExc))
+        self.assertEqual(process.value, 1)
 
 
     def test8_joining_process(self):

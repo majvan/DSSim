@@ -637,7 +637,6 @@ class DSProcess(DSComponent, IConsumer):
         self.create_metadata()
         # We store the latest value. Useful to check the status after finish.
         self.value, self.exc = None, None
-        self.waiting_tasks = []  # taks waiting to finish this task
         self.finish_tx = DSProducer(name=self.name+'.finish tx', sim=self.sim)
 
     def __iter__(self):
@@ -671,12 +670,11 @@ class DSProcess(DSComponent, IConsumer):
         if exc is None:
             exc = DSAbortException(self.sim.parent_process)
         try:
-            self.value = self.send(exc)
+            self.send(exc)
         except StopIteration as e:
             self.finish(e)
         except Exception as e:
             self.fail(e)
-        return self.value
 
     def create_metadata(self):
         self.meta = _ProcessMetadata()
