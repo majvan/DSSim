@@ -28,6 +28,11 @@ async def main():
 
 if __name__ == "__main__":
     random.seed(444)
+    import time
+    start = time.perf_counter()
     r1, r2, r3 = asyncio.run(main())
     print()
     print(f"r1: {r1}, r2: {r2}, r3: {r3}")
+    elapsed = time.perf_counter() - start
+    assert (r1, r2, r3) == (10, 10, 9)
+    print(f"{__file__} executed in {elapsed:0.2f} seconds. Simulation time is {asyncio.get_current_loop().time}.")

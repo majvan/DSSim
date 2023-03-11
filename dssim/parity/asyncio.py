@@ -12,10 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-from dssim.simulation import DSSimulation, DSAbsTime, DSProcess, DSCallback
+from dssim.simulation import DSSimulation, DSAbsTime, DSSchedulable, DSProcess, DSCallback, DSAbortException
 from dssim.cond import DSFilterAggregated, DSFilter
 
-class EventLoopAsyncioMixin:
+class CancelledError(DSAbortException):
+    pass
+
+
+class TimeoutError(Exception):
+    pass
+
+
+class DSAsyncSimulation(DSSimulation):
     ''' Following is a mixin for asyncio event loop'''
     def run_forever(self):
         retval = self.run()
@@ -51,18 +59,69 @@ class EventLoopAsyncioMixin:
         cb = DSSchedulable(DSCallback(callback(*args)))
         self.schedule(DSAbsTime(time), cb)
 
-class DSAsyncSimulation(DSSimulation, EventLoopAsyncioMixin):
-    pass
 
+class DSAsyncProcess(DSProcess):
+    ''' Following is a mixin for asyncio Task'''
+    def done(self):
+        return self.finished()
+    
+    def cancelled(self):
+        return self.finished() and isinstance(self.exc, CancelledError)
 
-class TaskAsyncioMixin:
-    ''' Following is a mixin for asyncio task'''
     def result(self):
         return self.value
+    
+    def exception(self):
+        return self.exc
 
-class DSAsyncProcess(DSProcess, TaskAsyncioMixin):
-    pass
+    def set_name(self, value):
+        self.name = value
 
+    def get_name(self):
+        return self.name
+    
+    def cancel(self, msg=None):
+        self.abort(CancelledError())
+
+    def add_done_callback(self, callback, * , context=None):
+        if isinstance(callback, function):
+            self.finish_tx.add_subscriber(DSCallback(callback))
+        elif isinstance(callback, DSCallback):
+            self.finish_tx.add_subscriber(callback)
+        else:
+            raise ValueError(f'Callback {callback} shall be a DSCallback or a function')
+
+    def remove_done_callback(self, callback):
+        if isinstance(callback, function):
+            callback = DSCallback(callback)
+        self.finish_tx.remove_subscriber(callback)
+
+    def get_coro(self):
+        return self.scheduled_generator
+
+    def __await__(self):
+        with self.sim.observe_pre(self.finish_tx):
+            retval = yield from self.sim.check_and_gwait(cond=lambda e:self.finished())
+        if self.exc is not None:
+            raise self.exc
+        return self.value
+
+
+class TaskGroup:
+    def __init__(self):
+        self.tasks = []
+    
+    async def __aenter__(self):
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        retval = await gather(*self.tasks)
+        return retval
+    
+    def create_task(self, coro):
+        task = create_task(coro)
+        self.tasks.append(task)
+        return task
 
 def set_current_loop(simulation):
     DSAsyncSimulation.sim_singleton = simulation
@@ -77,7 +136,7 @@ async def gather(*coros_or_futures, return_exceptions=False):
     filters = [DSFilter(c, sim=loop) for c in coros_or_futures]
     f = DSFilterAggregated(all, filters)
     retval = await loop.wait(cond=f)
-    return list(retval.values())
+    return [retval[f] for f in filters]  # values have to be sorted by input order
 
 async def sleep(time):
     loop = get_current_loop()
@@ -91,4 +150,4 @@ def run(coro_or_future):
 
 def create_task(coro):
     loop = get_current_loop()
-    return DSAsyncProcess(coro, sim=loop)
+    return DSAsyncProcess(coro, sim=loop).schedule(0)

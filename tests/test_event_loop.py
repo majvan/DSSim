@@ -15,8 +15,7 @@
 Tests for pubsub module
 '''
 import unittest
-import asyncio
-from dssim.simulation import DSSimulation
+from dssim.parity.asyncio import DSAsyncSimulation
 
 async def process(sim):
     await sim.wait(1)
@@ -25,13 +24,13 @@ class TestEventLoop(unittest.TestCase):
     ''' Test the time queue class behavior '''
 
     def test0_loop(self):
-        sim = DSSimulation()
+        sim = DSAsyncSimulation()
         p = process(sim)
         sim.schedule(0, p)
         sim.run_forever()
         self.assertEqual(sim.time, float('inf'))
 
-        sim = DSSimulation()
+        sim = DSAsyncSimulation()
         p = process(sim)
         sim.schedule_event(10, 'test')
         sim.run_until_complete(p)
