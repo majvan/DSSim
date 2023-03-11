@@ -167,13 +167,23 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertTrue(isinstance(retval, DSAbortException))
 
     def test7_send_abort_to_generator_as_process(self):
+        class MyExc(Exception):
+            pass
+
         process = DSProcess(self.__loopback_generator(), sim=DSSimulation())
         retval = next(process)
         retval = process.send('from_test0')
         self.assertEqual(retval, 'from_test0')
-        retval = process.abort('some_data')
+        retval = process.abort()
         self.assertTrue(isinstance(retval, DSAbortException))
         self.assertTrue(isinstance(process.value, DSAbortException))
+
+        process = DSProcess(self.__loopback_generator(), sim=DSSimulation())
+        retval = next(process)
+        retval = process.abort(MyExc())
+        self.assertTrue(isinstance(retval, MyExc))
+        self.assertTrue(isinstance(process.value, MyExc))
+
 
     def test8_joining_process(self):
         sim = DSSimulation()
