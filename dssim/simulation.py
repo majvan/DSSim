@@ -25,7 +25,7 @@ from abc import abstractmethod
 class DSAbortException(Exception):
     ''' Exception used to abort waiting process '''
 
-    def __init__(self, producer, **info):
+    def __init__(self, producer=None, **info):
         super().__init__()
         self.producer = producer
         self.info = info
@@ -493,7 +493,7 @@ class DSSimulation:
         # Remove all the events for this schedulable
         self.time_queue.delete(lambda e:e[0] is schedulable)
 
-    def run(self, future=object(), up_to=None):
+    def run(self, up_to=None, future=object()):
         ''' This is the simulation machine. In a loop it takes first event and process it.
         The loop ends when the queue is empty or when the simulation time is over.
         '''
@@ -636,7 +636,7 @@ class DSProcess(DSComponent, IConsumer):
         self.scheduled_generator = generator
         self.create_metadata()
         # We store the latest value. Useful to check the status after finish.
-        self.value = None
+        self.value, self.exc = None, None
         self.waiting_tasks = []  # taks waiting to finish this task
         self.finish_tx = DSProducer(name=self.name+'.finish tx', sim=self.sim)
 
@@ -666,10 +666,12 @@ class DSProcess(DSComponent, IConsumer):
     def schedule_kw_event(self, time, **event):
         return self.sim.schedule_event(time, event, self)
 
-    def abort(self, producer=None, **info):
-        ''' Aborts a task. Additional reasoning info can be provided. '''
+    def abort(self, exc=None):
+        ''' Aborts a task with an exception. '''
+        if exc is None:
+            exc = DSAbortException(self.sim.parent_process)
         try:
-            self.value = self.send(DSAbortException(producer, **info))
+            self.value = self.send(exc)
         except StopIteration as e:
             self.finish(e)
         except Exception as e:
@@ -732,6 +734,7 @@ class DSProcess(DSComponent, IConsumer):
         return self.value
 
     def fail(self, exc):
+        self.exc = exc
         self.sim.cleanup(self)
         self.finish_tx.schedule_event(0, 'Fail')
 
@@ -739,7 +742,7 @@ class DSProcess(DSComponent, IConsumer):
         with self.sim.observe_pre(self.finish_tx):
             retval = await self.sim.check_and_wait(cond=lambda e:self.finished())
         return retval
-
+    
     def gjoin(self, timeout=float('inf')):
         with self.sim.observe_pre(self.finish_tx):
             retval = yield from self.sim.check_and_gwait(cond=lambda e:self.finished())
