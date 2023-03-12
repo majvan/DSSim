@@ -772,8 +772,8 @@ class DSProcess(DSFuture, IConsumer):
         return retval
 
     def finished(self):
-        ''' The finished fcn can inherited from the futures. Another possibility is to compute it
-        from the state of routine.
+        ''' The finished evaluation cannot be the same as with the Futures because a process
+        changes its value / exc more times during its runtime.
         '''
         if inspect.iscoroutine(self.scheduled_generator):
             retval = inspect.getcoroutinestate(self.scheduled_generator) == inspect.CORO_CLOSED
