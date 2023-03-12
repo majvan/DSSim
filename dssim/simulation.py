@@ -20,6 +20,7 @@ from collections.abc import Iterable
 import inspect
 from dssim.timequeue import TimeQueue
 from abc import abstractmethod
+from contextlib import contextmanager
 
 
 class DSAbortException(Exception):
@@ -85,6 +86,22 @@ class DSSubscriberContextManager:
         self.act = self.act | other.act
         self.post = self.post | other.post
         return self
+
+
+class DSTimeoutContextManager:
+    class DSTimeoutContextError(Exception):
+        pass
+    def __init__(self, time, sim):
+        self.sim = sim
+        self.event = self.DSTimeoutContextError()
+        self.sim.schedule_event(time, self.event)
+
+    def reschedule(self, time):
+        self.sim.delete(cond=lambda e: e[1] == self.event)
+        self.sim.schedule_event(time, self.event)
+
+    def cleanup(self):
+        self.sim.delete(cond=lambda e: e[1] == self.event)
 
 
 class _ProcessMetadata:
@@ -527,6 +544,17 @@ class DSSimulation:
     def observe_post(self, *components, **kwargs):
         return DSSubscriberContextManager(self.parent_process, 'post', components, **kwargs)
 
+    @contextmanager
+    def timeout(self, time):
+        cm = DSTimeoutContextManager(time, sim=self)
+        try:
+            yield cm
+        except DSTimeoutContextManager.DSTimeoutContextError as e:
+            if cm.event is not e:
+                raise
+        finally:
+            cm.cleanup()
+
 
 class DSComponent:
     ''' DSComponent is any component which uses simulation (sim) environment.
@@ -777,6 +805,11 @@ class DSProcess(DSFuture, IConsumer):
             retval = yield from self.sim.check_and_gwait(cond=lambda e:self.finished())
         return retval
 
+
+class DSExceptionContextManager:
+    ''' This class is used to be able to schedule exception (i.e. timeout exc).
+    in a context code so it could then exit the context.
+    '''
 
 _exiting = False  # global var to prevent repeating nested exception frames
 

@@ -14,8 +14,9 @@
 import inspect
 from dssim.simulation import DSSimulation, DSAbsTime, DSComponent
 from dssim.simulation import DSSchedulable, DSFuture, DSProcess, DSCallback, DSAbortException
-from dssim.pubsub import DSProducer
 from dssim.cond import DSFilterAggregated, DSFilter
+from contextlib import asynccontextmanager
+
 
 class CancelledError(DSAbortException):
     def __init__(self, msg=None):
@@ -190,6 +191,11 @@ async def wait_for(aw, timeout):
     retval = await loop.wait(timeout, cond=aw)
     return retval
 
+@asynccontextmanager
+async def timeout(delay):
+    loop = get_running_loop()
+    with loop.timeout(delay) as cm:
+        yield cm
 
 def run(coro_or_future):
     loop = get_current_loop()
@@ -203,3 +209,4 @@ def create_task(coro):
 def current_task():
     loop = get_running_loop()
     return loop.parent_process
+
