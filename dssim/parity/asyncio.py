@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-from dssim.simulation import DSSimulation, DSAbsTime, DSComponent
-from dssim.simulation import DSSchedulable, DSFuture, DSProcess, DSCallback, DSAbortException
+from dssim.simulation import DSSimulation, DSAbsTime, DSComponent, DSTimeoutContextManager
+from dssim.simulation import DSAbortException, DSTimeoutContextError
+from dssim.simulation import DSSchedulable, DSFuture, DSProcess, DSCallback
 from dssim.cond import DSFilterAggregated, DSFilter
 from contextlib import asynccontextmanager
 
@@ -23,12 +24,17 @@ class CancelledError(DSAbortException):
         super().__init__(None, msg=msg)
 
 
-class TimeoutError(Exception):
-    pass
-
-
 class InvalidStateError(Exception):
     pass
+
+
+class Timeout(DSTimeoutContextManager):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.finished = False
+    
+    def expired(self):
+        return self.finished
 
 
 class DSAsyncSimulation(DSSimulation):
@@ -177,7 +183,7 @@ def get_running_loop():
 async def gather(*coros_or_futures, return_exceptions=False):
     loop = get_running_loop()
     filters = [DSFilter(c, sim=loop) for c in coros_or_futures]
-    f = DSFilterAggregated(all, filters)
+    f = DSFilterAggregated(all, filters, sim=loop)
     retval = await loop.wait(cond=f)
     return [retval[f] for f in filters]  # values have to be sorted by input order
 
@@ -187,14 +193,42 @@ async def sleep(delay, result=None):
     return retval
 
 async def wait_for(aw, timeout):
-    loop = get_running_loop()
-    retval = await loop.wait(timeout, cond=aw)
+    async with _timeout(timeout) as cm:
+        retval = await aw
+    if cm.expired():
+        raise TimeoutError()
     return retval
+
+ALL_COMPLETED = 1
+async def wait(aws, *, timeout=None, return_when=ALL_COMPLETED):
+    loop = get_running_loop()
+    filters = [DSFilter(c, sim=loop) for c in aws if inspect.iscoroutine]
+    if return_when == ALL_COMPLETED:
+        f = DSFilterAggregated(all, filters)
+    else:
+        f = DSFilterAggregated(any, filters)
+    retval = await f
+    return [retval[f] for f in filters]  # values have to be sorted by input order
+
 
 @asynccontextmanager
 async def timeout(delay):
     loop = get_running_loop()
-    with loop.timeout(delay) as cm:
+    exc = TimeoutError()
+    cm = Timeout(delay, sim=loop, exc=exc)
+    try:
+        yield cm
+    except TimeoutError as e:
+        if cm.exc is not e:
+            raise
+        cm.finished = True
+    finally:
+        cm.cleanup()
+_timeout = timeout
+
+@asynccontextmanager
+async def timeout_at(when):
+    async with timeout(DSAbsTime(when)) as cm:
         yield cm
 
 def run(coro_or_future):
@@ -209,4 +243,3 @@ def create_task(coro):
 def current_task():
     loop = get_running_loop()
     return loop.parent_process
-
