@@ -16,45 +16,58 @@ This file implements advanced filtering logic - with overloading operators
 to be able create advanced expressions.
 '''
 import inspect
-from dssim.simulation import DSProcess, DSCondition, DSCallback, DSSimulation
+from dssim.simulation import DSProcess, ICondition, DSCallback, DSFuture
 
-class DSFilter(DSCondition):
-    def one_liner(self):
-        return self.signaled
 
-    def compile(self, other, expr):
-        if (self.expression == expr) and (other.expression == expr):
-            return DSFilterAggregated(expr, [self.signals] + [other.signals])
-        if (other.expression == expr) and (self.expression == self.one_liner):
-            self, other = other, self
-        if (self.expression == expr) and (other.expression == other.one_liner):
-            if self.reset == other.reset:
-                self.signals.append(other)
-                self.set_signals()
-                return self
-            # A reset circuit is mergeable only if it is one_liner. The reason
-            # is that a reset circuit when signaled resets all his setters.
-            if other.reset:
-                self.signals.append(other)
-                self.set_signals()
-                return self
-        return DSFilterAggregated(expr, [self, other])
+class DSCondition(DSFuture):
+    ONE_LINER = 'one liner'
 
-    def set_signals(self):
-        self.setters = list(filter(lambda s: not s.reset, self.signals))
-        self.resetters = list(filter(lambda s: s.reset, self.signals))
+    def __await__(self):
+        with self.sim.observe_pre(self.finish_tx):
+            retval = yield from self.sim.check_and_gwait(cond=self)
+        if self.exc is not None:
+            raise self.exc
+        return self.value    
 
-    def __init__(self, cond=None, reevaluate=False, signal_timeout=False, sim=None):
-        self.expression = self.one_liner
+    def finish(self, value):
+        # The conditions do not send signals to other processes, so no finish_tx activity
+        self.value = value
+        self.sim.cleanup(self)
+		
+    def fail(self, exc):
+        # The conditions do not send signals to other processes, so no finish_tx activity
+        self.exc = exc
+        self.sim.cleanup(self)
+
+
+class DSFilter(DSCondition, ICondition):
+    ''' Differences from DSFuture:
+    1. DSFilter can be reevaluated, i.e. the finished() is not monostable. It can
+    once return True and the next call return False (if reevaluate is True).
+    2. DSFilter can be pulsed, i.e. the finished() never returns True, but the call
+    to DSFilter can return True (signaled). This requires the filter to be reevaluated.
+    3. DSFilter can be negated. This is possible: filter = -DSFilter(...).
+    Such expression will always change the filter policy to be pulsed.
+    4. DSFilter forwards all the events to the wrapped cond.
+    '''
+    class Policy:
+        DEFAULT = 0
+        REEVALUATE = 1
+        PULSED = 2
+
+    def __init__(self, cond=None, policy=Policy.DEFAULT, signal_timeout=False, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.expression = self.ONE_LINER
+        self.signals = [self]
+        self.positive = True  # positive sign
         self.signaled = False
         self.value = None
         self.cond = cond
-        self.signals = [self]
         # Reevaluation means that after every event we receive we have to re-evaluate
         # the condition
         # If not reevaluation set, then once filter matches, it is flipped to signaled
-        self.reevaluate = reevaluate
-        self.reset = False
+        self.pulse = policy in (self.Policy.PULSED,)
+        self.reevaluate = policy in (self.Policy.REEVALUATE, self.Policy.PULSED,)
         # Signalling timeout is for generators. If a generator returns with None, this means
         # that it timed out. If signal_timeout is True, such timeout would be understood
         # as a valid signal.
@@ -75,7 +88,7 @@ class DSFilter(DSCondition):
             #    asynchronously. For such, we subscribe for the new process finish event and push that to the current
             #    process.
             # if inspect.getgeneratorstate(self.cond) == inspect.GEN_CREATED:
-            self.cond = DSProcess(self.cond, sim=sim)  # convert to DSProcess so we could get return value
+            self.cond = DSProcess(self.cond, sim=self.sim)  # convert to DSProcess so we could get return value
             # else:
             #     raise ValueError('Cannot filter already running generator.')
         if isinstance(self.cond, DSProcess):
@@ -83,113 +96,157 @@ class DSFilter(DSCondition):
             if not self.cond.started():
                 self.cond = self.cond.schedule(0)  # start the process
             self.parent_process = self.sim.parent_process
+        if isinstance(self.cond, DSFuture):
             self.subscriber = DSCallback(self._process_finished, sim=self.sim)
             self.cond.finish_tx.add_subscriber(self.subscriber, 'pre')
 
-    def make_reset(self):
-        self.signaled = False
-
     def __or__(self, other):
-        return self.compile(other, any)
+        return DSFilterAggregated.build(self, other, any)
 
     def __and__(self, other):
-        return self.compile(other, all)
+        return DSFilterAggregated.build(self, other, all)
    
     def __neg__(self):
-        self.reset = True
+        self.pulse, self.reevaluate = True, True
+        self.positive = False
         return self
 
     def __str__(self):
         return f'DSFilter({self.cond})'
 
-    def __bool__(self):
+    def finished(self):
         return self.signaled
-
+    
     def __call__(self, event):
+        ''' Tries to evaluate the event. '''
         if self.signaled and not self.reevaluate:
             return True
         signaled, value = False, None
-        if isinstance(self.cond, DSProcess):
+        if isinstance(self.cond, DSFuture):
             # now we should get this signaled only after return
+            if isinstance(self.cond, DSProcess):
+                # forward message to the child process
+                self.sim.send(self.cond, event)
             if self.cond.finished():
-                if self.cond.value is None and self.signal_timeout:
-                    signaled, value = True, None
-                elif isinstance(self.cond.value, Exception):
+                if self.cond.exc is not None:
                     pass
+                elif self.cond.value is None and self.signal_timeout:
+                    signaled, value = True, None
                 else:
                     signaled, value = True, self.cond.value
-            else:
-                self.sim.send(self.cond, event)
         elif callable(self.cond) and self.cond(event):
             signaled, value = True, event
         elif self is event:
             signaled, value = True, event
         elif self.cond == event:
             signaled, value = True, event
-        if not self.reset:
+        if not self.pulse:
             # A resetting- circuit only pulses its signal, but does not keep the signal, neither value
-            self.signaled, self.value = signaled, value
+            self.signaled = signaled
+        if signaled:
+            self.finish(value)
         return signaled
 
-    def _process_finished(self, *args, **kwargs):
+    def _process_finished(self, future):
+        if not self.reevaluate:
+            self.cond.finish_tx.remove_subscriber(self.subscriber, 'pre')
         # Following forces re-evaluation by injecting new event
-        self.cond.finish_tx.remove_subscriber(self.subscriber, 'pre')
-        self.sim.send(self.parent_process, {'producer': self.cond, 'finished': True})
+        self.sim.send(self.parent_process, future)
 
     def cond_value(self, event):
         return self.value
 
     def cond_cleanup(self):
-        if isinstance(self.cond, DSProcess):
+        if isinstance(self.cond, DSFuture):
             self.cond.finish_tx.remove_subscriber(self.subscriber, 'pre')
             self.sim.cleanup(self.cond)
 
     def get_process(self):
-        return self.cond if isinstance(self.cond, DSProcess) else None
+        return self.cond if isinstance(self.cond, DSProcess) else None        
 
 
-class DSFilterAggregated(DSFilter):
-    def __init__(self, expression, signals):
+class DSFilterAggregated(DSCondition, ICondition):
+    ''' DSFilterAggregated aggregates several DSFutures into AND / OR circuit.
+    It evaluates the circuit after every event. The finished()
+    1. DSFilter can be reevaluated, i.e. the finished() is not monostable. It can
+    once return True and the next call return False (if reevaluate is True).
+    2. DSFilter can be pulsed, i.e. the finished() never returns True, but the call
+    to DSFilter can return True (signaled). This requires the filter to be reevaluated.
+    3. DSFilter can be negated. This is possible: filter = -DSFilter(...).
+    Such expression will always change the filter policy to be pulsed.
+    '''
+
+    def __init__(self, expression, signals, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.expression = expression
         self.signals = signals
         self.set_signals()
-        self.reset = False
+        self.positive = True
         self.signaled = False
+        # The sim is required for awaitable
+        self.sim = self.signals[0].sim  # get the sim from the first signal
 
-    def make_reset(self):
-        self.signaled = False
-        for el in self.setters:
-            el.signaled = False
+    @staticmethod
+    def _has_expr(filt, expr):
+        return isinstance(filt, DSFilterAggregated) and filt.expression == expr
+
+    @staticmethod
+    def build(first, second, expr):
+        if (first.expression == expr) and (second.expression == expr):
+            return DSFilterAggregated(expr, [first.signals] + [second.signals])
+        if (second.expression == expr) and (first.expression == DSFilter.ONE_LINER):
+            first, second = second, first
+        if (first.expression == expr) and (second.expression == DSFilter.ONE_LINER):
+            if first.positive == second.positive:
+                first.signals.append(second)
+                first.set_signals()
+                return first
+            # A reset circuit is mergeable only if it is one_liner. The reason
+            # is that a reset circuit when signaled resets all his setters.
+            if not second.positive:
+                first.signals.append(second)
+                first.set_signals()
+                return first
+        return DSFilterAggregated(expr, [first, second])
+
+
+    def set_signals(self):
+        self.setters, self.resetters = [], []
+        for s in self.signals:
+            if not isinstance(s, DSCondition):
+                self.setters.append(s)
+            elif s.positive:
+                self.setters.append(s)
+            else:
+                self.resetters.append(s)
 
     def __or__(self, other):
-        return self.compile(other, any)
+        return DSFilterAggregated.build(self, other, any)
 
     def __and__(self, other):
-        return self.compile(other, all)
+        return DSFilterAggregated.build(self, other, all)
 
     def __neg__(self):
-        self.reset = True
+        self.positive = False
         return self
 
     def cond_value(self, event):
         retval = {}
         for el in self.setters:
-            if not el:
+            if not el.finished():
                 continue
-            if el.expression == el.one_liner:
-                retval[el] = el.cond_value(event)
-            else:
+            if isinstance(el, DSFilterAggregated):
                 embedded = el.cond_value(event)
                 retval.update(embedded)
+            elif hasattr(el, 'cond_value'):
+                retval[el] = el.cond_value(event)
+            else:
+                retval[el] = el.value
         return retval
     
     def cond_cleanup(self):
         for el in self.signals:
             el.cond_cleanup()
-
-    def __bool__(self):
-        self.signaled = len(self.setters) > 0 and self.expression(self.setters)
-        return self.signaled
 
     def __str__(self):
         expression = '|' if self.expression == any else '&'
@@ -201,12 +258,21 @@ class DSFilterAggregated(DSFilter):
             retval += f'({retval} & (' + f' {expression} '.join(strings) + '))'
         return retval
 
+    def finished(self):
+        return self.signaled
+
     def __call__(self, event):
-        ''' Handles logic for the event. '''
+        ''' Handles logic for the event. Pushes the event to the inputs and then evaluates the circuit. '''
         signaled = False
-        if self.reset:
+        # In the following, we have to send the event to the whole circuit. The reason is that
+        # once some gate is signaled, it could be reset later; however if the signal stops event
+        # to be spread to other gates; the other gates could be activated as well with the same
+        # event.
+        if not self.positive:
             # For resetting signals we check if they are signaled
-            signaled = (len(self.setters) > 0) and self.expression(el(event) for el in self.setters)
+            if len(self.setters) > 0:
+                results = [el(event) for el in self.setters]
+                signaled = self.expression(results)
             if signaled:
                 # and if they are signaled, they reset the input setters
                 for el in self.setters:
@@ -214,8 +280,11 @@ class DSFilterAggregated(DSFilter):
         else:
             # For normal (mixed signals) we check first if the logic of reseters reset the circuit
             if len(self.resetters) > 0:
-                signaled = self.expression(el(event) for el in self.resetters)
-            if signaled:
+                results = [el(event) for el in self.resetters]
+                reset_signal = self.expression(results)
+            else:
+                reset_signal = False
+            if reset_signal:
                 # If they do, they reset the input setters
                 for el in self.setters:
                     el.signaled = False
@@ -224,4 +293,8 @@ class DSFilterAggregated(DSFilter):
                 if len(self.setters) > 0:
                     results = [el(event) for el in self.setters]
                     signaled = self.expression(results)
+            self.signaled = signaled
+            if signaled:
+                self.finish(self.cond_value(event))
         return signaled
+    

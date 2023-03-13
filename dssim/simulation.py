@@ -32,14 +32,8 @@ class DSAbortException(Exception):
         self.info = info
 
 
-class DSCondition:
-    @abstractmethod
-    def cond_value(self, event):
-        return event
-
-    @abstractmethod
-    def cond_cleanup(self):
-        pass
+class DSTimeoutContextError(Exception):
+    pass
 
 
 class DSAbsTime:
@@ -89,20 +83,25 @@ class DSSubscriberContextManager:
 
 
 class DSTimeoutContextManager:
-    class DSTimeoutContextError(Exception):
-        pass
-    def __init__(self, time, sim):
+    def __init__(self, time, exc=None, *, sim):
         self.sim = sim
-        self.event = self.DSTimeoutContextError()
-        self.sim.schedule_event(time, self.event)
+        self.time = time
+        if time is not None:
+            self.exc = exc
+            self.sim.schedule_event(time, exc)
 
     def reschedule(self, time):
-        self.sim.delete(cond=lambda e: e[1] == self.event)
-        self.sim.schedule_event(time, self.event)
+        if self.time is not None:
+            self.sim.delete(cond=lambda e: e[1] == self.exc)
+        self.sim.schedule_event(time, self.exc)
 
     def cleanup(self):
-        self.sim.delete(cond=lambda e: e[1] == self.event)
-
+        if self.time is not None:
+            self.sim.delete(cond=lambda e: e[1] == self.exc)
+    
+    def when(self):
+        return self.time
+    
 
 class _ProcessMetadata:
     def __init__(self, cond=lambda e: True):
@@ -281,13 +280,13 @@ class DSSimulation:
             self.parent_process = schedulable
             retval = schedulable.send(event)
         except StopIteration as exc:
-            if hasattr(schedulable, 'finish'):
-                retval = schedulable.finish(exc)
+            if isinstance(schedulable, DSFuture):
+                retval = schedulable.finish(exc.value)
             else:
                 retval = exc.value
                 self.cleanup(schedulable)
         except ValueError as exc:
-            if hasattr(schedulable, 'fail'):
+            if isinstance(schedulable, DSFuture):
                 retval = schedulable.fail(exc)
             global _exiting
             if 'generator already executing' in str(exc) and not _exiting:
@@ -546,12 +545,14 @@ class DSSimulation:
 
     @contextmanager
     def timeout(self, time):
-        cm = DSTimeoutContextManager(time, sim=self)
+        exc = DSTimeoutContextError()
+        cm = DSTimeoutContextManager(time, sim=self, exc=exc)
         try:
             yield cm
-        except DSTimeoutContextManager.DSTimeoutContextError as e:
-            if cm.event is not e:
+        except DSTimeoutContextError as e:
+            if cm.exc is not e:
                 raise
+            cm.set_expired()
         finally:
             cm.cleanup()
 
@@ -694,6 +695,16 @@ class DSFuture(DSComponent):
         self.finish_tx.signal(exc)
 
 
+class ICondition:
+    @abstractmethod
+    def cond_value(self, event):
+        return event
+
+    @abstractmethod
+    def cond_cleanup(self):
+        pass
+
+
 class DSProcess(DSFuture, IConsumer):
     ''' Typical task used in the simulations.
     This class "extends" generator / coroutine for additional info.
@@ -783,8 +794,8 @@ class DSProcess(DSFuture, IConsumer):
             raise ValueError(f'The assigned code {self.generator} to the process {self} is not generator, neither coroutine.')
         return retval
 
-    def finish(self, exc):
-        self.value = exc.value
+    def finish(self, value):
+        self.value = value
         self.sim.cleanup(self)
         # The last event is the process itself. This enables to wait for a process as an asyncio's Future 
         self.finish_tx.schedule_event(0, self)
