@@ -48,14 +48,14 @@ class DSFilter(DSCondition, ICondition):
     to DSFilter can return True (signaled). This requires the filter to be reevaluated.
     3. DSFilter can be negated. This is possible: filter = -DSFilter(...).
     Such expression will always change the filter policy to be pulsed.
-    4. DSFilter forwards all the events to the wrapped cond.
+    4. DSFilter forwards all the events to the wrapped DSProcess.
     '''
-    class Policy:
-        DEFAULT = 0
-        REEVALUATE = 1
-        PULSED = 2
+    class SignalType:
+        DEFAULT = 0  # Monostable. If once signaled, always signaled
+        REEVALUATE = 1  # Reevaluated after every event, i.e. the value changes after every event
+        PULSED = 2  # Returns "signaled" only when __call__(event) matches, but never stays in the state
 
-    def __init__(self, cond=None, policy=Policy.DEFAULT, signal_timeout=False, *args, **kwargs):
+    def __init__(self, cond=None, sigtype=SignalType.DEFAULT, signal_timeout=False, forward_events=True, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.expression = self.ONE_LINER
         self.signals = [self]
@@ -63,11 +63,12 @@ class DSFilter(DSCondition, ICondition):
         self.signaled = False
         self.value = None
         self.cond = cond
+        self.forward_events = forward_events
         # Reevaluation means that after every event we receive we have to re-evaluate
         # the condition
         # If not reevaluation set, then once filter matches, it is flipped to signaled
-        self.pulse = policy in (self.Policy.PULSED,)
-        self.reevaluate = policy in (self.Policy.REEVALUATE, self.Policy.PULSED,)
+        self.pulse = sigtype in (self.SignalType.PULSED,)
+        self.reevaluate = sigtype in (self.SignalType.REEVALUATE, self.SignalType.PULSED,)
         # Signalling timeout is for generators. If a generator returns with None, this means
         # that it timed out. If signal_timeout is True, such timeout would be understood
         # as a valid signal.
@@ -124,7 +125,7 @@ class DSFilter(DSCondition, ICondition):
         signaled, value = False, None
         if isinstance(self.cond, DSFuture):
             # now we should get this signaled only after return
-            if isinstance(self.cond, DSProcess):
+            if isinstance(self.cond, DSProcess) and self.forward_events:
                 # forward message to the child process
                 self.sim.send(self.cond, event)
             if self.cond.finished():
@@ -213,7 +214,7 @@ class DSFilterAggregated(DSCondition, ICondition):
     def set_signals(self):
         self.setters, self.resetters = [], []
         for s in self.signals:
-            if not isinstance(s, DSCondition):
+            if False:  # not isinstance(s, DSCondition):
                 self.setters.append(s)
             elif s.positive:
                 self.setters.append(s)
@@ -260,6 +261,15 @@ class DSFilterAggregated(DSCondition, ICondition):
 
     def finished(self):
         return self.signaled
+    
+    def _gather_results(self, event, futures):
+        retval = []
+        for fut in futures:
+            if isinstance(fut, DSCondition):
+                retval.append(fut(event))
+            else:
+                retval.append(fut.finished())
+        return retval
 
     def __call__(self, event):
         ''' Handles logic for the event. Pushes the event to the inputs and then evaluates the circuit. '''
@@ -271,7 +281,7 @@ class DSFilterAggregated(DSCondition, ICondition):
         if not self.positive:
             # For resetting signals we check if they are signaled
             if len(self.setters) > 0:
-                results = [el(event) for el in self.setters]
+                results = self._gather_results(event, self.setters)
                 signaled = self.expression(results)
             if signaled:
                 # and if they are signaled, they reset the input setters
@@ -280,7 +290,7 @@ class DSFilterAggregated(DSCondition, ICondition):
         else:
             # For normal (mixed signals) we check first if the logic of reseters reset the circuit
             if len(self.resetters) > 0:
-                results = [el(event) for el in self.resetters]
+                results = self._gather_results(event, self.resetters)
                 reset_signal = self.expression(results)
             else:
                 reset_signal = False
@@ -291,7 +301,7 @@ class DSFilterAggregated(DSCondition, ICondition):
                 signaled = False
             else:
                 if len(self.setters) > 0:
-                    results = [el(event) for el in self.setters]
+                    results = self._gather_results(event, self.setters)
                     signaled = self.expression(results)
             self.signaled = signaled
             if signaled:
