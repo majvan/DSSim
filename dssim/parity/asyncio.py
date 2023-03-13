@@ -243,3 +243,20 @@ def create_task(coro):
 def current_task():
     loop = get_running_loop()
     return loop.parent_process
+
+def isfuture(obj):
+    return isinstance(obj, DSFuture)
+
+def ensure_future(obj, *, loop=None):
+    async def wait_for_obj(obj):
+        retval = await obj
+        return retval
+    
+    if isinstance(obj, DSFuture):
+        return obj
+    loop = loop or get_running_loop()
+    if inspect.iscoroutine(obj):
+        return loop.create_task(obj)
+    if inspect.isawaitable(obj):
+        return loop.create_task(wait_for_obj(obj))
+    raise TypeError(f'Parameter {obj}: an awaitable expected.')
