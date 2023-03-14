@@ -104,7 +104,10 @@ class DSFilter(DSCondition, ICondition):
         return self
 
     def __str__(self):
-        return f'DSFilter({self.cond})'
+        retval = f'DSFilter({self.cond})'
+        if not self.positive:
+            retval = '-' + retval
+        return retval
 
     def finished(self):
         return self.signaled
@@ -240,14 +243,10 @@ class DSFilterAggregated(DSCondition, ICondition):
             el.cond_cleanup()
 
     def __str__(self):
-        expression = '|' if self.expression == any else '&'
-        strings = [str(v) for v in self.setters]
-        retval = '(' + f' {expression} '.join(strings) + ')'
-        if self.resetters:
-            strings = ['-'+str(v) for v in self.resetters]
-            retval = '(' + retval
-            retval += f'({retval} & (' + f' {expression} '.join(strings) + '))'
-        return retval
+        expression = ' | ' if self.expression == any else ' & '
+        strings = [str(v) for v in self.setters + self.resetters]
+        retval = expression.join(strings)
+        return f'({retval})'
 
     def finished(self):
         return self.signaled
