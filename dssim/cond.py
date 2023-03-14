@@ -16,28 +16,19 @@ This file implements advanced filtering logic - with overloading operators
 to be able create advanced expressions.
 '''
 import inspect
-from dssim.simulation import DSProcess, ICondition, DSCallback, DSFuture
+from dssim.simulation import DSProcess, IConsumer, ICondition, DSCallback, DSFuture
 
 
 class DSCondition(DSFuture):
     ONE_LINER = 'one liner'
 
     def __await__(self):
-        with self.sim.observe_pre(self.finish_tx):
-            retval = yield from self.sim.check_and_gwait(cond=self)
+        if not self.finished():
+            with self.sim.observe_pre(self.finish_tx):
+                retval = yield from self.sim.gwait(cond=self)
         if self.exc is not None:
             raise self.exc
         return self.value    
-
-    def finish(self, value):
-        # The conditions do not send signals to other processes, so no finish_tx activity
-        self.value = value
-        self.sim.cleanup(self)
-		
-    def fail(self, exc):
-        # The conditions do not send signals to other processes, so no finish_tx activity
-        self.exc = exc
-        self.sim.cleanup(self)
 
 
 class DSFilter(DSCondition, ICondition):
@@ -118,6 +109,9 @@ class DSFilter(DSCondition, ICondition):
     def finished(self):
         return self.signaled
     
+    def send(self, event):
+        return self.__call__(event)
+    
     def __call__(self, event):
         ''' Tries to evaluate the event. '''
         if self.signaled and not self.reevaluate:
@@ -186,10 +180,6 @@ class DSFilterAggregated(DSCondition, ICondition):
         self.signaled = False
         # The sim is required for awaitable
         self.sim = self.signals[0].sim  # get the sim from the first signal
-
-    @staticmethod
-    def _has_expr(filt, expr):
-        return isinstance(filt, DSFilterAggregated) and filt.expression == expr
 
     @staticmethod
     def build(first, second, expr):
@@ -270,6 +260,9 @@ class DSFilterAggregated(DSCondition, ICondition):
             else:
                 retval.append(fut.finished())
         return retval
+
+    def send(self, event):
+        return self.__call__(event)
 
     def __call__(self, event):
         ''' Handles logic for the event. Pushes the event to the inputs and then evaluates the circuit. '''

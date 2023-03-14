@@ -245,9 +245,11 @@ class DSSimulation:
         ''' Returns pair of info ("event passing", "value of event") '''
         if event is None:  # timeout received
             return True, None
-        if isinstance(event, Exception):  # any exception raised
+        elif isinstance(event, Exception):  # any exception raised
             return True, event
-        if callable(cond) and cond(event):  # there was a filter function set and the condition is met
+        elif isinstance(cond, IConsumer) and cond.send(event):
+            return True, event
+        elif callable(cond) and cond(event):  # there was a filter function set and the condition is met
             return True, event
         elif cond == event:  # we are expecting exact event and it came
             return True, event
@@ -653,7 +655,7 @@ class DSKWCallback(DSCallback):
 
 from dssim.pubsub import DSProducer
 
-class DSFuture(DSComponent):
+class DSFuture(DSComponent, IConsumer):
     ''' Typical future which can be used in the simulations.
     This represents a base for all awaitables.
     '''
@@ -694,6 +696,22 @@ class DSFuture(DSComponent):
         self.sim.cleanup(self)
         self.finish_tx.signal(exc)
 
+    def send(self, event):
+        self.finish(event)
+        return event
+
+    def signal(self, event):
+        return self.sim.signal(event)
+
+    def signal_kw(self, **event):
+        return self.sim.signal(event)
+
+    def schedule_event(self, time, event):
+        return self.sim.schedule_event(time, event)
+
+    def schedule_kw_event(self, time, event):
+        return self.sim.schedule_event(time, event)
+
 
 class ICondition:
     @abstractmethod
@@ -705,7 +723,7 @@ class ICondition:
         pass
 
 
-class DSProcess(DSFuture, IConsumer):
+class DSProcess(DSFuture):
     ''' Typical task used in the simulations.
     This class "extends" generator / coroutine for additional info.
     The best practise is to use DSProcess instead of generators.
