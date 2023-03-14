@@ -2,8 +2,8 @@ from dssim.simulation import DSProcess, DSSchedulable, DSSimulation
 from dssim.cond import DSFilter as _f
 
 @DSSchedulable
-def pusher(name, what_to_push):
-    sim.send(what_to_push, f'signal from pusher {name}')
+def pusher(name, where_to_push):
+    sim.send(where_to_push, f'signal from pusher {name}')
 
 def process_with_no_external_events():
     yield from sim.gwait(1)
@@ -23,21 +23,29 @@ def main():
     proc = DSProcess(process_with_no_external_events())
     ret = yield from sim.gwait(cond=_f(proc))
     print(sim.time, ret)
+    assert sim.time == 3
+    assert ret == 'Hello from introvert'
 
     proc = sim.schedule(0, DSProcess(process_with_no_external_events()))
     ret = yield from sim.gwait(cond=_f(proc))  # this will work
     print(sim.time, ret)
+    assert sim.time == 6
+    assert ret == 'Hello from introvert'
 
     proc = sim.schedule(0, DSProcess(process_with_external_events()))
     sim.schedule(4, pusher('first', proc))
-    ret = yield from sim.gwait(cond=_f(proc))  # this will work despite the fact that the last push was not done by time_process
+    ret = yield from sim.gwait(cond=_f(proc))  # this will work despite the fact that the last push was not scheduled by our process
     print(sim.time, ret)
+    assert sim.time == 10
+    assert ret == 'Hello from extrovert, last event I had was "signal from pusher first"'
 
     proc = sim.schedule(0, process_with_external_events())
     filt = _f(proc)
     sim.schedule(5, pusher('second', filt.get_process()))
-    ret = yield from sim.gwait(cond=filt)  # this will raise a ValueError because generator is already started
+    ret = yield from sim.gwait(cond=filt)
     print(sim.time, ret)
+    assert sim.time == 15
+    assert ret == 'Hello from extrovert, last event I had was "signal from pusher second"'
 
     # proc = process_with_external_events()
     # sim.schedule(3, pusher('second', proc))
@@ -48,11 +56,15 @@ def main():
     sim.schedule(6, pusher('third', filt.get_process()))
     ret = yield from sim.gwait(cond=filt)  # this will work
     print(sim.time, ret)
+    assert sim.time == 21
+    assert ret == 'Hello from extrovert, last event I had was "signal from pusher third"'
 
     filt = _f(DSProcess(process_with_external_events()))
     sim.schedule(7, pusher('forth', filt.get_process()))
     ret = yield from sim.gwait(cond=filt)  # this will work
     print(sim.time, ret)
+    assert sim.time == 28
+    assert ret == 'Hello from extrovert, last event I had was "signal from pusher forth"'
 
     proc = sim.schedule(0, DSProcess(process_with_external_events()))
     filt = _f(proc)
@@ -60,6 +72,8 @@ def main():
     sim.schedule(8, pusher('fifth', filt.get_process()))
     ret = yield from sim.gwait(cond=filt)  # this will work
     print(sim.time, ret)
+    assert sim.time == 36
+    assert ret == 'Hello from extrovert, last event I had was "signal from pusher fifth"'
 
 
 if __name__ == '__main__':
