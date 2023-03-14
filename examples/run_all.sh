@@ -13,8 +13,12 @@ echo "Running bottleneck"
 python $SCRIPT_DIR/bottleneck.py
 echo "Running bottleneck controller"
 python $SCRIPT_DIR/bottleneck_controller.py
-echo "Running conditions"
-python $SCRIPT_DIR/conditions.py
+echo "Running conditions generator"
+python $SCRIPT_DIR/conditions_generator.py
+echo "Running conditions async"
+python $SCRIPT_DIR/conditions_async.py
+echo "Running conditions futures"
+python $SCRIPT_DIR/conditions_futures.py
 echo "Running conditions process"
 python $SCRIPT_DIR/conditions_process.py
 echo "Running gas station"
