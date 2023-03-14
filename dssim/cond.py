@@ -16,19 +16,41 @@ This file implements advanced filtering logic - with overloading operators
 to be able create advanced expressions.
 '''
 import inspect
-from dssim.simulation import DSProcess, IConsumer, ICondition, DSCallback, DSFuture
-
+from dssim.simulation import DSCallback, DSFuture, DSProcess, ICondition
 
 class DSCondition(DSFuture):
     ONE_LINER = 'one liner'
 
-    def __await__(self):
+    def gwait(self, timeout=float('inf')):
+        ''' Implementation of await, differs from DSFuture. '''
+        retval = None
         if not self.finished():
-            with self.sim.observe_pre(self.finish_tx):
-                retval = yield from self.sim.gwait(cond=self)
+            futures = self.get_dependent_futures()
+            with self.sim.observe_pre(*futures):
+                retval = yield from self.sim.gwait(timeout, cond=self)
         if self.exc is not None:
             raise self.exc
+        if retval is None:
+            return None
+        return self.value
+
+    async def wait(self, timeout=float('inf')):
+        ''' Implementation of await, differs from DSFuture. '''
+
+        retval = None
+        if not self.finished():
+            futures = self.get_dependent_futures()
+            with self.sim.observe_pre(*futures):
+                retval = await self.sim.wait(timeout, cond=self)
+        if self.exc is not None:
+            raise self.exc
+        if retval is None:
+            return None
         return self.value    
+
+    def __await__(self):
+        retval = yield from self.gwait()
+        return retval
 
 
 class DSFilter(DSCondition, ICondition):
@@ -79,17 +101,13 @@ class DSFilter(DSCondition, ICondition):
             #    own events, the processing could be asynchronous with execution of this filter; i.e. it could return
             #    asynchronously. For such, we subscribe for the new process finish event and push that to the current
             #    process.
-            # if inspect.getgeneratorstate(self.cond) == inspect.GEN_CREATED:
             self.cond = DSProcess(self.cond, sim=self.sim)  # convert to DSProcess so we could get return value
-            # else:
-            #     raise ValueError('Cannot filter already running generator.')
         if isinstance(self.cond, DSProcess):
             self.sim = self.cond.sim
             if not self.cond.started():
                 self.cond = self.cond.schedule(0)  # start the process
-            self.parent_process = self.sim.parent_process
         if isinstance(self.cond, DSFuture):
-            self.subscriber = DSCallback(self._process_finished, sim=self.sim)
+            self.subscriber = DSCallback(self._future_finished, sim=self.sim)
             self.cond.finish_tx.add_subscriber(self.subscriber, 'pre')
 
     def __or__(self, other):
@@ -111,9 +129,6 @@ class DSFilter(DSCondition, ICondition):
 
     def finished(self):
         return self.signaled
-    
-    def send(self, event):
-        return self.__call__(event)
     
     def __call__(self, event):
         ''' Tries to evaluate the event. '''
@@ -145,11 +160,15 @@ class DSFilter(DSCondition, ICondition):
             self.finish(value)
         return signaled
 
-    def _process_finished(self, future):
+    def get_dependent_futures(self):
+        return [self.cond.finish_tx] if isinstance(self.cond, DSFuture) else []
+
+    def _future_finished(self, future):
+        ''' Async callback informing that the associated future has finished. '''
         if not self.reevaluate:
             self.cond.finish_tx.remove_subscriber(self.subscriber, 'pre')
         # Following forces re-evaluation by injecting new event
-        self.sim.send(self.parent_process, future)
+        self.finish(future)
 
     def cond_value(self, event):
         return self.value
@@ -260,8 +279,11 @@ class DSFilterAggregated(DSCondition, ICondition):
                 retval.append(fut.finished())
         return retval
 
-    def send(self, event):
-        return self.__call__(event)
+    def get_dependent_futures(self):
+        retval = []
+        for s in self.signals:
+            retval += s.get_dependent_futures()
+        return retval
 
     def __call__(self, event):
         ''' Handles logic for the event. Pushes the event to the inputs and then evaluates the circuit. '''

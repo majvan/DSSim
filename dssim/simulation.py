@@ -140,6 +140,16 @@ class IConsumer:
         raise NotImplementedError('Abstract method, use derived classes')
 
 
+class ICondition:
+    @abstractmethod
+    def cond_value(self, event):
+        return event
+
+    @abstractmethod
+    def cond_cleanup(self):
+        pass
+
+
 class DSSimulation:
     ''' The simulation is a which schedules the nearest (in time) events. '''
     sim_singleton = None
@@ -243,13 +253,13 @@ class DSSimulation:
 
     def _check_cond(self, cond, event):
         ''' Returns pair of info ("event passing", "value of event") '''
+        # Check the event first
         if event is None:  # timeout received
             return True, None
         elif isinstance(event, Exception):  # any exception raised
             return True, event
-        elif isinstance(cond, IConsumer) and cond.send(event):
-            return True, event
-        elif callable(cond) and cond(event):  # there was a filter function set and the condition is met
+        # Check the type of condition
+        if callable(cond) and cond(event):  # there was a filter function set and the condition is met
             return True, event
         elif cond == event:  # we are expecting exact event and it came
             return True, event
@@ -684,7 +694,7 @@ class DSFuture(DSComponent, IConsumer):
             retval = yield from self.sim.check_and_gwait(cond=lambda e:self.finished())
         if self.exc is not None:
             raise self.exc
-        return self.value    
+        return self.value
 
     def finish(self, value):
         self.value = value
@@ -711,16 +721,6 @@ class DSFuture(DSComponent, IConsumer):
 
     def schedule_kw_event(self, time, event):
         return self.sim.schedule_event(time, event)
-
-
-class ICondition:
-    @abstractmethod
-    def cond_value(self, event):
-        return event
-
-    @abstractmethod
-    def cond_cleanup(self):
-        pass
 
 
 class DSProcess(DSFuture):
