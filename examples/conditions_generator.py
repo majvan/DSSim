@@ -135,7 +135,10 @@ def demo_filtering():
     assert sim.time == time + 33
 
     time = sim.time
-    ret = yield from sim.gwait(cond=f(sim.gwait(2), signal_timeout=True, sim=sim) & f(sim.gwait(6), signal_timeout=True, sim=sim) | f(sim.gwait(4), signal_timeout=True, sim=sim) & f(sim.gwait(5), signal_timeout=True, sim=sim))
+    # The following timeout events from particular filters will not be forwarded to this process unless we subscribe for it.
+    # The c.gwait() will subscribe for these events
+    c = f(sim.gwait(2), signal_timeout=True, sim=sim) & f(sim.gwait(6), signal_timeout=True, sim=sim) | f(sim.gwait(4), signal_timeout=True, sim=sim) & f(sim.gwait(5), signal_timeout=True, sim=sim)
+    ret = yield from c.gwait()
     assert sim.time == time + 5  # wait for (2 and 6) or (1 and 5) => signal at 1 then 5 makes this true
     assert tuple(ret.values()) == (None, None)
 
@@ -144,4 +147,4 @@ if __name__ == '__main__':
     sim = DSSimulation()
     proc = sim.schedule(0, demo_filtering())
     retval = sim.run()
-    assert retval == (78, 109)
+    assert retval == (78, 103)
