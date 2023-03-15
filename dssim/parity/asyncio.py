@@ -179,12 +179,15 @@ def get_current_loop():
 def get_running_loop():
     return DSSimulation.sim_singleton
 
+def get_event_loop():
+    return get_current_loop()
+
 
 async def gather(*coros_or_futures, return_exceptions=False):
     loop = get_running_loop()
     filters = [DSFilter(c, sim=loop) for c in coros_or_futures]
     f = DSFilterAggregated(all, filters, sim=loop)
-    retval = await loop.wait(cond=f)
+    retval = await f
     return [retval[f] for f in filters]  # values have to be sorted by input order
 
 async def sleep(delay, result=None):
