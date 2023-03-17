@@ -119,25 +119,23 @@ class IConsumer:
         '''
         raise NotImplementedError('Abstract method, use derived classes')
 
-    @abstractmethod
+
+class SignalMixin:
     def signal(self, event):
         ''' Signal event. '''
-        raise NotImplementedError('Abstract method, use derived classes')
+        return self.sim.signal(self, event)
 
-    @abstractmethod
     def signal_kw(self, **event):
         ''' Signal key-value event type as kwargs. '''
-        raise NotImplementedError('Abstract method, use derived classes')
+        return self.sim.signal(self, event)
 
-    @abstractmethod
     def schedule_event(self, time, event):
         ''' Signal event later. '''
-        raise NotImplementedError('Abstract method, use derived classes')
+        return self.sim.schedule_event(time, event, self)
 
-    @abstractmethod
-    def schedule_kw_event(self, time, event):
+    def schedule_kw_event(self, time, **event):
         ''' Signal event later. '''
-        raise NotImplementedError('Abstract method, use derived classes')
+        return self.sim.schedule_event(time, event, self)
 
 
 class ICondition:
@@ -639,18 +637,6 @@ class DSCallback(DSComponent, IConsumer):
         retval = self.forward_method(event)
         return retval
 
-    def signal(self, event):
-        return self.sim.signal(self, event)
-
-    def signal_kw(self, **event):
-        return self.sim.signal(self.scheduled_generator, event)
-
-    def schedule_event(self, time, event):
-        return self.sim.schedule_event(time, event, self)
-
-    def schedule_kw_event(self, time, **event):
-        return self.sim.schedule_event(time, event, self)
-
     def create_metadata(self, cond):
         self.meta = _ProcessMetadata(cond)
         return self.meta
@@ -665,7 +651,7 @@ class DSKWCallback(DSCallback):
 
 from dssim.pubsub import DSProducer
 
-class DSFuture(DSComponent, IConsumer):
+class DSFuture(DSComponent, IConsumer, SignalMixin):
     ''' Typical future which can be used in the simulations.
     This represents a base for all awaitables.
     '''
@@ -710,20 +696,8 @@ class DSFuture(DSComponent, IConsumer):
         self.finish(event)
         return event
 
-    def signal(self, event):
-        return self.sim.signal(event)
 
-    def signal_kw(self, **event):
-        return self.sim.signal(event)
-
-    def schedule_event(self, time, event):
-        return self.sim.schedule_event(time, event)
-
-    def schedule_kw_event(self, time, event):
-        return self.sim.schedule_event(time, event)
-
-
-class DSProcess(DSFuture):
+class DSProcess(DSFuture, SignalMixin):
     ''' Typical task used in the simulations.
     This class "extends" generator / coroutine for additional info.
     The best practise is to use DSProcess instead of generators.
@@ -748,18 +722,6 @@ class DSProcess(DSFuture):
         ''' Pushes an event to the task and gets new state. '''
         self.value = self.scheduled_generator.send(event)
         return self.value
-
-    def signal(self, event):
-        return self.sim.signal(self, event)
-
-    def signal_kw(self, **event):
-        return self.sim.signal(self, event)
-
-    def schedule_event(self, time, event):
-        return self.sim.schedule_event(time, event, self)
-
-    def schedule_kw_event(self, time, **event):
-        return self.sim.schedule_event(time, event, self)
 
     def create_metadata(self):
         self.meta = _ProcessMetadata()

@@ -19,7 +19,7 @@ Consumer: an object which takes signal from producer and then stops
   further spread.
 '''
 from abc import abstractmethod
-from dssim.simulation import DSComponent, IConsumer
+from dssim.simulation import DSComponent, IConsumer, SignalMixin
 
 class NotifierDict():
     def __init__(self):
@@ -123,7 +123,7 @@ class _ProducerMetadata():
         self.cond = lambda e: True
 
 
-class DSProducer(DSComponent, IConsumer):
+class DSProducer(DSComponent, IConsumer, SignalMixin):
     ''' Full feature producer which consume signal events and resends it to the attached consumers. '''
     def __init__(self, notifier=NotifierDict, **kwargs):
         super().__init__(**kwargs)
@@ -171,38 +171,6 @@ class DSProducer(DSComponent, IConsumer):
         for queue in self.subs.values():
             queue.cleanup()
 
-    def signal(self, event):
-        ''' Send an event to the producer. The event will be processed by simulator
-        instance and then sent back to us by the send() method '''
-        self.sim.signal(self, event)
-
-    def signal_kw(self, **event):
-        ''' Signal a key-value event as dict '''
-        self.signal(event)
-
-    def schedule_event(self, time, event):
-        # We will schedule all the future events into our producer and not to the
-        # attached subscribers. The reason is simple- in the time of the event
-        # evaluation (in the future) the set of attached subscribers can be different.
-
-        # Another usage of this method is with zero time_delta. In that case it can
-        # defer the direct consumer calls back to the simulation and preventing thus
-        # cyclic signalling dependency (an event from processA sends directly to
-        # processB, it executes immediately and tries to send signal to processA).
-        # Decoupling with zero time schedule could be a solution.
-
-        # The last caveat of signalling is the order of execution. For instance, if
-        # processA gets signal i.e. "char A available on serial line", executes and
-        # frees serial line which in turn triggers signal i.e. "char B available
-        # on serial line" which now triggers processB, then the processB executes
-        # and preempts processA to finish its "char A" execution first.
-        # Though both events happen in the same sim.time, the execution process is
-        # typically expected to run sequentially.
-        return self.sim.schedule_event(time, event, self)
-
-    def schedule_kw_event(self, time, **event):
-        return self.sim.schedule_event(time, event, self)
-        
     async def wait(self, timeout=float('inf'), cond=lambda e: False, val=True):
         with self.sim.consume(self):
             retval = await self.sim.wait(timeout, cond, val)
