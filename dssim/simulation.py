@@ -264,9 +264,9 @@ class DSSimulation:
         elif isinstance(event, Exception):  # any exception raised
             return True, event
         # Check the type of condition
-        if callable(cond) and cond(event):  # there was a filter function set and the condition is met
+        if cond == event:  # we are expecting exact event and it came
             return True, event
-        elif cond == event:  # we are expecting exact event and it came
+        elif callable(cond) and cond(event):  # there was a filter function set and the condition is met
             return True, event
         else:  # the event does not match our condition and hence will be ignored
             return False, None
