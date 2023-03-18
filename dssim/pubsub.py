@@ -19,7 +19,7 @@ Consumer: an object which takes signal from producer and then stops
   further spread.
 '''
 from abc import abstractmethod
-from dssim.simulation import DSComponent, IConsumer, SignalMixin
+from dssim.simulation import DSComponent, DSConsumer, SignalMixin
 
 class NotifierDict():
     def __init__(self):
@@ -115,15 +115,7 @@ class NotifierPriority():
         self.d = new_prio_dict
 
 
-class _ProducerMetadata():
-    def __init__(self):
-        # The producer is signaled when a deferred event from the same producer appears.
-        # In such case the simulator checks for the condition and if met, it calls the producer's send method.
-        # Thus, the condition is always meet. Another conditions are checked when calling callbacks
-        self.cond = lambda e: True
-
-
-class DSProducer(DSComponent, IConsumer, SignalMixin):
+class DSProducer(DSConsumer, SignalMixin):
     ''' Full feature producer which consume signal events and resends it to the attached consumers. '''
     def __init__(self, notifier=NotifierDict, **kwargs):
         super().__init__(**kwargs)
@@ -132,10 +124,6 @@ class DSProducer(DSComponent, IConsumer, SignalMixin):
             'act': notifier(),
             'post': notifier(),
         }
-        self.create_metadata()
-
-    def create_metadata(self):
-        return _ProducerMetadata()
 
     def add_subscriber(self, subscriber, phase='act', **kwargs):
         if subscriber:

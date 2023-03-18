@@ -14,11 +14,11 @@
 '''
 A queue of events with runtime flexibility of put / get events.
 '''
-from dssim.simulation import DSComponent, IConsumer
+from dssim.simulation import DSConsumer
 from dssim.pubsub import DSProducer
 
 
-class Queue(DSComponent, IConsumer):
+class Queue(DSConsumer):
     ''' The (FIFO) queue of events is a SW component which can dynamically
     be used to put an event in and get (or wait for- if the queue is empty)
     a queued event.

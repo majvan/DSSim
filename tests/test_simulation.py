@@ -284,21 +284,21 @@ class TestConditionChecking(unittest.TestCase):
 
     def test0_process_metadata(self):
         sim = DSSimulation()
-        self.assertTrue(len(sim._process_metadata) == 0)
+        self.assertTrue(len(sim._consumer_metadata) == 0)
         p = DSProcess(self.__my_process(), sim=sim)
         p.meta = 'My meta'
-        meta = sim.get_process_metadata(p)
+        meta = sim.get_consumer_metadata(p)
         self.assertEqual(meta, p.meta)
-        self.assertTrue(len(sim._process_metadata) == 0)
+        self.assertTrue(len(sim._consumer_metadata) == 0)
 
         p = self.__my_process()
-        self.assertTrue(len(sim._process_metadata) == 0)
-        meta = sim.get_process_metadata(p)
+        self.assertTrue(len(sim._consumer_metadata) == 0)
+        meta = sim.get_consumer_metadata(p)
         self.assertIsNotNone(meta)
-        self.assertTrue(len(sim._process_metadata) == 1)  # write the metadata of the generator into the simulation registry
-        meta = sim.get_process_metadata(p)
+        self.assertTrue(len(sim._consumer_metadata) == 1)  # write the metadata of the generator into the simulation registry
+        meta = sim.get_consumer_metadata(p)
         self.assertIsNotNone(meta)
-        self.assertTrue(len(sim._process_metadata) == 1)  # the next retrieve does not increase the registry
+        self.assertTrue(len(sim._consumer_metadata) == 1)  # the next retrieve does not increase the registry
 
     def test1_check_storing_cond_in_metadata(self):
         ''' By calling wait, the metadata.cond should be stored '''

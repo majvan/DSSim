@@ -103,28 +103,9 @@ class DSTimeoutContextManager:
         return self.time
     
 
-class _ProcessMetadata:
+class _ConsumerMetadata:
     def __init__(self, cond=lambda e: True):
         self.cond = cond
-
-
-class IConsumer:
-    def __init__(self, *args, **kwargs):
-        self.create_metadata()
-       
-    @abstractmethod
-    def send(self, event):
-        ''' Receive event. This interface should be used only by DSSimulator instance as
-        the main dispatcher for directly sending messages.
-        Bypassing DSSimulator by calling the consumer send() directly would bypass the
-        condition check and could also result into dependency issues.
-        The name 'send' is required as python's generator.send() is de-facto consumer, too.
-        '''
-        raise NotImplementedError('Abstract method, use derived classes')
-
-    def create_metadata(self):
-        self.meta = _ProcessMetadata()
-        return self.meta
 
 
 class SignalMixin:
@@ -188,20 +169,20 @@ class DSSimulation:
         self.num_events = 0
         self.time = time
         self.parent_process = None
-        self._process_metadata = {}
+        self._consumer_metadata = {}
 
     def create_metadata(self, process):
         if hasattr(process, 'create_metadata'):
             retval = process.create_metadata()
         else:
-            retval = _ProcessMetadata()
-            self._process_metadata[process] = retval
+            retval = _ConsumerMetadata()
+            self._consumer_metadata[process] = retval
         return retval
 
-    def get_process_metadata(self, process):
+    def get_consumer_metadata(self, process):
         retval = getattr(process, 'meta', None)
         if not retval:
-            retval = self._process_metadata.get(process, None)
+            retval = self._consumer_metadata.get(process, None)
             retval = retval or self.create_metadata(process)
         return retval
 
@@ -268,7 +249,7 @@ class DSSimulation:
             return False, None
 
     def check_condition(self, schedulable, event):
-        cond = self.get_process_metadata(schedulable).cond
+        cond = self.get_consumer_metadata(schedulable).cond
         retval, event = self._check_cond(cond, event)
         return retval
 
@@ -402,7 +383,7 @@ class DSSimulation:
         if time != float('inf'):
             self.time_queue.add_element(time, (schedulable, None))
 
-        metaobj = self.get_process_metadata(schedulable)
+        metaobj = self.get_consumer_metadata(schedulable)
         # Get the condition object (lambda / object / ...) from the process metadata
         metaobj.cond = cond
 
@@ -472,7 +453,7 @@ class DSSimulation:
         if time != float('inf'):
             self.time_queue.add_element(time, (schedulable, None))
 
-        metaobj = self.get_process_metadata(schedulable)
+        metaobj = self.get_consumer_metadata(schedulable)
         # Get the condition object (lambda / object / ...) from the process metadata
         metaobj.cond = cond
 
@@ -515,7 +496,7 @@ class DSSimulation:
         # for the schedulable. Since the process has finished, it will never need it, however
         # there may be events for the process planned.
         # Remove the condition
-        metaobj = self.get_process_metadata(schedulable)
+        metaobj = self.get_consumer_metadata(schedulable)
         metaobj.cond = None  # we keep a condition, but an easy one; accepting None events
         # Remove all the events for this schedulable
         self.time_queue.delete(lambda e:e[0] is schedulable)
@@ -623,7 +604,27 @@ def DSSchedulable(api_func):
     return scheduled_func
 
 
-class DSCallback(DSComponent, IConsumer):
+class DSConsumer(DSComponent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, *args, **kwargs)
+        self.create_metadata()
+       
+    def create_metadata(self):
+        self.meta = _ConsumerMetadata()
+        return self.meta
+
+    @abstractmethod
+    def send(self, event):
+        ''' Receive event. This interface should be used only by DSSimulator instance as
+        the main dispatcher for directly sending messages.
+        Bypassing DSSimulator by calling the consumer send() directly would bypass the
+        condition check and could also result into dependency issues.
+        The name 'send' is required as python's generator.send() is de-facto consumer, too.
+        '''
+        raise NotImplementedError('Abstract method, use derived classes')
+
+
+class DSCallback(DSConsumer):
     ''' A callback interface.
     The callback interface is called from the simulator when a process sends events.
     '''
@@ -647,7 +648,7 @@ class DSKWCallback(DSCallback):
 
 from dssim.pubsub import DSProducer
 
-class DSFuture(DSComponent, IConsumer, SignalMixin):
+class DSFuture(DSConsumer, SignalMixin):
     ''' Typical future which can be used in the simulations.
     This represents a base for all awaitables.
     '''
