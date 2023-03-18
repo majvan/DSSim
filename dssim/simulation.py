@@ -109,6 +109,9 @@ class _ProcessMetadata:
 
 
 class IConsumer:
+    def __init__(self, *args, **kwargs):
+        self.create_metadata()
+       
     @abstractmethod
     def send(self, event):
         ''' Receive event. This interface should be used only by DSSimulator instance as
@@ -118,6 +121,10 @@ class IConsumer:
         The name 'send' is required as python's generator.send() is de-facto consumer, too.
         '''
         raise NotImplementedError('Abstract method, use derived classes')
+
+    def create_metadata(self):
+        self.meta = _ProcessMetadata()
+        return self.meta
 
 
 class SignalMixin:
@@ -527,7 +534,7 @@ class DSSimulation:
             up_to = float('inf')
         while len(self.time_queue) > 0:
             # Get the first event on the queue
-            tevent, (process, event_obj) = self.time_queue.get0()
+            tevent, (consumer, event_obj) = self.time_queue.get0()
             if tevent >= up_to:
                 retval_time = self.time
                 self.time = up_to
@@ -538,7 +545,7 @@ class DSSimulation:
             self.num_events += 1
             self.time = tevent
             self.time_queue.pop()
-            self.send(process, event_obj)
+            self.send(consumer, event_obj)
         else:
             retval_time = self.time
             self.time = up_to
@@ -630,16 +637,11 @@ class DSCallback(DSComponent, IConsumer):
         super().__init__(**kwargs)
         # TODO: check if forward method is not a generator / process; otherwise throw an error
         self.forward_method = forward_method
-        self.create_metadata(cond)
 
     def send(self, event):
         ''' The function calls the registered callback. '''
         retval = self.forward_method(event)
         return retval
-
-    def create_metadata(self, cond):
-        self.meta = _ProcessMetadata(cond)
-        return self.meta
 
 
 class DSKWCallback(DSCallback):
@@ -685,12 +687,12 @@ class DSFuture(DSComponent, IConsumer, SignalMixin):
     def finish(self, value):
         self.value = value
         self.sim.cleanup(self)
-        self.finish_tx.signal(value)
-		
+        self.finish_tx.signal(self)
+    
     def fail(self, exc):
         self.exc = exc
         self.sim.cleanup(self)
-        self.finish_tx.signal(exc)
+        self.finish_tx.signal(self)
 
     def send(self, event):
         self.finish(event)
@@ -707,7 +709,6 @@ class DSProcess(DSFuture, SignalMixin):
         ''' Initializes DSProcess. The input has to be a generator function. '''
         self.generator = generator
         self.scheduled_generator = generator
-        self.create_metadata()
 
     def __iter__(self):
         ''' Required to use the class to get events from it. '''
@@ -722,10 +723,6 @@ class DSProcess(DSFuture, SignalMixin):
         ''' Pushes an event to the task and gets new state. '''
         self.value = self.scheduled_generator.send(event)
         return self.value
-
-    def create_metadata(self):
-        self.meta = _ProcessMetadata()
-        return self.meta
 
     def _scheduled_gfcn(self, time):
         ''' Start a schedulable process with possible delay '''
@@ -778,13 +775,13 @@ class DSProcess(DSFuture, SignalMixin):
         self.value = value
         self.sim.cleanup(self)
         # The last event is the process itself. This enables to wait for a process as an asyncio's Future 
-        self.finish_tx.schedule_event(0, self)
+        self.finish_tx.signal(self)
         return self.value
     
     def fail(self, exc):
         self.exc = exc
         self.sim.cleanup(self)
-        self.finish_tx.schedule_event(0, 'Fail')
+        self.finish_tx.signal(self)
 
     async def join(self, timeout=float('inf')):
         with self.sim.observe_pre(self.finish_tx):
