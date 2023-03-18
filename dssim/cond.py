@@ -144,17 +144,17 @@ class DSFilter(DSCondition, ICondition):
                     signaled, value = True, None
                 else:
                     signaled, value = True, self.cond.value
-        elif callable(self.cond) and self.cond(event):
-            signaled, value = True, event
-        elif self is event:
-            signaled, value = True, event
         elif self.cond == event:
             signaled, value = True, event
+        elif callable(self.cond) and self.cond(event):
+            signaled, value = True, event
+        # elif self is event:
+        #     signaled, value = True, event
         if not self.pulse:
             # A resetting- circuit only pulses its signal, but does not keep the signal, neither value
             self.signaled = signaled
         if signaled:
-            self.finish(value)
+            self._finish(value, async_future=False)
         return signaled
 
     def get_dependent_futures(self):
@@ -164,11 +164,16 @@ class DSFilter(DSCondition, ICondition):
         return retval
 
     def finish(self, value):
+        self._finish(value, async_future=True)
+
+    def _finish(self, value, async_future=True):
         self.value = value
         if not self.pulse:
             self.signaled = True
-        # Following forces re-evaluation by injecting new event
-        self.finish_tx.signal(self)
+        if async_future:
+            # Following forces re-evaluation by injecting new event.
+            # We have to re-evaluate only when async finish was called.
+            self.finish_tx.signal(self)
 
     def cond_value(self, event):
         return self.value
