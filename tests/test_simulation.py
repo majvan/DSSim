@@ -333,7 +333,6 @@ class TestConditionChecking(unittest.TestCase):
             retval = e.value
         self.assertEqual(retval, 'condition value was computed in lambda')
         self.assertTrue(process.meta.cond == condition)
-        condition.cond_cleanup.assert_called_once()
     
     def test2_check_cond(self):
         ''' Test 5 types of conditions - see _check_cond '''

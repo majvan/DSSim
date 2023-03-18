@@ -176,9 +176,6 @@ class DSFilter(DSCondition, ICondition):
     def cond_value(self, event):
         return self.value
 
-    def cond_cleanup(self):
-        self.sim.cleanup(self)
-
     def get_process(self):
         return self.cond if isinstance(self.cond, DSProcess) else None        
 
@@ -258,10 +255,6 @@ class DSFilterAggregated(DSCondition, ICondition):
                 retval[el] = el.value
         return retval
     
-    def cond_cleanup(self):
-        for el in self.signals:
-            el.cond_cleanup()
-
     def __str__(self):
         expression = ' | ' if self.expression == any else ' & '
         strings = [str(v) for v in self.setters + self.resetters]

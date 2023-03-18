@@ -150,10 +150,6 @@ class ICondition:
     def cond_value(self, event):
         return event
 
-    @abstractmethod
-    def cond_cleanup(self):
-        pass
-
 
 class DSSimulation:
     ''' The simulation is a which schedules the nearest (in time) events. '''
@@ -417,8 +413,6 @@ class DSSimulation:
             self.delete(lambda e: e == (schedulable, None))
         if hasattr(cond, 'cond_value'):
             event = cond.cond_value(event)
-        if hasattr(cond, 'cond_cleanup'):
-            cond.cond_cleanup()
         return event
 
     def check_and_gwait(self, timeout=float('inf'), cond=lambda e: False, val=True):
