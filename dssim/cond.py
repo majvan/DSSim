@@ -44,9 +44,7 @@ class DSCondition(DSFuture):
                 retval = await self.sim.wait(timeout, cond=self)
         if self.exc is not None:
             raise self.exc
-        if retval is None:
-            return None
-        return self.value    
+        return retval
 
     def __await__(self):
         retval = yield from self.gwait()
