@@ -15,21 +15,98 @@ from dssim.cond import DSFilter as f
 from dssim.simulation import DSSimulation, DSProcess
 
 
-def return_hello_after_10():
-    yield from sim.gwait(10)
-    return 'hello'
+def return_greeting_after(time, greeting):
+    yield from sim.gwait(time)
+    return greeting
 
-def signal_after_time(time, cond):
+def signal_cond_after(time, cond):
     yield from sim.gwait(time)
     cond.finish('Signal!')
 
 async def demo_filtering():
     time = sim.time
-    cond = f(DSProcess(return_hello_after_10(), name='original_process_waiting_for', sim=sim))
-    DSProcess(signal_after_time(1, cond), name='async_setter_process').schedule(0)
+    cond = f(DSProcess(return_greeting_after(10, 'hello'), sim=sim))
+    DSProcess(signal_cond_after(2, cond)).schedule(0)
     ret = await cond
     assert ret == 'Signal!'
+    assert sim.time == time + 2
+    
+    time = sim.time
+    cond = f(DSProcess(return_greeting_after(10, 'hello'), sim=sim))
+    DSProcess(signal_cond_after(2, cond)).schedule(0)
+    ret = await cond.wait()
+    assert ret == 'Signal!'
+    assert sim.time == time + 2
+
+    time = sim.time
+    cond = f(DSProcess(return_greeting_after(10, 'hello'), sim=sim))
+    DSProcess(signal_cond_after(2, cond)).schedule(0)
+    ret = await cond.wait(1)
+    assert ret is None
     assert sim.time == time + 1
+
+    # time = sim.time
+    # cond = f(DSProcess(return_greeting_after(10, 'hello'), sim=sim))
+    # DSProcess(signal_cond_after(1, cond)).schedule(0)
+    # ret = await sim.wait(cond=cond)
+    # assert ret == 'Signal!'
+    # assert sim.time == time + 1
+
+    time = sim.time
+    cond0 = f(DSProcess(return_greeting_after(10, 'hi'), sim=sim))
+    cond1 = f(DSProcess(return_greeting_after(5, 'hello'), sim=sim))
+    ret = await (cond0 | cond1)
+    assert ret == {cond1: 'hello'}
+    assert sim.time == time + 5
+
+    time = sim.time
+    cond0 = f(DSProcess(return_greeting_after(10, 'hi'), sim=sim))
+    cond1 = f(DSProcess(return_greeting_after(5, 'hello'), sim=sim))
+    ret = await (cond0 | cond1).wait()
+    assert ret == {cond1: 'hello'}
+    assert sim.time == time + 5
+
+    time = sim.time
+    cond0 = f(DSProcess(return_greeting_after(10, 'hi'), sim=sim))
+    cond1 = f(DSProcess(return_greeting_after(5, 'hello'), sim=sim))
+    ret = await (cond0 | cond1).wait(1)
+    assert ret is None
+    assert sim.time == time + 1
+
+    # time = sim.time
+    # cond0 = f(DSProcess(return_greeting_after(10, 'hi'), sim=sim))
+    # cond1 = f(DSProcess(return_greeting_after(5, 'hello'), sim=sim))
+    # ret = await sim.wait(cond=cond0 | cond1)
+    # assert ret == {cond1: 'hello'}
+    # assert sim.time == time + 5
+
+    time = sim.time
+    cond0 = f(DSProcess(return_greeting_after(10, 'hi'), sim=sim))
+    cond1 = f(DSProcess(return_greeting_after(5, 'hello'), sim=sim))
+    ret = await (cond0 & cond1)
+    assert ret == {cond0: 'hi', cond1: 'hello'}
+    assert sim.time == time + 10
+
+    time = sim.time
+    cond0 = f(DSProcess(return_greeting_after(10, 'hi'), sim=sim))
+    cond1 = f(DSProcess(return_greeting_after(5, 'hello'), sim=sim))
+    ret = await (cond0 & cond1).wait()
+    assert ret == {cond0: 'hi', cond1: 'hello'}
+    assert sim.time == time + 10
+
+    time = sim.time
+    cond0 = f(DSProcess(return_greeting_after(10, 'hi'), sim=sim))
+    cond1 = f(DSProcess(return_greeting_after(5, 'hello'), sim=sim))
+    ret = await (cond0 & cond1).wait(1)
+    assert ret is None
+    assert sim.time == time + 1
+
+    # time = sim.time
+    # cond0 = f(DSProcess(return_greeting_after(10, 'hi'), sim=sim))
+    # cond1 = f(DSProcess(return_greeting_after(5, 'hello'), sim=sim))
+    # ret = await sim.wait(cond=cond0 & cond1)
+    # assert ret == {cond0: 'hi', cond1: 'hello'}
+    # assert sim.time == time + 5
 
     ret = await sim.wait(6, cond)
 
@@ -38,4 +115,4 @@ if __name__ == '__main__':
     sim = DSSimulation()
     proc = sim.schedule(0, demo_filtering())
     retval = sim.run()
-    assert retval == (10, 9)
+    assert retval == (46, 66)
