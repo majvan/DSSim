@@ -106,9 +106,6 @@ class DSFilter(DSCondition, ICondition):
             self.sim = self.cond.sim
             if not self.cond.started():
                 self.cond = self.cond.schedule(0)  # start the process
-        if isinstance(self.cond, DSFuture):
-            self.subscriber = DSCallback(self._future_finished, sim=self.sim)
-            self.cond.finish_tx.add_subscriber(self.subscriber, 'pre')
 
     def __or__(self, other):
         return DSFilterAggregated.build(self, other, any)
@@ -161,22 +158,23 @@ class DSFilter(DSCondition, ICondition):
         return signaled
 
     def get_dependent_futures(self):
-        return [self.cond.finish_tx] if isinstance(self.cond, DSFuture) else []
+        retval = [self.finish_tx]
+        if isinstance(self.cond, DSFuture):
+            retval.append(self.cond.finish_tx)
+        return retval
 
-    def _future_finished(self, future):
-        ''' Async callback informing that the associated future has finished. '''
-        if not self.reevaluate:
-            self.cond.finish_tx.remove_subscriber(self.subscriber, 'pre')
+    def finish(self, value):
+        self.value = value
+        if not self.pulse:
+            self.signaled = True
         # Following forces re-evaluation by injecting new event
-        self.finish(future)
+        self.finish_tx.signal(self)
 
     def cond_value(self, event):
         return self.value
 
     def cond_cleanup(self):
-        if isinstance(self.cond, DSFuture):
-            self.cond.finish_tx.remove_subscriber(self.subscriber, 'pre')
-            self.sim.cleanup(self.cond)
+        self.sim.cleanup(self)
 
     def get_process(self):
         return self.cond if isinstance(self.cond, DSProcess) else None        
