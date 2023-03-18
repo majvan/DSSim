@@ -22,15 +22,15 @@ class CustomerGenerator(sim.Component):
     def process(self):
         while True:
             Customer()
-            yield from self.wait(random.uniform(5, 15))
+            yield from self.gwait(random.uniform(5, 15))
 
 
 class Customer(sim.Component):
     def process(self):
-        yield from self.get(clerks)  # Get for me one clerk (=resource). If not available, wait
+        yield from self.gget(clerks)  # Get for me one clerk (=resource). If not available, wait
         print(f"{env.now()} Customer in process with clerk")
-        yield from self.wait(30)
-        yield from self.put(clerks)  # Put the clerk back to the resources, but wait while the resource is full (it is not, the capacity is infinity).
+        yield from self.gwait(30)
+        yield from self.gput(clerks)  # Put the clerk back to the resources, but wait while the resource is full (it is not, the capacity is infinity).
 
 
 env = sim.Environment() 

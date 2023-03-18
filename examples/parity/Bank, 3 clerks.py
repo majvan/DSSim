@@ -24,22 +24,22 @@ class CustomerGenerator(DSProcessComponent):
     def process(self):
         while True:
             Customer()
-            yield from self.wait(random.uniform(5, 15))
+            yield from self.gwait(random.uniform(5, 15))
 
 
 class Customer(DSProcessComponent):
     def process(self):
         self.enter_nowait(waitingline)
-        event = yield from self.wait()  # wait for any event
+        event = yield from self.gwait()  # wait for any event
         print(f"{self.sim.time} Customer ends with signal {event}")
 
 
 class Clerk(DSProcessComponent):
     def process(self):
         while True:
-            customer = yield from self.pop(waitingline)
+            customer = yield from self.gpop(waitingline)
             print(f"{self.sim.time} Processing customer")
-            yield from self.wait(30)
+            yield from self.gwait(30)
             customer.signal("processed")
 
 

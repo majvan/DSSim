@@ -25,7 +25,7 @@ class CustomerGenerator(DSProcessComponent):
     def process(self):
         while True:
             Customer()
-            yield from self.wait(random.uniform(5, 15))
+            yield from self.gwait(random.uniform(5, 15))
 
 
 class Customer(DSProcessComponent):
@@ -37,11 +37,11 @@ class Customer(DSProcessComponent):
 class Clerk(DSProcessComponent):
     def process(self):
         while True:
-            retval = yield from worktodo.check_and_wait(cond=lambda e:worktodo['waiting on line'])  # wait until worktodo['waiting on line'] is True
+            retval = yield from worktodo.check_and_gwait(cond=lambda e:worktodo['waiting on line'])  # wait until worktodo['waiting on line'] is True
             customer = waitingline.pop()
             worktodo['waiting on line'] = (len(waitingline) > 0)  # this operation can change the state => it sends a signal
             print(f"{self.sim.time} Customer in process with clerk")
-            yield from self.wait(30)
+            yield from self.gwait(30)
 
 
 sim = DSSimulation() 

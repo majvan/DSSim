@@ -35,7 +35,7 @@ class Prince(DSProcessComponent):
         if king is None:  # there is no king, so this prince will become king, immediately
             kings.append(("no king", lastkingdied, self.sim.time, self.sim.time - lastkingdied))
         with self.sim.consume(king_died):  # we consume event and noone else gets notified
-            event = yield from self.sim.check_and_wait(_abs(self.live_till), cond=lambda e: True)  # any message will interrupt, because only king died messages are sent here
+            event = yield from self.sim.check_and_gwait(_abs(self.live_till), cond=lambda e: True)  # any message will interrupt, because only king died messages are sent here
             if not event:  # timeout returns None event
                 print(self.sim.time, self, "dies before getting to the throne")
                 return

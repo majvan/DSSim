@@ -14,7 +14,7 @@
 '''
 The example is showing a code parity with example from salabim project
 '''
-from dssim.simulation import DSSimulation
+from dssim.simulation import DSSimulation, DSSchedulable
 from dssim.processcomponent import DSProcessComponent
 from dssim.pubsub import DSProducer
 import random
@@ -24,7 +24,7 @@ class CustomerGenerator(DSProcessComponent):
     def process(self):
         while True:
             Customer()
-            yield from self.wait(random.uniform(5, 15))
+            yield from self.gwait(random.uniform(5, 15))
 
 
 class Customer(DSProcessComponent):
@@ -37,10 +37,10 @@ class Clerk(DSProcessComponent):
     def process(self, i):
         while True:
             if len(waitingline) == 0:
-                msg = yield from signaler.wait(cond=lambda e:True)  # create a consumer and wait for any signal from the producer
+                msg = yield from signaler.gwait(cond=lambda e:True)  # create a consumer and wait for any signal from the producer
             customer = waitingline.pop()
             print(f"{self.sim.time} Customer in process with clerk {i}")
-            yield from self.wait(30)
+            yield from self.gwait(30)
 
 
 sim = DSSimulation() 
