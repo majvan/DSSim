@@ -42,6 +42,12 @@ class State(DSComponent):
     def get(self, key, default=None):
         return self.state.get(key, default)
 
+    def check_and_gwait(self, timeout=float('inf'), cond=lambda e:True):
+        ''' Wait for change in the state and returns when the condition is met '''
+        with self.sim.consume(self.tx_changed):
+            retval = yield from self.sim.check_and_gwait(timeout, cond=cond)
+        return retval
+
     async def check_and_wait(self, timeout=float('inf'), cond=lambda e:True):
         ''' Wait for change in the state and returns when the condition is met '''
         with self.sim.consume(self.tx_changed):

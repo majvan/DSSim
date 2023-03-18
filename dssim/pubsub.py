@@ -159,6 +159,11 @@ class DSProducer(DSConsumer, SignalMixin):
         for queue in self.subs.values():
             queue.cleanup()
 
+    def gwait(self, timeout=float('inf'), cond=lambda e: False, val=True):
+        with self.sim.consume(self):
+            retval = yield from self.sim.gwait(timeout, cond, val)
+        return retval
+
     async def wait(self, timeout=float('inf'), cond=lambda e: False, val=True):
         with self.sim.consume(self):
             retval = await self.sim.wait(timeout, cond, val)

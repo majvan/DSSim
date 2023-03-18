@@ -16,8 +16,6 @@ The file provides process-centric API to easy the design of process-oriented
 application.
 '''
 from dssim.simulation import DSSchedulable, DSComponent, DSProcess, DSAbortException
-from dssim.components.queue import Queue
-from dssim.components.resource import Resource
 import inspect
 
 class DSProcessComponent(DSComponent):
@@ -28,19 +26,18 @@ class DSProcessComponent(DSComponent):
             name = type(self).__name__ + '.' + str(self._dscomponent_instances)
         super().__init__(self, name=name, *args, **kwargs)
         kwargs.pop('name', None), kwargs.pop('sim', None)  # remove the two arguments
-        if inspect.isfunction(self.process):
-            process = DSProcess(DSSchedulable(self.process)(*args, **kwargs), name=self.name+'.process', sim=self.sim)
-        elif inspect.isgeneratorfunction(self.process) or inspect.iscoroutinefunction(self.process):
+        if inspect.isgeneratorfunction(self.process) or inspect.iscoroutinefunction(self.process):
             process = DSProcess(self.process(*args, **kwargs), name=self.name+'.process', sim=self.sim)
+        elif inspect.ismethod(self.process):
+            process = DSProcess(DSSchedulable(self.process)(*args, **kwargs), name=self.name+'.process', sim=self.sim)
         else:
-            raise ValueError(f'The attribute {self.__class__}.process is is not method, generator, neither coroutine.')
+            raise ValueError(f'The attribute {self.__class__}.process is not method, generator, neither coroutine.')
         retval = process.schedule(0)
         self.scheduled_process = retval
         self.__class__._dscomponent_instances += 1
 
     def signal(self, event):
         self.scheduled_process.signal({'object': event})
-        #self.sim.schedule_event(0, {'object': event}, self.scheduled_process)
 
     async def wait(self, timeout=float('inf')):
         try:
