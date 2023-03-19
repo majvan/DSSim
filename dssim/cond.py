@@ -66,7 +66,7 @@ class DSFilter(DSCondition, ICondition):
         REEVALUATE = 1  # Reevaluated after every event, i.e. the value changes after every event
         PULSED = 2  # Returns "signaled" only when __call__(event) matches, but never stays in the state
 
-    def __init__(self, cond=None, sigtype=SignalType.DEFAULT, signal_timeout=False, forward_events=True, *args, **kwargs):
+    def __init__(self, cond=None, sigtype=SignalType.DEFAULT, signal_timeout=False, forward_events=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.expression = self.ONE_LINER
         self.signals = [self]
@@ -74,7 +74,6 @@ class DSFilter(DSCondition, ICondition):
         self.signaled = False
         self.value = None
         self.cond = cond
-        self.forward_events = forward_events
         # Reevaluation means that after every event we receive we have to re-evaluate
         # the condition
         # If not reevaluation set, then once filter matches, it is flipped to signaled
@@ -85,21 +84,13 @@ class DSFilter(DSCondition, ICondition):
         # as a valid signal.
         self.signal_timeout = signal_timeout
         if inspect.isgenerator(self.cond) or inspect.iscoroutine(self.cond):
-            # We create a new process from generator. This is required:
-            # 1. (TODO: document!) Events scheduled only for the current process: they won't be taken by the new
-            #    process.
-            # 2. Events which are processed by the current process have go to the new process so it has to inherit
-            #    (fork) all the subscriptions from the current process.
-            #    Another possibility to solve this is to push all the events from this process to the new process.
-            # 3. Events which will be scheduled only for the new process (i.e. the new process schedules for himself)
-            #    won't be taken by the current process (of course).
-            # 4. The condition is computed on the event object, which is return value of the process
-            #    (retval None means timeout).
-            # 5. Because of [3] and [4], we have to know the return value but because the process may be handling his
-            #    own events, the processing could be asynchronous with execution of this filter; i.e. it could return
-            #    asynchronously. For such, we subscribe for the new process finish event and push that to the current
-            #    process.
+            # We create a new process from generator
             self.cond = DSProcess(self.cond, sim=self.sim)  # convert to DSProcess so we could get return value
+            # It is assumed that the coro / generator runs in the same 'context' as the current process.
+            # The coro / generator gets events which were planned for the current running process by default.
+            self.forward_events = (forward_events != False)  # True => True, None => True, False => False
+        else:
+            self.forward_events = (forward_events == True)  # True => True, None => False, False => False
         if isinstance(self.cond, DSProcess):
             self.sim = self.cond.sim
             if not self.cond.started():
@@ -132,8 +123,8 @@ class DSFilter(DSCondition, ICondition):
         signaled, value = False, None
         if isinstance(self.cond, DSFuture):
             # now we should get this signaled only after return
-            if isinstance(self.cond, DSProcess) and self.forward_events:
-                # forward message to the child process
+            if self.forward_events:
+                # forward message to the consumer
                 self.sim.send(self.cond, event)
             if self.cond.finished():
                 if self.cond.exc is not None:
