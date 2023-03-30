@@ -595,7 +595,7 @@ def DSSchedulable(api_func):
     
     @wraps(api_func)
     def scheduled_func(*args, **kwargs):
-        if inspect.isgeneratorfunction(api_func):
+        if inspect.isgeneratorfunction(api_func) or inspect.iscoroutinefunction(api_func):
             extended_gen = api_func(*args, **kwargs)
         else:
             extended_gen = _fcn_in_generator(*args, **kwargs)
