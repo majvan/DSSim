@@ -52,9 +52,15 @@ class Awaitable:
 class DSSubscriberContextManager:
     def __init__(self, process, queue_id, components, **kwargs):
         self.process = process
-        self.pre = set(components) if queue_id == 'pre' else set()
-        self.act = set(components) if queue_id == 'act' else set()
-        self.post = set(components) if queue_id == 'post' else set()
+        eps = set()
+        for c in components:
+            if isinstance(c, DSFuture):
+                eps |= set(c.get_future_eps())
+            else:  # component is DSProducer
+                eps.add(c)
+        self.pre = eps if queue_id == 'pre' else set()
+        self.act = eps if queue_id == 'act' else set()
+        self.post = eps if queue_id == 'post' else set()
         self.kwargs = kwargs
 
     def __enter__(self):
@@ -656,7 +662,10 @@ class DSFuture(DSConsumer, SignalMixin):
         super().__init__(*args, **kwargs)
         # We store the latest value or excpetion. Useful to check the status after finish.
         self.value, self.exc = None, None
-        self.finish_tx = DSProducer(name=self.name+'.finish_tx', sim=self.sim)
+        self._finish_tx = DSProducer(name=self.name+'.future', sim=self.sim)
+
+    def get_future_eps(self):
+        return {self._finish_tx,}
 
     def finished(self):
         return (self.value, self.exc) != (None, None)
@@ -673,7 +682,7 @@ class DSFuture(DSConsumer, SignalMixin):
             self.fail(e)
 
     def __await__(self):
-        with self.sim.observe_pre(self.finish_tx):
+        with self.sim.observe_pre(self):
             retval = yield from self.sim.check_and_gwait(cond=lambda e:self.finished())
         if self.exc is not None:
             raise self.exc
@@ -682,12 +691,12 @@ class DSFuture(DSConsumer, SignalMixin):
     def finish(self, value):
         self.value = value
         self.sim.cleanup(self)
-        self.finish_tx.signal(self)
+        self._finish_tx.signal(self)
     
     def fail(self, exc):
         self.exc = exc
         self.sim.cleanup(self)
-        self.finish_tx.signal(self)
+        self._finish_tx.signal(self)
 
     def send(self, event):
         self.finish(event)
@@ -770,21 +779,21 @@ class DSProcess(DSFuture, SignalMixin):
         self.value = value
         self.sim.cleanup(self)
         # The last event is the process itself. This enables to wait for a process as an asyncio's Future 
-        self.finish_tx.signal(self)
+        self._finish_tx.signal(self)
         return self.value
     
     def fail(self, exc):
         self.exc = exc
         self.sim.cleanup(self)
-        self.finish_tx.signal(self)
+        self._finish_tx.signal(self)
 
     async def join(self, timeout=float('inf')):
-        with self.sim.observe_pre(self.finish_tx):
+        with self.sim.observe_pre(self):
             retval = await self.sim.check_and_wait(cond=lambda e:self.finished())
         return retval
     
     def gjoin(self, timeout=float('inf')):
-        with self.sim.observe_pre(self.finish_tx):
+        with self.sim.observe_pre(self):
             retval = yield from self.sim.check_and_gwait(cond=lambda e:self.finished())
         return retval
 

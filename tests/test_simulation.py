@@ -17,7 +17,8 @@ Tests for simulation module
 '''
 import unittest
 from unittest.mock import Mock, MagicMock, call
-from dssim.simulation import DSSimulation, DSAbortException, DSSchedulable, DSProcess, DSSubscriberContextManager
+from dssim.simulation import DSSimulation, DSAbortException, DSFuture, DSSchedulable, DSProcess, DSSubscriberContextManager
+from dssim.pubsub import DSProducer
 
 class SomeObj:
     pass
@@ -25,6 +26,10 @@ class SomeObj:
 class SomeCallableObj:
     def __call__(self, event):
         return True
+
+class FutureMock(Mock):
+    def get_future_eps(self):
+        return {self,}
 
 class EventForwarder:
     ''' This represents basic forwarder which forwards events from time_process into a waiting
@@ -463,61 +468,103 @@ class TestSubscriberContext(unittest.TestCase):
     def __process(self):
         yield 1
 
-    def test0_init_add_remove(self):
+    def test0_init_add_remove_producer(self):
         sim = DSSimulation()
         p = DSProcess(self.__process(), sim=sim)
-        cm = DSSubscriberContextManager(p, 'pre', ('a', 'b', 'c'))
+        a, b, c, d, e = DSProducer(), DSProducer(), DSProducer(), DSProducer(), DSProducer()
+        cm = DSSubscriberContextManager(p, 'pre', (a, b, c))
         self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (3, 0, 0))
-        cm = DSSubscriberContextManager(p, 'act', ('a', 'b', 'c', 'd'))
+        cm = DSSubscriberContextManager(p, 'act', (a, b, c, d))
         self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (0, 4, 0))
-        cm = DSSubscriberContextManager(p, 'post', ('a', 'b', 'c', 'd', 'e'))
+        cm = DSSubscriberContextManager(p, 'post', (a, b, c, d, e))
         self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (0, 0, 5))
-        cm = cm + DSSubscriberContextManager(p, 'act', ('a', 'b', 'c'))
+        cm = cm + DSSubscriberContextManager(p, 'act', (a, b, c))
         self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (0, 3, 5))
-        cm = cm + DSSubscriberContextManager(p, 'act', ('d'))
+        cm = cm + DSSubscriberContextManager(p, 'act', (d,))
         self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (0, 4, 5))
-        cm = cm + DSSubscriberContextManager(p, 'act', ('c'))
+        cm = cm + DSSubscriberContextManager(p, 'act', (c,))
         self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (0, 4, 5))
 
-    def test1_enter_exit(self):
+    def test1_init_add_remove_future(self):
         sim = DSSimulation()
         p = DSProcess(self.__process(), sim=sim)
-        mock_a, mock_b, mock_c, mock_d, mock_e = (Mock(), Mock(), Mock(), Mock(), Mock())
-        cm = DSSubscriberContextManager(p, 'pre', (mock_a, mock_c)) + DSSubscriberContextManager(p, 'post', (mock_b,)) + DSSubscriberContextManager(p, 'act', (mock_e,))
-        cm.__enter__()
-        mock_a.add_subscriber.assert_called_once_with(p, 'pre')
-        mock_c.add_subscriber.assert_called_once_with(p, 'pre')
-        mock_b.add_subscriber.assert_called_once_with(p, 'post')
-        mock_d.add_subscriber.assert_not_called()
-        mock_e.add_subscriber.assert_called_once_with(p, 'act')
-        _ = mock_a.reset_mock(), mock_b.reset_mock(), mock_c.reset_mock(), mock_d.reset_mock()
-        cm.__exit__(None, None, None)
-        mock_a.remove_subscriber.assert_called_once_with(p, 'pre')
-        mock_c.remove_subscriber.assert_called_once_with(p, 'pre')
-        mock_b.remove_subscriber.assert_called_once_with(p, 'post')
-        mock_d.remove_subscriber.assert_not_called()
-        mock_e.remove_subscriber.assert_called_once_with(p, 'act')
+        a, b, c, d, e = DSFuture(), DSFuture(), DSFuture(), DSFuture(), DSFuture()
+        cm = DSSubscriberContextManager(p, 'pre', (a, b, c))
+        self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (3, 0, 0))
+        cm = DSSubscriberContextManager(p, 'act', (a, b, c, d))
+        self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (0, 4, 0))
+        cm = DSSubscriberContextManager(p, 'post', (a, b, c, d, e))
+        self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (0, 0, 5))
+        cm = cm + DSSubscriberContextManager(p, 'act', (a, b, c))
+        self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (0, 3, 5))
+        cm = cm + DSSubscriberContextManager(p, 'act', (d,))
+        self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (0, 4, 5))
+        cm = cm + DSSubscriberContextManager(p, 'act', (c,))
+        self.assertTrue((len(cm.pre), len(cm.act), len(cm.post)) == (0, 4, 5))
 
-    def test2_proxy_function(self):
+    def test2_enter_exit(self):
+        sim = DSSimulation()
+        p = DSProcess(self.__process(), sim=sim)
+        a, b, c, d, e = (FutureMock(), FutureMock(), FutureMock(), FutureMock(), FutureMock())
+        cm = DSSubscriberContextManager(p, 'pre', (a, c)) + DSSubscriberContextManager(p, 'post', (b,)) + DSSubscriberContextManager(p, 'act', (e,))
+        cm.__enter__()
+        a.add_subscriber.assert_called_once_with(p, 'pre')
+        c.add_subscriber.assert_called_once_with(p, 'pre')
+        b.add_subscriber.assert_called_once_with(p, 'post')
+        d.add_subscriber.assert_not_called()
+        e.add_subscriber.assert_called_once_with(p, 'act')
+        _ = a.reset_mock(), b.reset_mock(), c.reset_mock(), d.reset_mock()
+        cm.__exit__(None, None, None)
+        a.remove_subscriber.assert_called_once_with(p, 'pre')
+        c.remove_subscriber.assert_called_once_with(p, 'pre')
+        b.remove_subscriber.assert_called_once_with(p, 'post')
+        d.remove_subscriber.assert_not_called()
+        e.remove_subscriber.assert_called_once_with(p, 'act')
+
+    def test3_sim_functions_producer(self):
         sim = DSSimulation()
         sim.parent_process = DSProcess(self.__process(), sim=sim)
-        cm = sim.observe_pre('a', 'b', 'c')
+        a, b, c, d = (DSProducer(), DSProducer(), DSProducer(), DSProducer(),)
+        cm = sim.observe_pre(a, b, c)
         self.assertTrue(type(cm) == DSSubscriberContextManager)
-        self.assertTrue(cm.pre == {'a', 'b', 'c'})
+        self.assertTrue(cm.pre == {a, b, c})
         self.assertTrue((len(cm.act), len(cm.post)) == (0, 0))
-        cm = sim.consume('a', 'c')
+        cm = sim.consume(a, c)
         self.assertTrue(type(cm) == DSSubscriberContextManager)
-        self.assertTrue(cm.act == {'a', 'c'})
+        self.assertTrue(cm.act == {a, c})
         self.assertTrue((len(cm.pre), len(cm.post)) == (0, 0))
-        cm = sim.observe_post('d')
+        cm = sim.observe_post(d)
         self.assertTrue(type(cm) == DSSubscriberContextManager)
-        self.assertTrue(cm.post == {'d',})
+        self.assertTrue(cm.post == {d,})
         self.assertTrue((len(cm.pre), len(cm.act)) == (0, 0))
-        cm = sim.observe_post('d') + sim.observe_pre('a') + sim.consume('b', 'c')
+        cm = sim.observe_post(d) + sim.observe_pre(a) + sim.consume(b, c)
         self.assertTrue(type(cm) == DSSubscriberContextManager)
-        self.assertTrue(cm.pre == {'a',})
-        self.assertTrue(cm.act == {'b', 'c'})
-        self.assertTrue(cm.post == {'d',})
+        self.assertTrue(cm.pre == {a,})
+        self.assertTrue(cm.act == {b, c})
+        self.assertTrue(cm.post == {d,})
+
+    def test4_sim_functions_future(self):
+        sim = DSSimulation()
+        sim.parent_process = DSProcess(self.__process(), sim=sim)
+        a, b, c, d = (DSFuture(), DSFuture(), DSFuture(), DSFuture(),)
+        cm = sim.observe_pre(a, b, c)
+        self.assertTrue(type(cm) == DSSubscriberContextManager)
+        self.assertTrue(cm.pre == a.get_future_eps() | b.get_future_eps() | c.get_future_eps())
+        self.assertTrue((len(cm.act), len(cm.post)) == (0, 0))
+        cm = sim.consume(a, c)
+        self.assertTrue(type(cm) == DSSubscriberContextManager)
+        self.assertTrue(cm.act == a.get_future_eps() | c.get_future_eps())
+        self.assertTrue((len(cm.pre), len(cm.post)) == (0, 0))
+        cm = sim.observe_post(d)
+        self.assertTrue(type(cm) == DSSubscriberContextManager)
+        self.assertTrue(cm.post == d.get_future_eps())
+        self.assertTrue((len(cm.pre), len(cm.act)) == (0, 0))
+        cm = sim.observe_post(d) + sim.observe_pre(a) + sim.consume(b, c)
+        self.assertTrue(type(cm) == DSSubscriberContextManager)
+        self.assertTrue(cm.pre == a.get_future_eps())
+        self.assertTrue(cm.act == b.get_future_eps() | c.get_future_eps())
+        self.assertTrue(cm.post == d.get_future_eps())
+
 
 
 class TestSim(unittest.TestCase):

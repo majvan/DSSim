@@ -98,16 +98,16 @@ class FutureAsyncMixin:
 
     def add_done_callback(self, callback, * , context=None):
         if isinstance(callback, DSCallback):
-            self.finish_tx.add_subscriber(callback, phase='pre')
+            self._finish_tx.add_subscriber(callback, phase='pre')
         elif callable(callback):
-            self.finish_tx.add_subscriber(DSCallback(callback), phase='pre')
+            self._finish_tx.add_subscriber(DSCallback(callback), phase='pre')
         else:
             raise ValueError(f'Callback {callback} shall be a DSCallback or a callable')
 
     def remove_done_callback(self, callback):
         if isinstance(callback, function):
             callback = DSCallback(callback)
-        self.finish_tx.remove_subscriber(callback)
+        self._finish_tx.remove_subscriber(callback)
 
     def cancel(self, msg=None):
         if self.finished():

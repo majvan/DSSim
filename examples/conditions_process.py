@@ -21,14 +21,14 @@ def main():
     # print(sim.time, ret)
 
     proc = DSProcess(process_with_no_external_events())
-    with sim.observe_pre(proc.finish_tx):
+    with sim.observe_pre(proc):
         ret = yield from sim.gwait(cond=_f(proc))
     print(sim.time, ret)
     assert sim.time == 3
     assert ret == 'Hello from introvert'
 
     proc = sim.schedule(0, DSProcess(process_with_no_external_events()))
-    with sim.observe_pre(proc.finish_tx):
+    with sim.observe_pre(proc):
         ret = yield from sim.gwait(cond=_f(proc))  # this will work
     print(sim.time, ret)
     assert sim.time == 6
@@ -36,7 +36,7 @@ def main():
 
     proc = sim.schedule(0, DSProcess(process_with_external_events()))
     sim.schedule(4, pusher('first', proc))
-    with sim.observe_pre(proc.finish_tx):
+    with sim.observe_pre(proc):
         ret = yield from sim.gwait(cond=_f(proc))  # this will work despite the fact that the last push was not scheduled by our process
     print(sim.time, ret)
     assert sim.time == 10
@@ -46,7 +46,7 @@ def main():
     filt = _f(coro)
     proc = filt.get_process()
     sim.schedule(5, pusher('second', proc))
-    with sim.observe_pre(proc.finish_tx):
+    with sim.observe_pre(proc):
         ret = yield from sim.gwait(cond=filt)
     print(sim.time, ret)
     assert sim.time == 15
@@ -60,7 +60,7 @@ def main():
     filt = _f(process_with_external_events())
     proc = filt.get_process()
     sim.schedule(6, pusher('third', proc))
-    with sim.observe_pre(proc.finish_tx):
+    with sim.observe_pre(proc):
         ret = yield from sim.gwait(cond=filt)  # this will work
     print(sim.time, ret)
     assert sim.time == 21
@@ -69,7 +69,7 @@ def main():
     filt = _f(DSProcess(process_with_external_events()))
     proc = filt.get_process()
     sim.schedule(7, pusher('forth', proc))
-    with sim.observe_pre(proc.finish_tx):
+    with sim.observe_pre(proc):
         ret = yield from sim.gwait(cond=filt)  # this will work
     print(sim.time, ret)
     assert sim.time == 28
@@ -79,7 +79,7 @@ def main():
     filt = _f(proc)
     assert proc == filt.get_process()
     sim.schedule(8, pusher('fifth', proc))
-    with sim.observe_pre(proc.finish_tx):
+    with sim.observe_pre(proc):
         ret = yield from sim.gwait(cond=filt)  # this will work
     print(sim.time, ret)
     assert sim.time == 36

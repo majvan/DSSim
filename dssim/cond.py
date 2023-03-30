@@ -25,8 +25,7 @@ class DSCondition(DSFuture):
         ''' Implementation of await, differs from DSFuture. '''
         retval = None
         if not self.finished():
-            futures = self.get_dependent_futures()
-            with self.sim.observe_pre(*futures):
+            with self.sim.observe_pre(self):
                 retval = yield from self.sim.gwait(timeout, cond=self)
         if self.exc is not None:
             raise self.exc
@@ -39,8 +38,7 @@ class DSCondition(DSFuture):
 
         retval = None
         if not self.finished():
-            futures = self.get_dependent_futures()
-            with self.sim.observe_pre(*futures):
+            with self.sim.observe_pre(self):
                 retval = await self.sim.wait(timeout, cond=self)
         if self.exc is not None:
             raise self.exc
@@ -146,10 +144,10 @@ class DSFilter(DSCondition, ICondition):
             self._finish(value, async_future=False)
         return signaled
 
-    def get_dependent_futures(self):
-        retval = [self.finish_tx]
+    def get_future_eps(self):
+        retval = {self._finish_tx,}
         if isinstance(self.cond, DSFuture):
-            retval.append(self.cond.finish_tx)
+            retval |= self.cond.get_future_eps()
         return retval
 
     def finish(self, value):
@@ -162,7 +160,7 @@ class DSFilter(DSCondition, ICondition):
         if async_future:
             # Following forces re-evaluation by injecting new event.
             # We have to re-evaluate only when async finish was called.
-            self.finish_tx.signal(self)
+            self._finish_tx.signal(self)
 
     def cond_value(self, event):
         return self.value
@@ -264,10 +262,10 @@ class DSFilterAggregated(DSCondition, ICondition):
                 retval.append(fut.finished())
         return retval
 
-    def get_dependent_futures(self):
-        retval = []
+    def get_future_eps(self):
+        retval = set()
         for s in self.signals:
-            retval += s.get_dependent_futures()
+            retval |= s.get_future_eps()
         return retval
 
     def __call__(self, event):
