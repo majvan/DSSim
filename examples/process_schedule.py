@@ -15,68 +15,103 @@ from dssim.simulation import DSSchedulable, DSProcess, DSComponent, DSSimulation
 import inspect
 
 class MyComponent(DSComponent):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, dummy_selection, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.taskA = DSProcess(self.do_somethingA(), name=self.name+'.taskA', sim=self.sim)
         self.taskB = DSProcess(self.do_somethingB(), name=self.name+'.taskB', sim=self.sim)
         self.taskC = DSProcess(self.do_somethingC(), name=self.name+'.taskC', sim=self.sim)
-        self.taskDummy = self.dummy(12)
+        if dummy_selection == 'gjoin':
+            self.taskDummy = self.dummy_gjoin(dummy_selection)
+        elif dummy_selection == 'join':
+            self.taskDummy = self.dummy_join(dummy_selection)
+        else:
+            self.taskDummy = self.dummy(dummy_selection)
 
     def do_somethingA(self):
-        # The following will be run in a time t=10 sec (see below schedule_future)
-        print(self.taskA, '0 Time:', self.sim.time)
-        print(self.taskA, '0 Sleeping for 5 sec')
+        assert self.sim.time == 10
+        print(self.sim.time, self.taskA, '0 Sleeping for 5 sec')
         yield from self.sim.gwait(5)
-        print(self.taskA, '1 Time:', self.sim.time)
-        print(self.taskA, '1 Sleeping for 2 sec')
+        assert self.sim.time == 15
+        print(self.sim.time, self.taskA, '1 Sleeping for 2 sec')
         yield from self.sim.gwait(2)
-        print(self.taskA, '2 Time:', self.sim.time)
-        print(self.taskA, '2 Finish')
+        assert self.sim.time == 17
+        print(self.sim.time, self.taskA, '2 Finish')
 
     def do_somethingB(self):
-        # The following will be run in a time t=10 sec (see below schedule_future)
-        print(self.taskB, '0 Time:', self.sim.time)
-        print(self.taskB, '0 Sleeping for 1 sec')
+        assert self.sim.time == 14
+        print(self.sim.time, self.taskB, '0 Sleeping for 1 sec')
         yield from self.sim.gwait(1)
-        print(self.taskB, '1 Time:', self.sim.time)
-        print(self.taskB, '1 Sleeping for 3 sec')
+        assert self.sim.time == 15
+        print(self.sim.time, self.taskB, '1 Sleeping for 3 sec')
         yield from self.sim.gwait(3)
-        print(self.taskB, '2 Time:', self.sim.time)
-        print(self.taskB, '2 Finish')
+        assert self.sim.time == 18
+        print(self.sim.time, self.taskB, '2 Finish')
 
     def do_somethingC(self):
-        # The following will be run in a time t=10 sec (see below schedule_future)
-        print(self.taskC, '0 Time:', self.sim.time)
-        print(self.taskC, '0 Scheduling', self.taskA, 'in 2 sec')
+        assert self.sim.time == 8
+        print(self.sim.time, self.taskC, '0 Scheduling', self.taskA, 'in 2 sec')
         self.sim.schedule(2, self.taskA)
-        print(self.taskC, '0 Time:', self.sim.time)
-        print(self.taskC, '0 Sleeping for 4 sec')
+        assert self.sim.time == 8
+        print(self.sim.time, self.taskC, '0 Sleeping for 4 sec')
         yield from self.sim.gwait(4)
-        print(self.taskC, '1 Time:', self.sim.time)
-        print(self.taskC, '1 Scheduling', self.taskB, 'in 2 sec')
+        assert self.sim.time == 12
+        print(self.sim.time, self.taskC, '1 Scheduling', self.taskB, 'in 2 sec')
         self.sim.schedule(2, self.taskB)
-        print(self.taskC, '2 Time:', self.sim.time)
-        print(self.taskC, '2 Finish')
+        assert self.sim.time == 12
+        print(self.sim.time, self.taskC, '2 Finish')
 
     @DSSchedulable
-    def dummy(self, num):
-        print(self.taskDummy, '0 run with', num)
-        print(self.taskDummy, '0 waiting for finishing all the tasks...')
-        print(self.taskDummy, '0 waiting for', self.taskA, 'to finish...')
+    def dummy_gjoin(self, name):
+        print(self.sim.time, self.taskDummy, '0 run with', name)
+        print(self.sim.time, self.taskDummy, '0 waiting for', self.taskA, 'to finish...')
         yield from self.taskA.gjoin()
-        print(self.taskDummy, '1 waiting for', self.taskB, 'to finish...')
+        print(self.sim.time, self.taskDummy, '1 waiting for', self.taskB, 'to finish...')
         yield from self.taskB.gjoin()
-        print(self.taskDummy, '2 waiting for', self.taskC, 'to finish...')
+        print(self.sim.time, self.taskDummy, '2 waiting for', self.taskC, 'to finish...')
         yield from self.taskC.gjoin()
-        print(self.taskDummy, '3 all tasks finished')
+        print(self.sim.time, self.taskDummy, '3 all tasks finished')
+
+    @DSSchedulable
+    async def dummy_join(self, name):
+        print(self.sim.time, self.taskDummy, '0 run with', name)
+        print(self.sim.time, self.taskDummy, '0 waiting for', self.taskA, 'to finish...')
+        await self.taskA.join()
+        print(self.sim.time, self.taskDummy, '1 waiting for', self.taskB, 'to finish...')
+        await self.taskB.join()
+        print(self.sim.time, self.taskDummy, '2 waiting for', self.taskC, 'to finish...')
+        await self.taskC.join()
+        print(self.sim.time, self.taskDummy, '3 all tasks finished')
+
+    @DSSchedulable
+    async def dummy(self, name):
+        print(self.sim.time, self.taskDummy, '0 run with', name)
+        print(self.sim.time, self.taskDummy, '0 waiting for', self.taskA, 'to finish...')
+        await self.taskA.join()
+        assert self.sim.time == 17
+        print(self.sim.time, self.taskDummy, '1 waiting for', self.taskB, 'to finish...')
+        await self.taskB.join()
+        assert self.sim.time == 18
+        print(self.sim.time, self.taskDummy, '2 waiting for', self.taskC, 'to finish...')
+        await self.taskC.join()
+        assert self.sim.time == 18
+        print(self.sim.time, self.taskDummy, '3 all tasks finished')
+
 
 if __name__ == '__main__':
     sim = DSSimulation()
-    obj0 = MyComponent(name='obj0', sim=sim)
-    print('Scheduling task', obj0.taskC, 'in 8 sec')
-    sim.schedule(8, obj0.taskC)
-    # The dummy task does not have customized name
-    print('Scheduling task', obj0.taskDummy, 'in 2 sec')
-    sim.schedule(2, obj0.taskDummy)
+    # Run 3 components in parallel. Each components uses dummy waiting task in different way.
+    obj0 = MyComponent('gjoin', name='ComponentGJoin', sim=sim)
+    obj1 = MyComponent('join', name='ComponentJoin', sim=sim)
+    obj2 = MyComponent('', name='Component', sim=sim)
+    # Schedule them process (taskC)
+    for obj in (obj0, obj1, obj2):
+        print('Scheduling task', obj.taskC, 'in 8 sec')
+        sim.schedule(8, obj.taskC)
+    # Schedule them taskDummy
+    for obj in (obj0, obj1, obj2):
+        print('Scheduling task', obj.taskDummy, 'in 2 sec')
+        sim.schedule(2, obj.taskDummy)
     sim.run(20)
     assert inspect.getgeneratorstate(obj0.taskDummy) == inspect.GEN_CLOSED
+    assert inspect.getcoroutinestate(obj1.taskDummy) == inspect.CORO_CLOSED
+    assert inspect.getcoroutinestate(obj2.taskDummy) == inspect.CORO_CLOSED
