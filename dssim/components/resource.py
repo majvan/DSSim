@@ -119,17 +119,16 @@ class Mutex(Resource):
         self.context_manager_timeout = None
         return event
 
+    def __enter__(self):
+        # Unfortunately, it is not possible to yield here. So the caller has to yield from lock() after with
+        return self
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         # release the mutex only if we own the acquired mutex
         if self.last_owner == self.sim.parent_process:
             self.release()
 
-    def __enter__(self):
-        # Unfortunately, it is not possible to yield here. So the caller has to yield from lock() after with
-        return self
-
-    def __aexit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         # release the mutex only if we own the acquired mutex
         if self.last_owner == self.sim.parent_process:
             self.release()
-        return Awaitable()
