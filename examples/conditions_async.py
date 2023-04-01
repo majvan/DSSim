@@ -131,7 +131,7 @@ async def demo_filtering():
     assert tuple(ret.values()) == ({'greeting': 'hello'},)
     assert sim.time == time + 3
     ret = await sim.wait(30, cond=lambda e:True)
-    assert ret == None
+    assert ret is None
     assert sim.time == time + 33
 
     time = sim.time
