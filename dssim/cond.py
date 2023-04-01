@@ -18,38 +18,7 @@ to be able create advanced expressions.
 import inspect
 from dssim.simulation import DSCallback, DSFuture, DSProcess, ICondition
 
-class DSCondition(DSFuture):
-    ONE_LINER = 'one liner'
-
-    def gwait(self, timeout=float('inf')):
-        ''' Implementation of await, differs from DSFuture. '''
-        retval = None
-        if not self.finished():
-            with self.sim.observe_pre(self):
-                retval = yield from self.sim.gwait(timeout, cond=self)
-        if self.exc is not None:
-            raise self.exc
-        if retval is None:
-            return None
-        return self.value
-
-    async def wait(self, timeout=float('inf')):
-        ''' Implementation of await, differs from DSFuture. '''
-
-        retval = None
-        if not self.finished():
-            with self.sim.observe_pre(self):
-                retval = await self.sim.wait(timeout, cond=self)
-        if self.exc is not None:
-            raise self.exc
-        return retval
-
-    def __await__(self):
-        retval = yield from self.gwait()
-        return retval
-
-
-class DSFilter(DSCondition, ICondition):
+class DSFilter(DSFuture, ICondition):
     ''' Differences from DSFuture:
     1. DSFilter can be reevaluated, i.e. the finished() is not monostable. It can
     once return True and the next call return False (if reevaluate is True).
@@ -63,6 +32,8 @@ class DSFilter(DSCondition, ICondition):
         DEFAULT = 0  # Monostable. If once signaled, always signaled
         REEVALUATE = 1  # Reevaluated after every event, i.e. the value changes after every event
         PULSED = 2  # Returns "signaled" only when __call__(event) matches, but never stays in the state
+
+    ONE_LINER = 'one liner'
 
     def __init__(self, cond=None, sigtype=SignalType.DEFAULT, signal_timeout=False, forward_events=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -169,7 +140,7 @@ class DSFilter(DSCondition, ICondition):
         return self.cond if isinstance(self.cond, DSProcess) else None        
 
 
-class DSFilterAggregated(DSCondition, ICondition):
+class DSFilterAggregated(DSFuture, ICondition):
     ''' DSFilterAggregated aggregates several DSFutures into AND / OR circuit.
     It evaluates the circuit after every event. The finished()
     1. DSFilter can be reevaluated, i.e. the finished() is not monostable. It can
@@ -209,13 +180,10 @@ class DSFilterAggregated(DSCondition, ICondition):
                 return first
         return DSFilterAggregated(expr, [first, second])
 
-
     def set_signals(self):
         self.setters, self.resetters = [], []
         for s in self.signals:
-            if False:  # not isinstance(s, DSCondition):
-                self.setters.append(s)
-            elif s.positive:
+            if s.positive:
                 self.setters.append(s)
             else:
                 self.resetters.append(s)
@@ -256,7 +224,7 @@ class DSFilterAggregated(DSCondition, ICondition):
     def _gather_results(self, event, futures):
         retval = []
         for fut in futures:
-            if isinstance(fut, DSCondition):
+            if isinstance(fut, DSFilter) or isinstance(fut, DSFilterAggregated):
                 retval.append(fut(event))
             else:
                 retval.append(fut.finished())

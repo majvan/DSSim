@@ -681,12 +681,27 @@ class DSFuture(DSConsumer, SignalMixin):
         except Exception as e:
             self.fail(e)
 
-    def __await__(self):
-        with self.sim.observe_pre(self):
-            retval = yield from self.sim.check_and_gwait(cond=lambda e:self.finished())
+    def gwait(self, timeout=float('inf')):
+        retval = None
+        if not self.finished():
+            with self.sim.observe_pre(self):
+                retval = yield from self.sim.gwait(timeout, cond=self)
         if self.exc is not None:
             raise self.exc
-        return self.value
+        return retval
+
+    async def wait(self, timeout=float('inf')):
+        retval = None
+        if not self.finished():
+            with self.sim.observe_pre(self):
+                retval = await self.sim.wait(timeout, cond=self)
+        if self.exc is not None:
+            raise self.exc
+        return retval
+
+    def __await__(self):
+        retval = yield from self.gwait()
+        return retval
 
     def finish(self, value):
         self.value = value

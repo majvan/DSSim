@@ -30,8 +30,25 @@ async def demo_filtering0():
     fut = DSFuture()
     DSProcess(signal_future_after(2, fut), sim=sim).schedule(0)
     ret = await fut
-    assert ret == 'Signal!'
+    assert ret == fut
+    assert fut.value == 'Signal!'
     assert sim.time == time + 2
+
+    # Test future.wait()
+    time = sim.time
+    fut = DSFuture()
+    DSProcess(signal_future_after(2, fut), sim=sim).schedule(0)
+    ret = await fut.wait()
+    assert ret == fut
+    assert fut.value == 'Signal!'
+    assert sim.time == time + 2
+
+    time = sim.time
+    fut = DSFuture()
+    DSProcess(signal_future_after(2, fut), sim=sim).schedule(0)
+    ret = await fut.wait(1)
+    assert ret is None
+    assert sim.time == time + 1
 
     # Test sim.wait(future)
     time = sim.time
@@ -40,6 +57,7 @@ async def demo_filtering0():
     with sim.observe_post(fut):
         ret = await sim.wait(cond=fut)
     assert ret == fut
+    assert fut.value == 'Signal!'
     assert sim.time == time + 2
 
     time = sim.time
@@ -232,7 +250,8 @@ async def demo_filtering3():
     time = sim.time
     fut = DSProcess(return_greeting_after(2, 'Signal!'), sim=sim).schedule(0)
     ret = await fut
-    assert ret == 'Signal!'
+    assert ret == fut
+    assert fut.value == 'Signal!'
     assert sim.time == time + 2
 
     # Test sim.wait(future)
@@ -241,6 +260,7 @@ async def demo_filtering3():
     with sim.observe_pre(fut):
         ret = await sim.wait(cond=fut)
     assert ret == fut
+    assert fut.value == 'Signal!'
     assert sim.time == time + 2
 
     time = sim.time
@@ -287,7 +307,7 @@ async def demo_filtering3():
     DSProcess(signal_future_after(2, cond)).schedule(0)
     with sim.observe_pre(cond):
         ret = await sim.wait(1, cond=cond)
-    assert ret == None
+    assert ret is None
     assert sim.time == time + 1
 
     
@@ -400,4 +420,4 @@ if __name__ == '__main__':
     sim = DSSimulation()
     proc = sim.schedule(0, demo_filtering())
     retval = sim.run()
-    assert retval == (132, 243)
+    assert retval == (135, 252)
