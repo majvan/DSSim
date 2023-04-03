@@ -16,6 +16,7 @@ This file implements advanced filtering logic - with overloading operators
 to be able create advanced expressions.
 '''
 import inspect
+import copy
 from dssim.simulation import DSCallback, DSFuture, DSProcess, ICondition
 
 class DSFilter(DSFuture, ICondition):
@@ -72,9 +73,12 @@ class DSFilter(DSFuture, ICondition):
         return DSFilterAggregated.build(self, other, all)
    
     def __neg__(self):
-        self.pulse, self.reevaluate = True, True
-        self.positive = False
-        return self
+        if not self.positive:
+            raise ValueError('You can negate a DSFilter only once')
+        f = copy.copy(self)
+        f.pulse, f.reevaluate = True, True
+        f.positive = False
+        return f
 
     def __str__(self):
         retval = f'DSFilter({self.cond})'
@@ -124,13 +128,13 @@ class DSFilter(DSFuture, ICondition):
     def finish(self, value):
         self._finish(value, async_future=True)
 
-    def _finish(self, value, async_future=True):
+    def _finish(self, value, async_future):
         self.value = value
         if not self.pulse:
             self.signaled = True
         if async_future:
             # Following forces re-evaluation by injecting new event.
-            # We have to re-evaluate only when async finish was called.
+            # We have to re-evaluate only when finish() was called asynchronously.
             self._finish_tx.signal(self)
 
     def cond_value(self, event):
