@@ -91,22 +91,27 @@ class DSSubscriberContextManager:
 class DSTimeoutContextManager:
     def __init__(self, time, exc=None, *, sim):
         self.sim = sim
-        self.time = time
+        self.time = time  # None or a value
+        self.exc = exc
+        self.expired = False
         if time is not None:
-            self.exc = exc
             self.sim.schedule_event(time, exc)
 
     def reschedule(self, time):
-        if self.time is not None:
-            self.sim.delete(cond=lambda e: e[1] == self.exc)
+        self.cleanup()
+        self.time = time
         self.sim.schedule_event(time, self.exc)
 
     def cleanup(self):
         if self.time is not None:
-            self.sim.delete(cond=lambda e: e[1] == self.exc)
+            # We may compare also self.parent_process, but
+            # the context manager relies on the assumption that the
+            # the exception object is allocated only once in the
+            # timequeue.
+            self.sim.delete(cond=lambda e: e[1] is self.exc)
     
-    def when(self):
-        return self.time
+    def set_expired(self):
+        self.expired = True
     
 
 class _ConsumerMetadata:

@@ -17,7 +17,9 @@ Tests for simulation module
 '''
 import unittest
 from unittest.mock import Mock, MagicMock, call
-from dssim.simulation import DSSimulation, DSAbortException, DSFuture, DSSchedulable, DSProcess, DSSubscriberContextManager
+from dssim.simulation import DSSimulation, DSAbortException, DSFuture, DSSchedulable, DSProcess
+from dssim.simulation import DSSubscriberContextManager
+from dssim.simulation import DSTimeoutContextManager, DSTimeoutContextError
 from dssim.pubsub import DSProducer
 
 class SomeObj:
@@ -396,7 +398,7 @@ class TestConditionChecking(unittest.TestCase):
         sim.send_object.assert_called_once()
         self.assertEqual(call_order, [call('check_condition', consumer, None), call('send_object', consumer, None)])
 
-    def test5_check_and_wait(self):
+    def test5_check_and_gwait(self):
         ''' Test check_and_wait function. First it should call check and if check does not pass, it should call wait '''
         sim = DSSimulation()
         retval = 'abc'
@@ -419,12 +421,82 @@ class TestConditionChecking(unittest.TestCase):
         self.assertTrue(retval == 'condition value was computed in lambda')
         condition.cond_cleanup.assert_called_once()
 
-    def test6_wait_return(self):
+    def test5_check_and_wait(self):
+        ''' Test check_and_wait function. First it should call check and if check does not pass, it should call wait '''
+        sim = DSSimulation()
+        retval = 'abc'
+        # The generator sim.check_and_wait yields in the middle with the value back, which is by default "True"
+        coro = sim.check_and_wait(cond=lambda c:False)
+        retval = coro.send(None)
+        self.assertTrue(retval == True)
+        try:
+            coro = sim.check_and_wait(cond=lambda c:True)
+            retval = coro.send(None)
+        except StopIteration as e:
+            retval = e.value
+        self.assertTrue(isinstance(retval, object)) # we get back the object which was created in the check_and_wait function
+
+        condition = SomeCallableObj()
+        condition.cond_value = lambda e: 'condition value was computed in lambda'
+        condition.cond_cleanup = Mock()
+        try:
+            coro = sim.check_and_wait(cond=condition)
+            retval = coro.send(None)
+        except StopIteration as e:
+            retval = e.value
+        self.assertTrue(retval == 'condition value was computed in lambda')
+        condition.cond_cleanup.assert_called_once()
+
+    def test6_gwait_return(self):
         def my_process():
             yield 1
             yield from self.sim.gwait(cond=lambda e:True, val=2)
             return 3
+        self.sim = DSSimulation()
+        p = my_process()
+        retval = self.sim._kick(p)
+        # self.assertTrue(retval == 1)  # kick does not return value
+        retval = self.sim.send(p, None)
+        self.assertTrue(retval == 2)
+        retval = self.sim.send(p, None)
+        self.assertTrue(retval == 3)
 
+        p = DSProcess(my_process(), sim=self.sim)
+        retval = self.sim._kick(p)
+        # self.assertTrue(retval == 1)  # kick does not return value
+        retval = self.sim.send(p, None)
+        self.assertTrue(retval == 2)
+        retval = self.sim.send(p, None)
+        self.assertTrue(retval == 3)
+
+        p = my_process()
+        p = self.sim.schedule(0, p)
+        # kick does not return value
+        retval = self.sim.send(p, None)
+        self.assertTrue(retval == 1)
+        retval = self.sim.send(p, None)
+        self.assertTrue(retval == 2)
+        retval = self.sim.send(p, None)
+        self.assertTrue(retval == 3)
+
+        p = DSProcess(my_process(), sim=self.sim)
+        p = self.sim.schedule(0, p)
+        # kick does not return value
+        retval = self.sim.send(p, None)
+        self.assertTrue(retval == 1)
+        retval = self.sim.send(p, None)
+        self.assertTrue(retval == 2)
+        retval = self.sim.send(p, None)
+        self.assertTrue(retval == 3)
+
+    def test7_wait_return(self):
+        class SomeAwaitable:
+            def __await__(self):
+                yield 1
+        async def my_process():
+            await SomeAwaitable()
+            await self.sim.wait(cond=lambda e:True, val=2)
+            return 3
         self.sim = DSSimulation()
         p = my_process()
         retval = self.sim._kick(p)
@@ -564,6 +636,101 @@ class TestSubscriberContext(unittest.TestCase):
         self.assertTrue(cm.pre == a.get_future_eps())
         self.assertTrue(cm.act == b.get_future_eps() | c.get_future_eps())
         self.assertTrue(cm.post == d.get_future_eps())
+
+
+class TestTimeoutContext(unittest.TestCase):
+
+    def test0_init(self):
+        sim = Mock()
+        cm = DSTimeoutContextManager(None, sim=sim)
+        self.assertTrue(cm.time is None)
+        self.assertTrue(cm.sim is sim)
+        sim.schedule_event.assert_not_called()
+
+        sim = Mock()
+        cm = DSTimeoutContextManager(0, sim=sim)
+        self.assertTrue(cm.time == 0)
+        self.assertTrue(cm.sim is sim)
+        sim.schedule_event.assert_has_calls([call(0, None),])
+
+        sim = Mock()
+        event = DSTimeoutContextError()
+        cm = DSTimeoutContextManager(0, event, sim=sim)
+        self.assertTrue(cm.time == 0)
+        self.assertTrue(cm.sim is sim)
+        sim.schedule_event.assert_has_calls([call(0, event),])
+
+    def test1_reschedule(self):
+        sim = DSSimulation()
+        sim.parent_process = 'process'
+        cm = DSTimeoutContextManager(None, 'hello', sim=sim)
+        self.assertTrue(len(sim.time_queue) == 0)
+        cm.reschedule(2)
+        self.assertTrue(len(sim.time_queue) == 1)
+        self.assertTrue(sim.time_queue.get0() == (2, ('process', 'hello')))
+        cm.reschedule(1)
+        self.assertTrue(len(sim.time_queue) == 1)
+        self.assertTrue(sim.time_queue.get0() == (1, ('process', 'hello')))
+
+        sim = DSSimulation()
+        sim.parent_process = 'process'
+        cm = DSTimeoutContextManager(0, 'hi', sim=sim)
+        self.assertTrue(len(sim.time_queue) == 1)
+        self.assertTrue(sim.time_queue.get0() == (0, ('process', 'hi')))
+        cm.reschedule(2)
+        self.assertTrue(len(sim.time_queue) == 1)
+        self.assertTrue(sim.time_queue.get0() == (2, ('process', 'hi')))
+        cm.reschedule(1)
+        self.assertTrue(len(sim.time_queue) == 1)
+        self.assertTrue(sim.time_queue.get0() == (1, ('process', 'hi')))
+
+        event = 'hi'
+        cm = DSTimeoutContextManager(3, 'bye', sim=sim)
+        self.assertTrue(len(sim.time_queue) == 2)
+        self.assertTrue(sim.time_queue.get0() == (1, ('process', 'hi')))
+        cm.reschedule(0)
+        self.assertTrue(len(sim.time_queue) == 2)
+        self.assertTrue(sim.time_queue.get0() == (0, ('process', 'bye')))
+        cm.reschedule(3)
+        self.assertTrue(len(sim.time_queue) == 2)
+        self.assertTrue(sim.time_queue.pop() == (1, ('process', 'hi')))
+        self.assertTrue(sim.time_queue.pop() == (3, ('process', 'bye')))
+
+    def test2_sim_timeout_positive(self):
+        sim = DSSimulation()
+        sim.parent_process = 'process'
+        with sim.timeout(0) as cm:
+            self.assertTrue(len(sim.time_queue) == 1)
+            queued = sim.time_queue.get0()
+            self.assertTrue(queued[0] == 0)
+            self.assertTrue(queued[1][0] == 'process')
+            self.assertTrue(isinstance(queued[1][1], DSTimeoutContextError))
+            cm.reschedule(10)
+            self.assertTrue(len(sim.time_queue) == 1)
+            queued = sim.time_queue.get0()
+            self.assertTrue(queued[0] == 10)
+            self.assertTrue(queued[1][0] == 'process')
+            self.assertTrue(isinstance(queued[1][1], DSTimeoutContextError))
+        self.assertTrue(len(sim.time_queue) == 0)
+
+    def test2_sim_timeout_negative(self):
+        def process(sim, timeout):
+            with sim.timeout(timeout) as cm:
+                self.assertFalse(cm.expired)
+                yield from sim.gwait(10)
+                self.assertTrue(timeout > 10)
+            self.assertTrue(cm.expired == (timeout < 10))
+
+        sim = DSSimulation()
+        p = process(sim, 20)
+        sim.schedule(0, p)
+        sim.run()
+
+        sim = DSSimulation()
+        p = process(sim, 1)
+        sim.schedule(0, p)
+        sim.run()
+
 
 
 
@@ -839,3 +1006,4 @@ class TestSim(unittest.TestCase):
         self.assertEqual(len(self.sim.time_queue), 1)  # there are still timeout event left from process
         self.sim.abort(process, testing=-1),  # abort after time
         self.assertEqual(len(self.sim.time_queue), 0)  # test if the timeout event was removed after abort
+

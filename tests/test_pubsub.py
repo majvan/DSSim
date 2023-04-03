@@ -16,7 +16,7 @@ Tests for pubsub module
 '''
 import unittest
 from unittest.mock import Mock, call
-from dssim.simulation import DSProcess, DSCallback, DSSimulation
+from dssim.simulation import DSProcess, DSCallback, DSKWCallback, DSSimulation
 from dssim.pubsub import DSProducer
 
 class SimMock:
@@ -35,7 +35,7 @@ __all__ = ['TestPubSub']
 class TestCallback(unittest.TestCase):
     ''' Test the DSCallback '''
 
-    def test0_consumer(self):
+    def test0_fcn(self):
         my_consumer_fcn = Mock()
         c = DSCallback(my_consumer_fcn, sim=SomeObj())
         c.send({'data': 1})
@@ -45,7 +45,17 @@ class TestCallback(unittest.TestCase):
         my_consumer_fcn.assert_called_once_with({'data': 0})
         my_consumer_fcn.reset_mock()
 
-    def test1_consumer(self):
+    def test1_kw_fcn(self):
+        my_consumer_fcn = Mock()
+        c = DSKWCallback(my_consumer_fcn, sim=SomeObj())
+        c.send({'data': 1})
+        my_consumer_fcn.assert_called_once_with(data=1)
+        my_consumer_fcn.reset_mock()
+        c.send({'data': 0})
+        my_consumer_fcn.assert_called_once_with(data=0)
+        my_consumer_fcn.reset_mock()
+
+    def test2_method(self):
         class ObjWithCallback:
             def cb(self, *args, **kwargs):
                 self.args = args
@@ -59,11 +69,35 @@ class TestCallback(unittest.TestCase):
         self.assertEqual(obj.args, ({'data': 0},))
         self.assertEqual(obj.kwargs, {})
 
-    def test2_consumer_with_filter(self):
+    def test3_kw_method(self):
+        class ObjWithCallback:
+            def cb(self, data):
+                self.args = []
+                self.kwargs = {'data': data}
+        obj = ObjWithCallback()
+        c = DSKWCallback(obj.cb, sim=SomeObj())
+        c.send({'data': 1})
+        self.assertEqual(obj.args, [])
+        self.assertEqual(obj.kwargs, {'data': 1})
+        c.send({'data': 0})
+        self.assertEqual(obj.args, [])
+        self.assertEqual(obj.kwargs, {'data': 0})
+
+    def test4_consumer_with_filter(self):
         my_consumer_fcn = Mock()
         c = DSCallback(my_consumer_fcn, cond=lambda e:e['data'] > 0, sim=SomeObj())
         c.send({'data': 1})
         my_consumer_fcn.assert_called_once_with({'data': 1})
+        my_consumer_fcn.reset_mock()
+        c.send({'data': 0})
+        my_consumer_fcn.send.assert_not_called()
+        my_consumer_fcn.reset_mock()
+
+    def test5_kw_consumer_with_filter(self):
+        my_consumer_fcn = Mock()
+        c = DSKWCallback(my_consumer_fcn, cond=lambda e:e['data'] > 0, sim=SomeObj())
+        c.send({'data': 1})
+        my_consumer_fcn.assert_called_once_with(data=1)
         my_consumer_fcn.reset_mock()
         c.send({'data': 0})
         my_consumer_fcn.send.assert_not_called()
