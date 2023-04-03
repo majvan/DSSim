@@ -104,7 +104,7 @@ class NotifierPriority():
 
     def dec(self, key, priority, **kwargs):
         priority_dict = self.d[priority] = self.d.get(priority, {})
-        priority_dict[key] = priority_dict.get(key, 0) + 1
+        priority_dict[key] = priority_dict.get(key, 0) - 1
 
     def cleanup(self):
         new_prio_dict = {}

@@ -17,7 +17,7 @@ Tests for pubsub module
 import unittest
 from unittest.mock import Mock, call
 from dssim.simulation import DSProcess, DSCallback, DSKWCallback, DSSimulation
-from dssim.pubsub import DSProducer
+from dssim.pubsub import DSProducer, NotifierDict, NotifierRoundRobin, NotifierPriority
 
 class SimMock:
     pass
@@ -380,3 +380,204 @@ class TestProducer(unittest.TestCase):
         self.assertEqual(p.subs['pre'].d, {})
         self.assertEqual(p.subs['act'].d, {c0: 1})
         self.assertEqual(p.subs['post'].d, {})
+
+class TestNotifierDict(unittest.TestCase):
+
+    def test0_inc_dec(self):
+        n = NotifierDict()
+        self.assertTrue(n.d == {})
+        n.inc('a'), n.inc('a')
+        self.assertEqual(n.d, {'a': 2})
+        n.inc('b'), n.inc('a')
+        self.assertEqual(n.d, {'a': 3, 'b': 1})
+        n.dec('a'), n.inc('b')
+        self.assertEqual(n.d, {'a': 2, 'b': 2})
+        n.dec('a'), n.dec('a')
+        self.assertEqual(n.d, {'a': 0, 'b': 2})
+
+    def test1_cleanup(self):
+        n = NotifierDict()
+        self.assertEqual(n.d, {})
+        n.cleanup()
+        self.assertEqual(n.d, {})
+        n.d = {'a': 2, 'b': 3}
+        n.cleanup()
+        self.assertEqual(n.d, {'a': 2, 'b': 3})
+        n.dec('a'), n.dec('a')
+        self.assertEqual(n.d, {'a': 0, 'b': 3})
+        n.cleanup()
+        self.assertEqual(n.d, {'b': 3})
+        n.dec('b'), n.dec('b'), n.dec('b')
+        self.assertEqual(n.d, {'b': 0})
+        n.cleanup()
+        self.assertEqual(n.d, {})
+
+    def test2_iter(self):
+        n = NotifierDict()
+        n.d = {'c': 1, 'a': 2, 'b': 4}
+        it = iter(n)
+        el = next(it)
+        self.assertTrue(el == ('c', 1))
+        el = next(it)
+        self.assertTrue(el == ('a', 2))
+        el = next(it)
+        self.assertTrue(el == ('b', 4))
+        with self.assertRaises(StopIteration):
+            el = next(it)
+
+    def test3_rewind(self):
+        n = NotifierDict()
+        n.d = {'c': 1, 'a': 2, 'b': 4}
+        it = iter(n)
+        next(it), next(it)
+        n.rewind()
+        self.assertEqual(n.d, {'c': 1, 'a': 2, 'b': 4})
+
+        it = iter(n)
+        next(it), next(it), next(it)
+        n.rewind()
+        self.assertEqual(n.d, {'c': 1, 'a': 2, 'b': 4})
+
+        it = iter(n)
+        n.rewind()
+        self.assertEqual(n.d, {'c': 1, 'a': 2, 'b': 4})
+        
+class TestNotifierRoundRobin(unittest.TestCase):
+
+    def test0_inc_dec(self):
+        n = NotifierRoundRobin()
+        self.assertTrue(n.queue == [])
+        n.inc('a'), n.inc('a')
+        self.assertEqual(n.queue, [['a', 2]])
+        n.inc('b'), n.inc('a')
+        self.assertEqual(n.queue, [['a', 3], ['b', 1]])
+        n.dec('a'), n.inc('b')
+        self.assertEqual(n.queue, [['a', 2], ['b', 2]])
+        n.dec('a'), n.dec('a')
+        self.assertEqual(n.queue, [['a', 0], ['b', 2]])
+
+    def test1_cleanup(self):
+        n = NotifierRoundRobin()
+        self.assertEqual(n.queue, [])
+        n.cleanup()
+        self.assertEqual(n.queue, [])
+        n.queue = [['a', 2], ['b', 3]]
+        n.cleanup()
+        self.assertEqual(n.queue, [['a', 2], ['b', 3]])
+        n.dec('a'), n.dec('a')
+        self.assertEqual(n.queue, [['a', 0], ['b', 3]])
+        n.cleanup()
+        self.assertEqual(n.queue, [['b', 3]])
+        n.dec('b'), n.dec('b'), n.dec('b')
+        self.assertEqual(n.queue, [['b', 0]])
+        n.cleanup()
+        self.assertEqual(n.queue, [])
+
+    def test2_iter(self):
+        n = NotifierRoundRobin()
+        n.queue = [['c', 1], ['a', 2], ['b', 4]]
+        it = iter(n)
+        el = next(it)
+        self.assertTrue(el == ['c', 1])
+        el = next(it)
+        self.assertTrue(el == ['a', 2])
+        el = next(it)
+        self.assertTrue(el == ['b', 4])
+        with self.assertRaises(StopIteration):
+            el = next(it)
+
+    def test3_rewind(self):
+        n = NotifierRoundRobin()
+        n.queue = [['c', 1], ['a', 2], ['b', 4],]
+        it = iter(n)
+        next(it), next(it)
+        n.rewind()
+        self.assertEqual(n.queue, [['b', 4], ['c', 1], ['a', 2],])
+
+        it = iter(n)
+        next(it), next(it), next(it)
+        n.rewind()
+        self.assertEqual(n.queue, [['b', 4], ['c', 1], ['a', 2],])
+
+        it = iter(n)
+        n.rewind()
+        self.assertEqual(n.queue, [['b', 4], ['c', 1], ['a', 2],])
+
+class TestNotifierPriority(unittest.TestCase):
+
+    def test0_inc_dec(self):
+        n = NotifierPriority()
+        self.assertTrue(n.d == {})
+        n.inc('a', priority=1), n.inc('a', priority=1)
+        self.assertEqual(n.d, {1: {'a': 2}})
+        n.inc('b', priority=1), n.inc('a', priority=2)
+        self.assertEqual(n.d, {1: {'a': 2, 'b': 1}, 2: {'a': 1}})
+        n.dec('a', priority=1), n.inc('b', priority=1)
+        self.assertEqual(n.d, {1: {'a': 1, 'b': 2}, 2: {'a': 1}})
+        n.dec('a', priority=1)
+        self.assertEqual(n.d, {1: {'a': 0, 'b': 2}, 2: {'a': 1}})
+        n.dec('a', priority=2)
+        self.assertEqual(n.d, {1: {'a': 0, 'b': 2}, 2: {'a': 0}})
+
+    def test1_cleanup(self):
+        n = NotifierPriority()
+        self.assertEqual(n.d, {})
+        n.cleanup()
+        self.assertEqual(n.d, {})
+        n.d = {1: {'a': 2, 'b': 3}, 2: {'a': 1}}
+        n.cleanup()
+        self.assertEqual(n.d, {1: {'a': 2, 'b': 3}, 2: {'a': 1}})
+        n.dec('a', priority=1), n.dec('a', priority=1)
+        self.assertEqual(n.d, {1: {'a': 0, 'b': 3}, 2: {'a': 1}})
+        n.cleanup()
+        self.assertEqual(n.d, {1: {'b': 3}, 2: {'a': 1}})
+        n.dec('a', priority=2)
+        n.cleanup()
+        self.assertEqual(n.d, {1: {'b': 3}})
+        n.dec('b', priority=1), n.dec('b', priority=1), n.dec('b', priority=1)
+        n.cleanup()
+        self.assertEqual(n.d, {})
+
+    def test2_iter(self):
+        n = NotifierPriority()
+        n.d = {2: {'c': 1, 'a': 2, 'b': 4}, 1: {'d': 12, 'e': 14}}
+        it = iter(n)
+        el = next(it)
+        self.assertTrue(el == ('d', 12))
+        el = next(it)
+        self.assertTrue(el == ('e', 14))
+        el = next(it)
+        self.assertTrue(el == ('c', 1))
+        el = next(it)
+        self.assertTrue(el == ('a', 2))
+        el = next(it)
+        self.assertTrue(el == ('b', 4))
+        with self.assertRaises(StopIteration):
+            el = next(it)
+
+    def test3_rewind(self):
+        n = NotifierPriority()
+        n.d = {2: {'c': 1, 'a': 2, 'b': 4}, 1: {'d': 12, 'e': 14}}
+        it = iter(n)
+        next(it), next(it)
+        n.rewind()
+        self.assertEqual(n.d, {2: {'c': 1, 'a': 2, 'b': 4}, 1: {'d': 12, 'e': 14}})
+
+        it = iter(n)
+        next(it), next(it), next(it)
+        n.rewind()
+        self.assertEqual(n.d, {2: {'c': 1, 'a': 2, 'b': 4}, 1: {'d': 12, 'e': 14}})
+
+        it = iter(n)
+        next(it), next(it), next(it), next(it), next(it)
+        n.rewind()
+        self.assertEqual(n.d, {2: {'c': 1, 'a': 2, 'b': 4}, 1: {'d': 12, 'e': 14}})
+
+        it = iter(n)
+        next(it), next(it), next(it), next(it)
+        n.rewind()
+        self.assertEqual(n.d, {2: {'c': 1, 'a': 2, 'b': 4}, 1: {'d': 12, 'e': 14}})
+
+        it = iter(n)
+        n.rewind()
+        self.assertEqual(n.d, {2: {'c': 1, 'a': 2, 'b': 4}, 1: {'d': 12, 'e': 14}})
