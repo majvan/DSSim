@@ -222,7 +222,8 @@ class DSFilterAggregated(DSFuture, ICondition):
         expression = ' | ' if self.expression == any else ' & '
         strings = [str(v) for v in self.setters + self.resetters]
         retval = expression.join(strings)
-        return f'({retval})'
+        sign = '' if self.positive else '-'
+        return f'{sign}({retval})'
 
     def finished(self):
         return self.signaled
