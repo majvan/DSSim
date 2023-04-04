@@ -21,7 +21,7 @@ from dssim.simulation import DSSimulation, DSProcess, DSFuture, DSAbortException
 from dssim.cond import DSFilter as _f, DSFilterAggregated
 from contextlib import contextmanager
 
-class TestDSFilterAggregated(unittest.TestCase):
+class TestDSFilter(unittest.TestCase):
 
     def test0_init_value(self):
         sim = DSSimulation()
@@ -188,7 +188,7 @@ class TestDSFilterAggregated(unittest.TestCase):
             class Awaitable:
                 def __await__(self):
                     yield 'hi'
-            await Awaitable
+            await Awaitable()
 
         sim = DSSimulation()
         g = coro()
@@ -337,21 +337,111 @@ class TestDSFilterAggregated(unittest.TestCase):
         fa = _f(fut, sim=sim)
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
+        self.assertTrue(fut.finished() == False)
         retval = fa('Hi')
         self.assertTrue((retval, fa.signaled) == (False, False))
         self.assertTrue(fa.finished() == False)
+        self.assertTrue(fut.finished() == False)
         fut.finish('Ahoy')
         retval = fa(fut)  # When waiting for a future in a condition, a process registers the future notification which is then sent to the process
         self.assertTrue((retval, fa.signaled) == (True, True))
         self.assertTrue(fa.finished() == True)
-        retval = fa('Ciao')  # When waiting for a future in a condition, a process registers the future notification which is then sent to the process
+        self.assertTrue(fut.finished() == True)
+        retval = fa('Ciao')
         self.assertTrue((retval, fa.signaled) == (True, True))
         self.assertTrue(fa.finished() == True)
+        self.assertTrue(fut.finished() == True)
 
-    def test9_feeding_process(self):
-        pass
+    def test9_feeding_gen(self):
+        def gen():
+            yield 'First'
+            return 'Return'
 
-    def test10_feeding_value_reevaluate(self):
+        sim = DSSimulation()
+        fa = _f(gen(), sim=sim)
+        self.assertTrue(fa.signaled == False)
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == False)
+        retval = fa('Hi')
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == False)
+        retval = fa('Ahoy')
+        self.assertTrue((retval, fa.signaled) == (True, True))
+        self.assertTrue(fa.finished() == True)
+        self.assertTrue(fa.cond.finished() == True)
+        retval = fa('Ciao')
+        self.assertTrue((retval, fa.signaled) == (True, True))
+        self.assertTrue(fa.finished() == True)
+        self.assertTrue(fa.cond.finished() == True)
+
+    def test10_feeding_coro(self):
+        async def coro():
+            class Awaitable:
+                def __await__(self):
+                    yield 'First'
+                    return 'Return'
+            await Awaitable()
+        
+        sim = DSSimulation()
+        fa = _f(coro(), sim=sim)
+        self.assertTrue(fa.signaled == False)
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == False)
+        retval = fa('Hi')
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == False)
+        retval = fa('Ahoy')
+        self.assertTrue((retval, fa.signaled) == (True, True))
+        self.assertTrue(fa.finished() == True)
+        self.assertTrue(fa.cond.finished() == True)
+        retval = fa('Ciao')
+        self.assertTrue((retval, fa.signaled) == (True, True))
+        self.assertTrue(fa.finished() == True)
+        self.assertTrue(fa.cond.finished() == True)
+
+    def test11_feeding_process(self):
+        def gen():
+            yield 'First'
+            return 'Return'
+        
+        sim = DSSimulation()
+        p = DSProcess(gen(), sim=sim)
+        fa = _f(p, sim=sim)
+        self.assertTrue(fa.signaled == False)
+        self.assertTrue(fa.finished() == False)
+        retval = fa('Hi')  # This will NOT forward the event to the process
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(p.finished() == False)
+        retval = fa('Ahoy')  # The event is not forwarded => no finish
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(p.finished() == False)
+        retval = fa('Ciao')  # Last check
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(p.finished() == False)
+        # Try again, but now the process will be iterating
+        retval = sim.send(p, 'Hi')
+        self.assertTrue((retval, fa.signaled) == ('First', False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(p.finished() == False)
+        retval = sim.send(p, 'Ahoy')
+        self.assertTrue((retval, fa.signaled) == ('Return', False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(p.finished() == True)
+        retval = fa(p)  # When waiting for a future in a condition, a process registers the future notification which is then sent to the process
+        self.assertTrue((retval, fa.signaled) == (True, True))
+        self.assertTrue(fa.finished() == True)
+        self.assertTrue(p.finished() == True)
+        retval = fa('Ciao')  # Last check
+        self.assertTrue((retval, fa.signaled) == (True, True))
+        self.assertTrue(fa.finished() == True)
+        self.assertTrue(p.finished() == True)
+
+    def test12_feeding_value_reevaluate(self):
         sim = DSSimulation()
         fa = _f('a', sigtype=_f.SignalType.REEVALUATE, sim=sim)
         self.assertTrue(fa.signaled == False)
@@ -368,7 +458,7 @@ class TestDSFilterAggregated(unittest.TestCase):
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.value == 'a')
 
-    def test11_feeding_lambda_reevaluate(self):
+    def test13_feeding_lambda_reevaluate(self):
         sim = DSSimulation()
         fa = _f(lambda e: 'A' in e, sigtype=_f.SignalType.REEVALUATE, sim=sim)
         self.assertTrue(fa.signaled == False)
@@ -388,27 +478,118 @@ class TestDSFilterAggregated(unittest.TestCase):
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.value == 'Ahoy')
 
-    def test12_feeding_future_reevaluate(self):
+    def test14_feeding_future_reevaluate(self):
         sim = DSSimulation()
         fut = DSFuture(sim=sim)
         fa = _f(fut, sigtype=_f.SignalType.REEVALUATE, sim=sim)
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
+        self.assertTrue(fut.finished() == False)
         retval = fa('Hi')
         self.assertTrue((retval, fa.signaled) == (False, False))
         self.assertTrue(fa.finished() == False)
+        self.assertTrue(fut.finished() == False)
         fut.finish('Ahoy')
         retval = fa(fut)  # When waiting for a future in a condition, a process registers the future notification which is then sent to the process
         self.assertTrue((retval, fa.signaled) == (True, True))
         self.assertTrue(fa.finished() == True)
-        retval = fa('Ciao')  # When waiting for a future in a condition, a process registers the future notification which is then sent to the process
+        self.assertTrue(fut.finished() == True)
+        retval = fa('Ciao')
         self.assertTrue((retval, fa.signaled) == (True, True))
         self.assertTrue(fa.finished() == True)
+        self.assertTrue(fut.finished() == True)
 
-    def test13_feeding_process_reevaluate(self):
-        pass
+    def test15_feeding_gen_reevaluate(self):
+        def gen():
+            yield 'First'
+            return 'Return'
 
-    def test14_feeding_value_pulsed(self):
+        sim = DSSimulation()
+        fa = _f(gen(), sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        self.assertTrue(fa.signaled == False)
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == False)
+        retval = fa('Hi')
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == False)
+        retval = fa('Ahoy')
+        self.assertTrue((retval, fa.signaled) == (True, True))
+        self.assertTrue(fa.finished() == True)
+        self.assertTrue(fa.cond.finished() == True)
+        retval = fa('Ciao')
+        self.assertTrue((retval, fa.signaled) == (True, True))
+        self.assertTrue(fa.finished() == True)
+        self.assertTrue(fa.cond.finished() == True)
+
+    def test16_feeding_coro_reevaluate(self):
+        async def coro():
+            class Awaitable:
+                def __await__(self):
+                    yield 'First'
+                    return 'Return'
+            await Awaitable()
+        
+        sim = DSSimulation()
+        fa = _f(coro(), sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        self.assertTrue(fa.signaled == False)
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == False)
+        retval = fa('Hi')
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == False)
+        retval = fa('Ahoy')
+        self.assertTrue((retval, fa.signaled) == (True, True))
+        self.assertTrue(fa.finished() == True)
+        self.assertTrue(fa.cond.finished() == True)
+        retval = fa('Ciao')
+        self.assertTrue((retval, fa.signaled) == (True, True))
+        self.assertTrue(fa.finished() == True)
+        self.assertTrue(fa.cond.finished() == True)
+
+    def test17_feeding_process_reevaluate(self):
+        def gen():
+            yield 'First'
+            return 'Return'
+        
+        sim = DSSimulation()
+        p = DSProcess(gen(), sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        fa = _f(p, sim=sim)
+        self.assertTrue(fa.signaled == False)
+        self.assertTrue(fa.finished() == False)
+        retval = fa('Hi')  # This will NOT forward the event to the process
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(p.finished() == False)
+        retval = fa('Ahoy')  # The event is not forwarded => no finish
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(p.finished() == False)
+        retval = fa('Ciao')  # Last check
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(p.finished() == False)
+        # Try again, but now the process will be iterating
+        retval = sim.send(p, 'Hi')
+        self.assertTrue((retval, fa.signaled) == ('First', False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(p.finished() == False)
+        retval = sim.send(p, 'Ahoy')
+        self.assertTrue((retval, fa.signaled) == ('Return', False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(p.finished() == True)
+        retval = fa(p)  # When waiting for a future in a condition, a process registers the future notification which is then sent to the process
+        self.assertTrue((retval, fa.signaled) == (True, True))
+        self.assertTrue(fa.finished() == True)
+        self.assertTrue(p.finished() == True)
+        retval = fa('Ciao')  # Last check
+        self.assertTrue((retval, fa.signaled) == (True, True))
+        self.assertTrue(fa.finished() == True)
+        self.assertTrue(p.finished() == True)
+
+
+    def test18_feeding_value_pulsed(self):
         sim = DSSimulation()
         fa = _f('a', sigtype=_f.SignalType.PULSED, sim=sim)
         self.assertTrue(fa.signaled == False)
@@ -425,7 +606,7 @@ class TestDSFilterAggregated(unittest.TestCase):
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.value == 'a')
 
-    def test15_feeding_lambda_pulsed(self):
+    def test19_feeding_lambda_pulsed(self):
         sim = DSSimulation()
         fa = _f(lambda e: 'A' in e, sigtype=_f.SignalType.PULSED, sim=sim)
         self.assertTrue(fa.signaled == False)
@@ -445,31 +626,129 @@ class TestDSFilterAggregated(unittest.TestCase):
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.value == 'Ahoy')
 
-    def test16_feeding_future_pulsed(self):
+    def test20_feeding_future_pulsed(self):
         sim = DSSimulation()
         fut = DSFuture(sim=sim)
         fa = _f(fut, sigtype=_f.SignalType.PULSED, sim=sim)
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
+        self.assertTrue(fut.finished() == False)
         retval = fa('Hi')
         self.assertTrue((retval, fa.signaled) == (False, False))
         self.assertTrue(fa.finished() == False)
+        self.assertTrue(fut.finished() == False)
         fut.finish('Ahoy')
         retval = fa(fut)  # When waiting for a future in a condition, a process registers the future notification which is then sent to the process
         self.assertTrue((retval, fa.signaled) == (True, False))
         self.assertTrue(fa.finished() == False)
-        retval = fa('Ciao')  # When waiting for a future in a condition, a process registers the future notification which is then sent to the process
+        self.assertTrue(fut.finished() == True)
+        retval = fa('Ciao')
         self.assertTrue((retval, fa.signaled) == (False, False))
         self.assertTrue(fa.finished() == False)
+        self.assertTrue(fut.finished() == True)
 
-    def test17_feeding_process_pulsed(self):
+    def test21_feeding_gen_pulsed(self):
+        def gen():
+            yield 'First'
+            return 'Return'
+
+        sim = DSSimulation()
+        fa = _f(gen(), sigtype=_f.SignalType.PULSED, sim=sim)
+        self.assertTrue(fa.signaled == False)
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == False)
+        retval = fa('Hi')
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == False)
+        retval = fa('Ahoy')
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == True)
+        retval = fa(fa.cond)  # When waiting for a condition, typically this event is sent to the process after gen is finished
+        self.assertTrue((retval, fa.signaled) == (True, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == True)
+        retval = fa('Ciao')
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == True)
+
+    def test22_feeding_coro_pulsed(self):
+        async def coro():
+            class Awaitable:
+                def __await__(self):
+                    yield 'First'
+                    return 'Return'
+            await Awaitable()
+        
+        sim = DSSimulation()
+        fa = _f(coro(), sigtype=_f.SignalType.PULSED, sim=sim)
+        self.assertTrue(fa.signaled == False)
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == False)
+        retval = fa('Hi')
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == False)
+        retval = fa('Ahoy')
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == True)
+        retval = fa(fa.cond)  # When waiting for a condition, typically this event is sent to the process after gen is finished
+        self.assertTrue((retval, fa.signaled) == (True, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == True)
+        retval = fa('Ciao')
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(fa.cond.finished() == True)
+
+    def test23_feeding_process_pulsed(self):
+        def gen():
+            yield 'First'
+            return 'Return'
+        
+        sim = DSSimulation()
+        p = DSProcess(gen(), sigtype=_f.SignalType.PULSED, sim=sim)
+        fa = _f(p, sim=sim)
+        self.assertTrue(fa.signaled == False)
+        self.assertTrue(fa.finished() == False)
+        retval = fa('Hi')  # This will NOT forward the event to the process
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(p.finished() == False)
+        retval = fa('Ahoy')  # The event is not forwarded => no finish
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(p.finished() == False)
+        retval = fa('Ciao')  # Last check
+        self.assertTrue((retval, fa.signaled) == (False, False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(p.finished() == False)
+        # Try again, but now the process will be iterating
+        retval = sim.send(p, 'Hi')
+        self.assertTrue((retval, fa.signaled) == ('First', False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(p.finished() == False)
+        retval = sim.send(p, 'Ahoy')
+        self.assertTrue((retval, fa.signaled) == ('Return', False))
+        self.assertTrue(fa.finished() == False)
+        self.assertTrue(p.finished() == True)
+        retval = fa(p)  # When waiting for a future in a condition, a process registers the future notification which is then sent to the process
+        self.assertTrue((retval, fa.signaled) == (True, True))
+        self.assertTrue(fa.finished() == True)
+        self.assertTrue(p.finished() == True)
+        retval = fa('Ciao')  # Last check
+        self.assertTrue((retval, fa.signaled) == (True, True))
+        self.assertTrue(fa.finished() == True)
+        self.assertTrue(p.finished() == True)
+
+
+    def test24_cond_gwait(self):
         pass
 
-
-    def test18_cond_gwait(self):
-        pass
-
-    def test19_cond_wait(self):
+    def test25_cond_wait(self):
         pass
 
 
@@ -477,8 +756,9 @@ class TestDSFilterAggregated(unittest.TestCase):
     The second part is for agregated 
     '''
 
+class TestDSFilterAggregated(unittest.TestCase):
 
-    def test20_build(self):
+    def test0_build(self):
         sim = DSSimulation()
         fa, fb, fc, fd = _f('a', sim=sim), _f('b', sim=sim), _f('c', sim=sim), _f('d', sim=sim)
         c = fa | fb
@@ -550,7 +830,7 @@ class TestDSFilterAggregated(unittest.TestCase):
         self.assertEqual(str(d), "(DSFilter(a) & (DSFilter(b) | DSFilter(c)) & DSFilter(d))")
         self.assertTrue((len(d.setters), len(d.resetters)) == (3, 0))
 
-    def test21_build_with_reseters(self):
+    def test1_build_with_reseters(self):
         sim = DSSimulation()
         fa, fb, fc, fd = _f('a', sim=sim), _f('b', sim=sim), _f('c', sim=sim), _f('d', sim=sim)
         fna = -fa
