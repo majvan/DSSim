@@ -104,6 +104,8 @@ class DSFilter(DSFuture, ICondition):
                     pass
                 elif self.cond.value is None and self.signal_timeout:
                     signaled, value = True, None
+                elif self.pulse:
+                    signaled, value = (event == self.cond), event
                 else:
                     signaled, value = True, self.cond.value
         elif self.cond == event:
