@@ -18,6 +18,7 @@ Tests for simulation module
 import unittest
 from unittest.mock import Mock, MagicMock, call
 from dssim.simulation import DSSimulation, DSAbortException, DSFuture, DSSchedulable, DSProcess
+from dssim.simulation import _StackedCond
 from dssim.simulation import DSSubscriberContextManager
 from dssim.simulation import DSInterruptibleContext, DSTimeoutContextError
 from dssim.pubsub import DSProducer
@@ -317,6 +318,7 @@ class TestConditionChecking(unittest.TestCase):
         sim = DSSimulation()
         sim._wait_for_event = my_process
         process = DSProcess(my_process(), sim=sim)
+        process.meta.cond = Mock()
         sim.parent_process = process
         waitable = sim.gwait(cond='condition')
         retval = next(waitable)
@@ -326,11 +328,10 @@ class TestConditionChecking(unittest.TestCase):
         except StopIteration as e:
             retval = e.value
         self.assertEqual(retval, None)
-        self.assertTrue(process.meta.cond == 'condition')
+        process.meta.cond.push.assert_called_with('condition')
 
         condition = SomeObj()
         condition.cond_value = lambda e: 'condition value was computed in lambda'
-        condition.cond_cleanup = Mock()
         waitable = sim.gwait(cond=condition)
         retval = next(waitable)
         self.assertTrue(retval)
@@ -339,7 +340,7 @@ class TestConditionChecking(unittest.TestCase):
         except StopIteration as e:
             retval = e.value
         self.assertEqual(retval, 'condition value was computed in lambda')
-        self.assertTrue(process.meta.cond == condition)
+        process.meta.cond.push.assert_called_with(condition)
     
     def test2_check_cond(self):
         ''' Test 5 types of conditions - see _check_cond '''
@@ -359,7 +360,7 @@ class TestConditionChecking(unittest.TestCase):
             ('abc', 'def', (False, None)),
             ('def', 'def', (True, 'def')),
         ):
-            retval = sim._check_cond(cond, event)
+            retval = _StackedCond(cond).check(event)
             self.assertEqual(retval, expected_result)
 
     def test3_check_condition(self):
@@ -367,9 +368,10 @@ class TestConditionChecking(unittest.TestCase):
         sim = DSSimulation()
         p = DSProcess(self.__my_process(), sim=sim)
         p.meta = SomeObj()
-        p.meta.cond = Mock(return_value='abc')
+        p.meta.cond = MagicMock()
+        p.meta.cond.check = Mock(return_value=(True, 'abc'))
         retval = sim.check_condition(p, 'test')
-        p.meta.cond.assert_called_once()
+        p.meta.cond.check.assert_called_once()
         self.assertEqual(retval, True)
     
     def test4_early_check(self):
@@ -405,16 +407,19 @@ class TestConditionChecking(unittest.TestCase):
         # The generator sim.check_and_wait yields in the middle with the value back, which is by default "True"
         retval = next(sim.check_and_gwait(cond=lambda c:False))
         self.assertTrue(retval == True)
+        sim.get_consumer_metadata(None).cond.pop()  # remove stored condition for this task
         try:
             retval = next(sim.check_and_gwait(cond=lambda c:True))
         except StopIteration as e:
             retval = e.value
         self.assertTrue(isinstance(retval, object)) # we get back the object which was created in the check_and_wait function
+        sim.get_consumer_metadata(None).cond.pop()  # remove stored condition for this task
 
         condition = SomeCallableObj()
         condition.cond_value = lambda e: 'condition value was computed in lambda'
         try:
             retval = next(sim.check_and_gwait(cond=condition))
+            sim.get_consumer_metadata(None).cond.pop()  # remove stored condition for this task
         except StopIteration as e:
             retval = e.value
         self.assertTrue(retval == 'condition value was computed in lambda')
@@ -426,10 +431,12 @@ class TestConditionChecking(unittest.TestCase):
         # The generator sim.check_and_wait yields in the middle with the value back, which is by default "True"
         coro = sim.check_and_wait(cond=lambda c:False)
         retval = coro.send(None)
+        sim.get_consumer_metadata(None).cond.pop()  # remove stored condition for this task
         self.assertTrue(retval == True)
         try:
             coro = sim.check_and_wait(cond=lambda c:True)
             retval = coro.send(None)
+            sim.get_consumer_metadata(None).cond.pop()  # remove stored condition for this task
         except StopIteration as e:
             retval = e.value
         self.assertTrue(isinstance(retval, object)) # we get back the object which was created in the check_and_wait function
@@ -439,6 +446,7 @@ class TestConditionChecking(unittest.TestCase):
         try:
             coro = sim.check_and_wait(cond=condition)
             retval = coro.send(None)
+            sim.get_consumer_metadata(None).cond.pop()  # remove stored condition for this task
         except StopIteration as e:
             retval = e.value
         self.assertTrue(retval == 'condition value was computed in lambda')

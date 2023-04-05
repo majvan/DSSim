@@ -115,11 +115,45 @@ class DSInterruptibleContext:
 
     def interrupted(self):
         return self._interrupted
+
+
+class _StackedCond:
+    def __init__(self, cond):
+        self.conds = [cond]
+
+    def push(self, cond):
+        self.conds.append(cond)
+
+    def pop(self):
+        self.conds.pop()
+
+    def check_one(self, cond, event):
+        ''' Returns pair of info ("event passing", "value of event") '''
+        # Check the event first
+        if event is None:  # timeout received
+            return True, None
+        elif isinstance(event, Exception):  # any exception raised
+            return True, event
+        # Check the type of condition
+        if cond == event:  # we are expecting exact event and it came
+            return True, event
+        elif callable(cond) and cond(event):  # there was a filter function set and the condition is met
+            return True, event
+        else:  # the event does not match our condition and hence will be ignored
+            return False, None
     
+    def check(self, event):
+        for cond in reversed(self.conds):
+            signaled, event = self.check_one(cond, event)
+            if not signaled:
+                break
+        return signaled, event
+
 
 class _ConsumerMetadata:
     def __init__(self, cond=lambda e: True):
-        self.cond = cond
+        self.cond = _StackedCond(cond)
+
 
 
 class SignalMixin:
@@ -247,24 +281,9 @@ class DSSimulation:
         self.parent_process = old_process
         return new_process
 
-    def _check_cond(self, cond, event):
-        ''' Returns pair of info ("event passing", "value of event") '''
-        # Check the event first
-        if event is None:  # timeout received
-            return True, None
-        elif isinstance(event, Exception):  # any exception raised
-            return True, event
-        # Check the type of condition
-        if cond == event:  # we are expecting exact event and it came
-            return True, event
-        elif callable(cond) and cond(event):  # there was a filter function set and the condition is met
-            return True, event
-        else:  # the event does not match our condition and hence will be ignored
-            return False, None
-
     def check_condition(self, schedulable, event):
-        cond = self.get_consumer_metadata(schedulable).cond
-        retval, event = self._check_cond(cond, event)
+        conds = self.get_consumer_metadata(schedulable).cond
+        retval, event = conds.check(event)
         return retval
 
     def send_object(self, schedulable, event):
@@ -355,7 +374,12 @@ class DSSimulation:
         retval = yield from schedulable
         return retval
 
-    def _gwait_for_event(self, val=None):
+    def _gwait_for_event(self, timeout, val=None):
+        # Re-compute abs/relative time to abs for the timeout
+        time = self._compute_time(timeout)
+        # Schedule the timeout to the time queue. The condition is only for higher performance
+        if time != float('inf'):
+            self.time_queue.add_element(time, (self.parent_process, None))
         try:
             # Pass value to the feeder and wait for next event
             event = yield val
@@ -373,6 +397,10 @@ class DSSimulation:
             # If we got any exception, we will not use the other events anymore
             self.delete(lambda e: e == (self.parent_process, None))
             raise
+        if event is not None and time != float('inf'):
+            # If we terminated before timeout and the timeout event is on time queue- remove it
+            self.delete(lambda e: e == (self.parent_process, None))
+
         return event
 
     def gwait(self, timeout=float('inf'), cond=lambda e: False, val=True):
@@ -389,23 +417,12 @@ class DSSimulation:
         # _wait_for_event method, the return from the subprocess would not defer here, but rather
         # just ended and disappeared in scheduler. But we need that the scheduler is said to plan
         # another timeout for this process.
-        schedulable = self.parent_process
-    
-        # Re-compute abs/relative time to abs for the timeout
-        time = self._compute_time(timeout)
-        # Schedule the timeout to the time queue. The condition is only for higher performance
-        if time != float('inf'):
-            self.time_queue.add_element(time, (schedulable, None))
-
-        metaobj = self.get_consumer_metadata(schedulable)
-        # Get the condition object (lambda / object / ...) from the process metadata
-        metaobj.cond = cond
-
-        event = yield from self._gwait_for_event(val)
-
-        if event is not None and time != float('inf'):
-            # If we terminated before timeout and the timeout event is on time queue- remove it
-            self.delete(lambda e: e == (schedulable, None))
+        conds = self.get_consumer_metadata(self.parent_process).cond
+        # Set the condition object (lambda / object / ...) in the process metadata
+        conds.push(cond)
+        event = yield from self._gwait_for_event(timeout, val)
+        # Remove the last condition
+        conds.pop()
         if hasattr(cond, 'cond_value'):
             event = cond.cond_value(event)
         return event
@@ -415,15 +432,23 @@ class DSSimulation:
         # invariant to the passed event, for instance to check for a state of an object
         # so if the state matches, it returns immediately
         # Otherwise it jumps to the waiting process.
-        _, event = self._check_cond(cond, self._TestObject())
-        if event:
-            if hasattr(cond, 'cond_value'):
-                event = cond.cond_value(event)
-            return event  # return event immediately
-        retval = yield from self.gwait(timeout, cond, val)
-        return retval
+        conds = self.get_consumer_metadata(self.parent_process).cond
+        # Set the condition object (lambda / object / ...) in the process metadata
+        conds.push(cond)
+        _, event = conds.check(self._TestObject())
+        if not event:
+            event = yield from self._gwait_for_event(timeout, val)
+        if hasattr(cond, 'cond_value'):
+            event = cond.cond_value(event)
+        conds.pop()
+        return event
 
-    async def _wait_for_event(self, val=None):
+    async def _wait_for_event(self, timeout, val=None):
+        # Re-compute abs/relative time to abs for the timeout
+        time = self._compute_time(timeout)
+        # Schedule the timeout to the time queue. The condition is only for higher performance
+        if time != float('inf'):
+            self.time_queue.add_element(time, (self.parent_process, None))
         try:
             # Pass value to the feeder and wait for next event
             event = await Awaitable(val)
@@ -441,6 +466,9 @@ class DSSimulation:
             # If we got any exception, we will not use the other events anymore
             self.delete(lambda e: e == (self.parent_process, None))
             raise
+        if event is not None and time != float('inf'):
+            # If we terminated before timeout and the timeout event is on time queue- remove it
+            self.delete(lambda e: e == (self.parent_process, None))
         return event
 
     async def wait(self, timeout=float('inf'), cond=lambda e: False, val=True):
@@ -457,23 +485,12 @@ class DSSimulation:
         # _wait_for_event method, the return from the subprocess would not defer here, but rather
         # just ended and disappeared in scheduler. But we need that the scheduler is said to plan
         # another timeout for this process.
-        schedulable = self.parent_process
-    
-        # Re-compute abs/relative time to abs for the timeout
-        time = self._compute_time(timeout)
-        # Schedule the timeout to the time queue. The condition is only for higher performance
-        if time != float('inf'):
-            self.time_queue.add_element(time, (schedulable, None))
-
-        metaobj = self.get_consumer_metadata(schedulable)
-        # Get the condition object (lambda / object / ...) from the process metadata
-        metaobj.cond = cond
-
-        event = await self._wait_for_event(val)
-
-        if event is not None and time != float('inf'):
-            # If we terminated before timeout and the timeout event is on time queue- remove it
-            self.delete(lambda e: e == (schedulable, None))
+        conds = self.get_consumer_metadata(self.parent_process).cond
+        # Set the condition object (lambda / object / ...) in the process metadata
+        conds.push(cond)
+        event = await self._wait_for_event(timeout, val)
+        # Remove the last condition
+        conds.pop()
         if hasattr(cond, 'cond_value'):
             event = cond.cond_value(event)
         return event
@@ -483,13 +500,16 @@ class DSSimulation:
         # invariant to the passed event, for instance to check for a state of an object
         # so if the state matches, it returns immediately
         # Otherwise it jumps to the waiting process.
-        _, event = self._check_cond(cond, self._TestObject())
-        if event:
-            if hasattr(cond, 'cond_value'):
-                event = cond.cond_value(event)
-            return event  # return event immediately
-        retval = await self.wait(timeout, cond, val)
-        return retval
+        conds = self.get_consumer_metadata(self.parent_process).cond
+        # Set the condition object (lambda / object / ...) in the process metadata
+        conds.push(cond)
+        _, event = conds.check(self._TestObject())
+        if not event:
+            event = await self._wait_for_event(timeout, val)
+        if hasattr(cond, 'cond_value'):
+            event = cond.cond_value(event)
+        conds.pop()
+        return event
 
     def _kick(self, schedulable):
         ''' Provides first kick (run) of a schedulable process. '''
@@ -505,7 +525,7 @@ class DSSimulation:
         # there may be events for the process planned.
         # Remove the condition
         metaobj = self.get_consumer_metadata(schedulable)
-        metaobj.cond = None  # we keep a condition, but an easy one; accepting None events
+        metaobj.cond = _StackedCond(None)  # we keep a condition, but an easy one; accepting None events
         # Remove all the events for this schedulable
         self.time_queue.delete(lambda e:e[0] is schedulable)
 
