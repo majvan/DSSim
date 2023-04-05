@@ -419,8 +419,6 @@ class DSSimulation:
         if event:
             if hasattr(cond, 'cond_value'):
                 event = cond.cond_value(event)
-            if hasattr(cond, 'cond_cleanup'):
-                cond.cond_cleanup()
             return event  # return event immediately
         retval = yield from self.gwait(timeout, cond, val)
         return retval
@@ -478,8 +476,6 @@ class DSSimulation:
             self.delete(lambda e: e == (schedulable, None))
         if hasattr(cond, 'cond_value'):
             event = cond.cond_value(event)
-        if hasattr(cond, 'cond_cleanup'):
-            cond.cond_cleanup()
         return event
 
     async def check_and_wait(self, timeout=float('inf'), cond=lambda e: False, val=True):
@@ -491,8 +487,6 @@ class DSSimulation:
         if event:
             if hasattr(cond, 'cond_value'):
                 event = cond.cond_value(event)
-            if hasattr(cond, 'cond_cleanup'):
-                cond.cond_cleanup()
             return event  # return event immediately
         retval = await self.wait(timeout, cond, val)
         return retval

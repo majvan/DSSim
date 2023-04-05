@@ -413,13 +413,11 @@ class TestConditionChecking(unittest.TestCase):
 
         condition = SomeCallableObj()
         condition.cond_value = lambda e: 'condition value was computed in lambda'
-        condition.cond_cleanup = Mock()
         try:
             retval = next(sim.check_and_gwait(cond=condition))
         except StopIteration as e:
             retval = e.value
         self.assertTrue(retval == 'condition value was computed in lambda')
-        condition.cond_cleanup.assert_called_once()
 
     def test5_check_and_wait(self):
         ''' Test check_and_wait function. First it should call check and if check does not pass, it should call wait '''
@@ -438,14 +436,12 @@ class TestConditionChecking(unittest.TestCase):
 
         condition = SomeCallableObj()
         condition.cond_value = lambda e: 'condition value was computed in lambda'
-        condition.cond_cleanup = Mock()
         try:
             coro = sim.check_and_wait(cond=condition)
             retval = coro.send(None)
         except StopIteration as e:
             retval = e.value
         self.assertTrue(retval == 'condition value was computed in lambda')
-        condition.cond_cleanup.assert_called_once()
 
     def test6_gwait_return(self):
         def my_process():
