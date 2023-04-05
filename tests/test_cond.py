@@ -58,6 +58,19 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(isinstance(fc, DSFuture))
         self.assertEqual(str(fc), "DSFilter(c)")
 
+        fna = -fa
+        self.assertTrue(fna is not fa)  # a copy is created instead of extension
+        self.assertTrue(fna.expression == _f.ONE_LINER)
+        self.assertFalse(fna.positive)
+        self.assertTrue(fna.pulse)
+        self.assertTrue(fna.get_future_eps() == {fna._finish_tx,})
+        self.assertTrue(isinstance(fna, DSFuture))
+        self.assertEqual(str(fna), "-DSFilter(a)")
+
+        with self.assertRaises(ValueError):
+            -fna  # once a filter is negative (reseter), it cannot be negated again
+
+
     def test1_init_lambda(self):
         sim = DSSimulation()
         l = lambda e: 'A' in e
@@ -96,6 +109,19 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(isinstance(fc, DSFuture))
         self.assertEqual(str(fc), f"DSFilter({l})")
 
+        fna = -fa
+        self.assertTrue(fna is not fa)  # a copy is created instead of extension
+        self.assertTrue(fna.expression == _f.ONE_LINER)
+        self.assertFalse(fna.positive)
+        self.assertTrue(fna.pulse)
+        self.assertTrue(fna.get_future_eps() == {fna._finish_tx,})
+        self.assertTrue(isinstance(fna, DSFuture))
+        self.assertEqual(str(fna), f"-DSFilter({fa.cond})")
+
+        with self.assertRaises(ValueError):
+            -fna  # once a filter is negative (reseter), it cannot be negated again
+
+
     def test2_init_future(self):
         sim = DSSimulation()
         fut = DSFuture(sim=sim)
@@ -133,6 +159,19 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fc.get_future_eps() == {fc._finish_tx, fut._finish_tx})
         self.assertTrue(isinstance(fc, DSFuture))
         self.assertEqual(str(fc), f"DSFilter({fut})")
+
+        fna = -fa
+        self.assertTrue(fna is not fa)  # a copy is created instead of extension
+        self.assertTrue(fna.expression == _f.ONE_LINER)
+        self.assertFalse(fna.positive)
+        self.assertTrue(fna.pulse)
+        self.assertTrue(fna.get_future_eps() == {fna._finish_tx, fna.cond._finish_tx})
+        self.assertTrue(isinstance(fna, DSFuture))
+        self.assertEqual(str(fna), f"-DSFilter({fa.cond})")
+
+        with self.assertRaises(ValueError):
+            -fna  # once a filter is negative (reseter), it cannot be negated again
+
 
     def test3_init_gen(self):
         def gen():
@@ -174,6 +213,18 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fc.get_future_eps() == {fc._finish_tx, fc.cond._finish_tx})
         self.assertTrue(isinstance(fc, DSFuture))
         self.assertEqual(str(fc), f"DSFilter({fc.cond})")
+
+        fna = -fa
+        self.assertTrue(fna is not fa)  # a copy is created instead of extension
+        self.assertTrue(fna.expression == _f.ONE_LINER)
+        self.assertFalse(fna.positive)
+        self.assertTrue(fna.pulse)
+        self.assertTrue(fna.get_future_eps() == {fna._finish_tx, fna.cond._finish_tx})
+        self.assertTrue(isinstance(fna, DSFuture))
+        self.assertEqual(str(fna), f"-DSFilter({fa.cond})")
+
+        with self.assertRaises(ValueError):
+            -fna  # once a filter is negative (reseter), it cannot be negated again
 
         sim = DSSimulation()
         g = gen()
@@ -227,6 +278,18 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(isinstance(fc, DSFuture))
         self.assertEqual(str(fc), f"DSFilter({fc.cond})")
 
+        fna = -fa
+        self.assertTrue(fna is not fa)  # a copy is created instead of extension
+        self.assertTrue(fna.expression == _f.ONE_LINER)
+        self.assertFalse(fna.positive)
+        self.assertTrue(fna.pulse)
+        self.assertTrue(fna.get_future_eps() == {fna._finish_tx, fna.cond._finish_tx})
+        self.assertTrue(isinstance(fna, DSFuture))
+        self.assertEqual(str(fna), f"-DSFilter({fa.cond})")
+
+        with self.assertRaises(ValueError):
+            -fna  # once a filter is negative (reseter), it cannot be negated again
+
         sim = DSSimulation()
         self.assertTrue(len(sim.time_queue) == 0)
         fd = _f(coro(), sim=sim)
@@ -261,7 +324,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fb.cond == p)
         self.assertTrue(fb.get_future_eps() == {fb._finish_tx, p._finish_tx})
         self.assertTrue(isinstance(fb, DSFuture))
-        self.assertEqual(str(fb), f"DSFilter({fb.cond})")
+        self.assertEqual(str(fb), f"DSFilter({p})")
 
         p = DSProcess(gen(), sim=sim)
         fc = _f(p, sigtype=_f.SignalType.PULSED, sim=sim)
@@ -273,7 +336,19 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fc.cond == p)
         self.assertTrue(fc.get_future_eps() == {fc._finish_tx, p._finish_tx})
         self.assertTrue(isinstance(fc, DSFuture))
-        self.assertEqual(str(fc), f"DSFilter({fc.cond})")
+        self.assertEqual(str(fc), f"DSFilter({p})")
+
+        fna = -fa
+        self.assertTrue(fna is not fa)  # a copy is created instead of extension
+        self.assertTrue(fna.expression == _f.ONE_LINER)
+        self.assertFalse(fna.positive)
+        self.assertTrue(fna.pulse)
+        self.assertTrue(fna.get_future_eps() == {fna._finish_tx, fna.cond._finish_tx})
+        self.assertTrue(isinstance(fna, DSFuture))
+        self.assertEqual(str(fna), f"-DSFilter({fa.cond})")
+
+        with self.assertRaises(ValueError):
+            -fna  # once a filter is negative (reseter), it cannot be negated again
 
         sim = DSSimulation()
         self.assertTrue(len(sim.time_queue) == 0)
@@ -764,12 +839,16 @@ class TestDSFilterAggregated(unittest.TestCase):
         c = fa | fb
         self.assertTrue(isinstance(c, DSFuture))
         self.assertTrue(c.expression == any)
+        self.assertTrue(c.positive)
+        self.assertTrue(c.get_future_eps() == {fa._finish_tx, fb._finish_tx,})
         self.assertEqual(repr(c), "<class 'dssim.cond.DSFilterAggregated'>0")
         self.assertEqual(str(c), "(DSFilter(a) | DSFilter(b))")
         self.assertTrue((c.setters, c.resetters) == ([fa, fb], []))
         d = fa | fb | fc
         self.assertTrue(isinstance(d, DSFuture))
         self.assertTrue(d.expression == any)
+        self.assertTrue(d.positive)
+        self.assertTrue(d.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
         self.assertEqual(repr(d), "<class 'dssim.cond.DSFilterAggregated'>1")
         self.assertEqual(str(d), "(DSFilter(a) | DSFilter(b) | DSFilter(c))")
         self.assertTrue((d.setters, d.resetters) == ([fa, fb, fc], []))
@@ -777,12 +856,16 @@ class TestDSFilterAggregated(unittest.TestCase):
         c = fa & fb
         self.assertTrue(isinstance(c, DSFuture))
         self.assertTrue(c.expression == all)
+        self.assertTrue(c.positive)
+        self.assertTrue(c.get_future_eps() == {fa._finish_tx, fb._finish_tx,})
         self.assertEqual(repr(c), "<class 'dssim.cond.DSFilterAggregated'>2")
         self.assertEqual(str(c), "(DSFilter(a) & DSFilter(b))")
         self.assertTrue((c.setters, c.resetters) == ([fa, fb], []))
         d = fa & fb & fc
         self.assertTrue(isinstance(d, DSFuture))
         self.assertTrue(d.expression == all)
+        self.assertTrue(d.positive)
+        self.assertTrue(d.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
         self.assertEqual(repr(d), "<class 'dssim.cond.DSFilterAggregated'>3")
         self.assertEqual(str(d), "(DSFilter(a) & DSFilter(b) & DSFilter(c))")
         self.assertTrue((d.setters, d.resetters) == ([fa, fb, fc], []))
@@ -790,89 +873,115 @@ class TestDSFilterAggregated(unittest.TestCase):
         # Test priorities
         c = fa & fb | fc
         self.assertTrue(c.expression == any)
+        self.assertTrue(c.positive)
+        self.assertTrue(c.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
         self.assertEqual(str(c), "((DSFilter(a) & DSFilter(b)) | DSFilter(c))")
         self.assertTrue((len(c.setters), len(c.resetters)) == (2, 0))
         c = fa | fb & fc
         self.assertTrue(c.expression == any)
+        self.assertTrue(c.positive)
+        self.assertTrue(d.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
         self.assertEqual(str(c), "(DSFilter(a) | (DSFilter(b) & DSFilter(c)))")
         self.assertTrue((len(c.setters), len(c.resetters)) == (2, 0))
 
         # Test heterogenous combinations
         c = fa | fb & fc
         self.assertTrue(c.expression == any)
+        self.assertTrue(c.positive)
+        self.assertTrue(c.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
         self.assertEqual(str(c), "(DSFilter(a) | (DSFilter(b) & DSFilter(c)))")
         self.assertTrue((len(c.setters), len(c.resetters)) == (2, 0))
         d = c | fd
         self.assertTrue(d is c)  # the filter was just updated with a new expression
         self.assertTrue(d.expression == any)
+        self.assertTrue(d.positive)
+        self.assertTrue(d.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx, fd._finish_tx})
         self.assertEqual(str(d), "(DSFilter(a) | (DSFilter(b) & DSFilter(c)) | DSFilter(d))")
         self.assertTrue((len(d.setters), len(d.resetters)) == (3, 0))
         c = fa | fb & fc
         d = fd | c
         self.assertTrue(d is c)  # the filter was just updated with a new expression
         self.assertTrue(d.expression == any)
+        self.assertTrue(d.positive)
+        self.assertTrue(d.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx, fd._finish_tx})
         self.assertEqual(str(d), "(DSFilter(a) | (DSFilter(b) & DSFilter(c)) | DSFilter(d))")
         self.assertTrue((len(d.setters), len(d.resetters)) == (3, 0))
 
         c = fa & (fb | fc)
         self.assertTrue(c.expression == all)
+        self.assertTrue(c.positive)
+        self.assertTrue(c.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
         self.assertEqual(str(c), "(DSFilter(a) & (DSFilter(b) | DSFilter(c)))")
         self.assertTrue((len(c.setters), len(c.resetters)) == (2, 0))
         d = c & fd
         self.assertTrue(d is c)  # the filter was just updated with a new expression
         self.assertTrue(d.expression == all)
+        self.assertTrue(d.positive)
+        self.assertTrue(d.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx, fd._finish_tx})
         self.assertEqual(str(d), "(DSFilter(a) & (DSFilter(b) | DSFilter(c)) & DSFilter(d))")
         self.assertTrue((len(d.setters), len(d.resetters)) == (3, 0))
         c = fa & (fb | fc)
         d = fd & c
         self.assertTrue(d is c)  # the filter was just updated with a new expression
         self.assertTrue(d.expression == all)
+        self.assertTrue(d.positive)
+        self.assertTrue(d.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx, fd._finish_tx})
         self.assertEqual(str(d), "(DSFilter(a) & (DSFilter(b) | DSFilter(c)) & DSFilter(d))")
         self.assertTrue((len(d.setters), len(d.resetters)) == (3, 0))
+
+        c = -(fa & fb)
+        self.assertTrue(c.expression == all)
+        self.assertTrue(not c.positive)
+        self.assertTrue(c.get_future_eps() == {fa._finish_tx, fb._finish_tx})
+        self.assertEqual(str(c), "-(DSFilter(a) & DSFilter(b))")
+        self.assertTrue((len(c.setters), len(c.resetters)) == (2, 0))
 
     def test1_build_with_reseters(self):
         sim = DSSimulation()
         fa, fb, fc, fd = _f('a', sim=sim), _f('b', sim=sim), _f('c', sim=sim), _f('d', sim=sim)
-        fna = -fa
-        self.assertTrue(fna is not fa)
-        self.assertTrue(fna.expression == _f.ONE_LINER)
-        self.assertFalse(fna.positive)
-        self.assertTrue(fna.pulse)
-        self.assertTrue(isinstance(fna, DSFuture))
-        self.assertEqual(str(fna), "-DSFilter(a)")
-
-        with self.assertRaises(ValueError):
-            -fna  # once a filter is negative (reseter), it cannot be negated again
-        fnb = -fb
+        fna, fnb = -fa, -fb
 
         c = fna | fb
         self.assertTrue(isinstance(c, DSFuture))
         self.assertTrue(c.expression == any)
+        self.assertTrue(c.get_future_eps() == {fna._finish_tx, fb._finish_tx})
         self.assertEqual(str(c), "(DSFilter(b) | -DSFilter(a))")
         self.assertTrue((c.setters, c.resetters) == ([fb], [fna]))
         d = fna | fb | fc
         self.assertTrue(isinstance(d, DSFuture))
         self.assertTrue(d.expression == any)
+        self.assertTrue(d.get_future_eps() == {fna._finish_tx, fb._finish_tx, fc._finish_tx})
         self.assertEqual(str(d), "(DSFilter(b) | DSFilter(c) | -DSFilter(a))")
         self.assertTrue((d.setters, d.resetters) == ([fb, fc], [fna]))
         d = fna | fc | fd | fnb
         self.assertTrue(isinstance(d, DSFuture))
         self.assertTrue(d.expression == any)
+        self.assertTrue(d.get_future_eps() == {fna._finish_tx, fc._finish_tx, fd._finish_tx, fnb._finish_tx})
         self.assertEqual(str(d), "(DSFilter(c) | DSFilter(d) | -DSFilter(a) | -DSFilter(b))")
         self.assertTrue((d.setters, d.resetters) == ([fc, fd], [fna, fnb]))
 
         c = fna & fb
         self.assertTrue(isinstance(c, DSFuture))
         self.assertTrue(c.expression == all)
+        self.assertTrue(c.get_future_eps() == {fna._finish_tx, fb._finish_tx,})
         self.assertEqual(str(c), "(DSFilter(b) & -DSFilter(a))")
         self.assertTrue((c.setters, c.resetters) == ([fb], [fna]))
         d = fna & fb & fc
         self.assertTrue(isinstance(d, DSFuture))
         self.assertTrue(d.expression == all)
+        self.assertTrue(d.get_future_eps() == {fna._finish_tx, fb._finish_tx, fc._finish_tx})
         self.assertEqual(str(d), "(DSFilter(b) & DSFilter(c) & -DSFilter(a))")
         self.assertTrue((d.setters, d.resetters) == ([fb, fc], [fna]))
         d = fna & fc & fd & fnb
         self.assertTrue(isinstance(d, DSFuture))
         self.assertTrue(d.expression == all)
+        self.assertTrue(d.get_future_eps() == {fna._finish_tx, fc._finish_tx, fd._finish_tx, fnb._finish_tx})
         self.assertEqual(str(d), "(DSFilter(c) & DSFilter(d) & -DSFilter(a) & -DSFilter(b))")
         self.assertTrue((d.setters, d.resetters) == ([fc, fd], [fna, fnb]))
+
+        c = -(fa & fb) & fc
+        self.assertTrue(c.expression == all)
+        self.assertTrue(c.positive)
+        self.assertTrue(c.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx})
+        self.assertEqual(str(c), "(DSFilter(c) & -(DSFilter(a) & DSFilter(b)))")
+        self.assertTrue((len(c.setters), len(c.resetters)) == (1, 1))
