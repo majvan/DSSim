@@ -124,6 +124,8 @@ class DSProducer(DSConsumer, SignalMixin):
             'act': notifier(),
             'post': notifier(),
         }
+        # A producer takes any event - no conditional
+        self.meta.cond.push(lambda e: True)
 
     def add_subscriber(self, subscriber, phase='act', **kwargs):
         if subscriber:

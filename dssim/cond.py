@@ -17,7 +17,7 @@ to be able create advanced expressions.
 '''
 import inspect
 import copy
-from dssim.simulation import DSCallback, DSFuture, DSProcess, ICondition
+from dssim.simulation import DSFuture, DSProcess, ICondition, _ConsumerMetadata
 
 class DSFilter(DSFuture, ICondition):
     ''' Differences from DSFuture:
@@ -65,6 +65,12 @@ class DSFilter(DSFuture, ICondition):
             self.sim = self.cond.sim
             if not self.cond.started():
                 self.cond = self.cond.schedule(0)  # start the process
+
+    def create_metadata(self):
+        self.meta = _ConsumerMetadata()
+        # A condition accepts any event 
+        self.meta.cond.push(lambda e:True)
+        return self.meta
 
     def __or__(self, other):
         return DSFilterAggregated.build(self, other, any)

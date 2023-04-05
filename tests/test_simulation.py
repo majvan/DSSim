@@ -161,6 +161,7 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertEqual(retval, 'First return')
         retval = process.send('anything0')
         self.assertEqual(retval, 'Second return')
+        process.meta.cond.push(lambda e:True)  # accepting any event
         retval = sim.schedule_event(1, 'anything0', process)
         sim.run()
         self.assertEqual(process.value, 'Success')
@@ -231,28 +232,31 @@ class TestException(unittest.TestCase):
         a = 10 / 0
         return 'Second unreachable'
 
-    def __first_cyclic(self):
-        yield 'Kick-on first'
-        self.sim.send(self.process2, 'Signal from first process')
+    def __first_cyclic(self, sim):
+        process2 = yield 'Kick-on first'
+        yield
+        sim.send(process2, 'Signal from first process')
         yield 'After signalling first'
         return 'Done first'
 
-    def __second_cyclic(self):
-        yield 'Kick-on second'
-        self.sim.send(self.process1, 'Signal from second process')
+    def __second_cyclic(self, sim):
+        process1 = yield 'Kick-on second'
+        yield
+        sim.send(process1, 'Signal from second process')
         yield 'After signalling second'
         return 'Done second'
 
     def setUp(self):
-        self.sim = DSSimulation()
         self.__time_process_event = Mock()
 
     def test0_exception_usercode_generator(self):
+        sim = DSSimulation()
         process = self.__my_buggy_code()
-        self.sim._kick(process)
+        sim._kick(process)
+        sim.get_consumer_metadata(process).cond.push(lambda e:True)  # Accept all events
         exc_to_check = None
         try:
-            self.sim.send(process, 'My data')
+            sim.send(process, 'My data')
             # we should not get here, exception is expected
             self.assertTrue(1 == 2)
         except ZeroDivisionError as exc:
@@ -260,12 +264,16 @@ class TestException(unittest.TestCase):
 
     def test1_exception_usercode_generators(self):
         sim = DSSimulation()
-        self.process1 = self.__first_cyclic()
-        self.process2 = self.__second_cyclic()
-        sim._kick(self.process1)
-        sim._kick(self.process2)
+        process1 = self.__first_cyclic(sim)
+        process2 = self.__second_cyclic(sim)
+        sim._kick(process1)
+        sim._kick(process2)
+        sim.get_consumer_metadata(process1).cond.push(lambda e:True)  # Accept all events
+        sim.get_consumer_metadata(process2).cond.push(lambda e:True)  # Accept all events
+        sim.send(process1, process2)  # Inform processes about the other process
+        sim.send(process2, process1)
         try:
-            self.sim.send(self.process1, 'My data')
+            sim.send(process2, 'My data')
             # we should not get here, exception is expected
             self.assertTrue(1 == 2)
         except ValueError as exc:
@@ -273,12 +281,16 @@ class TestException(unittest.TestCase):
 
     def test2_exception_usercode_process(self):
         sim = DSSimulation()
-        self.process1 = DSProcess(self.__first_cyclic(), name="First cyclic", sim=self.sim)
-        self.process2 = DSProcess(self.__second_cyclic(), name="Second cyclic", sim=self.sim)
-        sim._kick(self.process1)
-        sim._kick(self.process2)
+        process1 = DSProcess(self.__first_cyclic(sim), name="First cyclic", sim=sim)
+        process1.meta.cond.push(lambda e:True)  # accept any event
+        process2 = DSProcess(self.__second_cyclic(sim), name="Second cyclic", sim=sim)
+        process2.meta.cond.push(lambda e:True)  # accept any event
+        sim._kick(process1)
+        sim._kick(process2)
+        sim.send(process1, process2)  # Inform processes about the other process
+        sim.send(process2, process1)
         try:
-            self.sim.send(self.process1, 'My data')
+            sim.send(process1, 'My data')
             # we should not get here, exception is expected
             self.assertTrue(1 == 2)
         except ValueError as exc:
@@ -360,8 +372,12 @@ class TestConditionChecking(unittest.TestCase):
             ('abc', 'def', (False, None)),
             ('def', 'def', (True, 'def')),
         ):
-            retval = _StackedCond(cond).check(event)
+            stack = _StackedCond()
+            stack.push(cond)
+            retval = stack.check(event)
             self.assertEqual(retval, expected_result)
+            stack.pop()
+            self.assertTrue(len(stack.conds) == 0)
 
     def test3_check_condition(self):
         ''' The check_condition should retrieve cond from the metadata and then call _check_cond '''
@@ -413,7 +429,6 @@ class TestConditionChecking(unittest.TestCase):
         except StopIteration as e:
             retval = e.value
         self.assertTrue(isinstance(retval, object)) # we get back the object which was created in the check_and_wait function
-        sim.get_consumer_metadata(None).cond.pop()  # remove stored condition for this task
 
         condition = SomeCallableObj()
         condition.cond_value = lambda e: 'condition value was computed in lambda'
@@ -876,11 +891,12 @@ class TestSim(unittest.TestCase):
         self.sim.parent_process = Mock()
         my_process = self.__my_time_process()
         parent_process = self.sim.schedule(0, my_process)
+        self.sim.get_consumer_metadata(parent_process).cond.push(lambda e:True)  # Accept any event
 
         self.sim.run(0.5) # kick on the process
-        self.sim.schedule_event(1, 3, my_process)
-        self.sim.schedule_event(2, 2, my_process)
-        self.sim.schedule_event(3, 1, my_process)
+        self.sim.schedule_event(1, 3, parent_process)
+        self.sim.schedule_event(2, 2, parent_process)
+        self.sim.schedule_event(3, 1, parent_process)
         retval = self.sim.run(0.5)
         self.__time_process_event.assert_called_once_with('kick-on')
         self.assertEqual(retval, (0.5, 1))
@@ -896,9 +912,9 @@ class TestSim(unittest.TestCase):
         self.__time_process_event.reset_mock()
 
         self.sim.restart()
-        self.sim.schedule_event(1, 3, my_process)
-        self.sim.schedule_event(2, 2, my_process)
-        self.sim.schedule_event(3, 1, my_process)
+        self.sim.schedule_event(1, 3, parent_process)
+        self.sim.schedule_event(2, 2, parent_process)
+        self.sim.schedule_event(3, 1, parent_process)
         retval = self.sim.run(2.5)
         self.assertEqual(retval, (2, 2))
         calls = [call(1, 3), call(2, 2),]
@@ -910,7 +926,8 @@ class TestSim(unittest.TestCase):
 
     def test8_run_producer(self):
         self.sim = DSSimulation()
-        producer = SomeObj()
+        producer = SomeObj()  # Instead of 
+        self.sim.get_consumer_metadata(producer).cond.push(lambda e:True)  # Accept any event
         producer.send = Mock()
         self.sim.schedule_event(1, 3, producer)
         self.sim.schedule_event(2, 2, producer)
@@ -964,6 +981,7 @@ class TestSim(unittest.TestCase):
             yield from sim.gwait(1)
         sim = DSSimulation()
         process = DSProcess(my_process2(sim), sim=sim)
+        sim.get_consumer_metadata(process).cond.push(lambda e:True)  # Accept any event
         sim.parent_process = process
         sim._kick(process)
         sim.schedule_event(1, {'data': 1}, process)

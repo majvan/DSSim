@@ -118,8 +118,8 @@ class DSInterruptibleContext:
 
 
 class _StackedCond:
-    def __init__(self, cond):
-        self.conds = [cond]
+    def __init__(self):
+        self.conds = []
 
     def push(self, cond):
         self.conds.append(cond)
@@ -127,13 +127,18 @@ class _StackedCond:
     def pop(self):
         self.conds.pop()
 
-    def check_one(self, cond, event):
+    def check_always(self, event):
         ''' Returns pair of info ("event passing", "value of event") '''
         # Check the event first
         if event is None:  # timeout received
             return True, None
         elif isinstance(event, Exception):  # any exception raised
             return True, event
+        else:  # the event does not match our condition
+            return False, None
+
+    def check_one(self, cond, event):
+        ''' Returns pair of info ("event passing", "value of event") '''
         # Check the type of condition
         if cond == event:  # we are expecting exact event and it came
             return True, event
@@ -143,17 +148,19 @@ class _StackedCond:
             return False, None
     
     def check(self, event):
+        signaled, retval = self.check_always(event)
+        if signaled:
+            return signaled, retval
         for cond in reversed(self.conds):
-            signaled, event = self.check_one(cond, event)
-            if not signaled:
+            signaled, retval = self.check_one(cond, event)
+            if signaled:
                 break
-        return signaled, event
+        return signaled, retval
 
 
 class _ConsumerMetadata:
-    def __init__(self, cond=lambda e: True):
-        self.cond = _StackedCond(cond)
-
+    def __init__(self):
+        self.cond = _StackedCond()
 
 
 class SignalMixin:
@@ -194,6 +201,7 @@ class DSSimulation:
         all the producers which belong to the same simulation entity.
         '''
         self.name = name
+        self._consumer_metadata = {}
         self._restart(time=0)
         if DSSimulation.sim_singleton is None:
             DSSimulation.sim_singleton = self  # The first sim environment will be the first initialized one
@@ -217,15 +225,14 @@ class DSSimulation:
         self.num_events = 0
         self.time = time
         self.parent_process = None
-        self._consumer_metadata = {}
 
     def create_metadata(self, process):
         if hasattr(process, 'create_metadata'):
-            retval = process.create_metadata()
+            meta = process.create_metadata()
         else:
-            retval = _ConsumerMetadata()
-            self._consumer_metadata[process] = retval
-        return retval
+            meta = _ConsumerMetadata()
+            self._consumer_metadata[process] = meta
+        return meta
 
     def get_consumer_metadata(self, process):
         retval = getattr(process, 'meta', None)
@@ -524,8 +531,8 @@ class DSSimulation:
         # for the schedulable. Since the process has finished, it will never need it, however
         # there may be events for the process planned.
         # Remove the condition
-        metaobj = self.get_consumer_metadata(schedulable)
-        metaobj.cond = _StackedCond(None)  # we keep a condition, but an easy one; accepting None events
+        meta = self.get_consumer_metadata(schedulable)
+        meta.cond = _StackedCond()
         # Remove all the events for this schedulable
         self.time_queue.delete(lambda e:e[0] is schedulable)
 
@@ -562,19 +569,29 @@ class DSSimulation:
 
     def observe_post(self, *components, **kwargs):
         return DSSubscriberContextManager(self.parent_process, 'post', components, **kwargs)
+    
+    @contextmanager
+    def extend_cond(self, cond):
+        conds = self.get_consumer_metadata(self.parent_process).cond
+        conds.push(cond)
+        try:
+            yield
+        finally:
+            conds.pop()
 
     @contextmanager
-    def interruptible(self, time):
-        exc = DSTimeoutContextError()
-        cm = DSInterruptibleContext(time, sim=self, exc=exc)
-        try:
-            yield cm
-        except DSTimeoutContextError as e:
-            if cm.exc is not e:
-                raise
-            cm.set_interrupted()
-        finally:
-            cm.cleanup()
+    def interruptible(self, time, cond=lambda e: False):
+        with self.extend_cond(cond):
+            exc = DSTimeoutContextError()
+            cm = DSInterruptibleContext(time, sim=self, exc=exc)
+            try:
+                yield cm
+            except DSTimeoutContextError as e:
+                if cm.exc is not e:
+                    raise
+                cm.set_interrupted()
+            finally:
+                cm.cleanup()
 
 
 class DSComponent:
@@ -661,6 +678,11 @@ class DSCallback(DSConsumer):
         # TODO: check if forward method is not a generator / process; otherwise throw an error
         self.forward_method = forward_method
 
+    def create_metadata(self):
+        self.meta = _ConsumerMetadata()
+        self.meta.cond.push(lambda e:True)
+        return
+
     def send(self, event):
         ''' The function calls the registered callback. '''
         retval = self.forward_method(event)
@@ -685,6 +707,12 @@ class DSFuture(DSConsumer, SignalMixin):
         # We store the latest value or excpetion. Useful to check the status after finish.
         self.value, self.exc = None, None
         self._finish_tx = DSProducer(name=self.name+'.future', sim=self.sim)
+    
+    def create_metadata(self):
+        self.meta = _ConsumerMetadata()
+        # By default, a future accepts event from self
+        self.meta.cond.push(self)
+        return self.meta
 
     def get_future_eps(self):
         return {self._finish_tx,}
@@ -746,10 +774,13 @@ class DSProcess(DSFuture, SignalMixin):
     The best practise is to use DSProcess instead of generators.
     '''
     def __init__(self, generator, *args, **kwargs):
-        super().__init__(*args, **kwargs)
         ''' Initializes DSProcess. The input has to be a generator function. '''
         self.generator = generator
         self.scheduled_generator = generator
+        if self.started():  # check if the generator / coro has already been started...
+            # TODO: if we want to support this use case, we should merge the metadata from the generator
+            raise ValueError('The DSProcess can be used only on non-started generators / coroutines')
+        super().__init__(*args, **kwargs)
 
     def __iter__(self):
         ''' Required to use the class to get events from it. '''

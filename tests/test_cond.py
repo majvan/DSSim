@@ -433,7 +433,9 @@ class TestDSFilter(unittest.TestCase):
             return 'Return'
 
         sim = DSSimulation()
-        fa = _f(gen(), sim=sim)
+        g = gen()
+        fa = _f(g, sim=sim)
+        sim.get_consumer_metadata(fa.get_process()).cond.push(lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.cond.finished() == False)
@@ -460,6 +462,7 @@ class TestDSFilter(unittest.TestCase):
         
         sim = DSSimulation()
         fa = _f(coro(), sim=sim)
+        sim.get_consumer_metadata(fa.get_process()).cond.push(lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.cond.finished() == False)
@@ -484,6 +487,7 @@ class TestDSFilter(unittest.TestCase):
         sim = DSSimulation()
         p = DSProcess(gen(), sim=sim)
         fa = _f(p, sim=sim)
+        sim.get_consumer_metadata(fa.get_process()).cond.push(lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         retval = fa('Hi')  # This will NOT forward the event to the process
@@ -581,6 +585,7 @@ class TestDSFilter(unittest.TestCase):
 
         sim = DSSimulation()
         fa = _f(gen(), sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        sim.get_consumer_metadata(fa.get_process()).cond.push(lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.cond.finished() == False)
@@ -607,6 +612,7 @@ class TestDSFilter(unittest.TestCase):
         
         sim = DSSimulation()
         fa = _f(coro(), sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        sim.get_consumer_metadata(fa.get_process()).cond.push(lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.cond.finished() == False)
@@ -631,6 +637,7 @@ class TestDSFilter(unittest.TestCase):
         sim = DSSimulation()
         p = DSProcess(gen(), sigtype=_f.SignalType.REEVALUATE, sim=sim)
         fa = _f(p, sim=sim)
+        sim.get_consumer_metadata(fa.get_process()).cond.push(lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         retval = fa('Hi')  # This will NOT forward the event to the process
@@ -729,6 +736,7 @@ class TestDSFilter(unittest.TestCase):
 
         sim = DSSimulation()
         fa = _f(gen(), sigtype=_f.SignalType.PULSED, sim=sim)
+        sim.get_consumer_metadata(fa.get_process()).cond.push(lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.cond.finished() == False)
@@ -759,6 +767,7 @@ class TestDSFilter(unittest.TestCase):
         
         sim = DSSimulation()
         fa = _f(coro(), sigtype=_f.SignalType.PULSED, sim=sim)
+        sim.get_consumer_metadata(fa.get_process()).cond.push(lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.cond.finished() == False)
@@ -787,6 +796,7 @@ class TestDSFilter(unittest.TestCase):
         sim = DSSimulation()
         p = DSProcess(gen(), sigtype=_f.SignalType.PULSED, sim=sim)
         fa = _f(p, sim=sim)
+        sim.get_consumer_metadata(fa.get_process()).cond.push(lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         retval = fa('Hi')  # This will NOT forward the event to the process

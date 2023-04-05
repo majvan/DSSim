@@ -55,20 +55,21 @@ class Switch(DSComponent):
         assert self.counter == 9
 
     def process(self, nr):
-        with self.sim.consume(self.producer):
-            data = yield 0  # wait for any event
-            self.counter += 1
-            print(f"Process {nr} was given feed data {data}")
-            print(f"Process {nr} returning back 0")
-            # we decided to return 0 to the feeder as a reply to the ALREADY PROCESSED event and to wait for a next event
-            data = yield 0
-            self.counter += 1
-            print(f"Process {nr} was given feed data {data}")
-            print(f"Process {nr} returning back 1 - this should consume the event")
-            # we decided to return 1 to the feeder as a reply to the ALREADY PROCESSED event and to wait for a next event            
-            data = yield 1
-            self.counter += 1
-            print(f"Process {nr} returning with {nr}")
+        with self.sim.extend_cond(cond=lambda e:True):
+            with self.sim.consume(self.producer):
+                data = yield 0  # wait for any event
+                self.counter += 1
+                print(f"Process {nr} was given feed data {data}")
+                print(f"Process {nr} returning back 0")
+                # we decided to return 0 to the feeder as a reply to the ALREADY PROCESSED event and to wait for a next event
+                data = yield 0
+                self.counter += 1
+                print(f"Process {nr} was given feed data {data}")
+                print(f"Process {nr} returning back 1 - this should consume the event")
+                # we decided to return 1 to the feeder as a reply to the ALREADY PROCESSED event and to wait for a next event            
+                data = yield 1
+                self.counter += 1
+                print(f"Process {nr} returning with {nr}")
         return nr
 
 
