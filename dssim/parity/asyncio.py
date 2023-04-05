@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-from dssim.simulation import DSSimulation, DSAbsTime, DSComponent, DSTimeoutContextManager
-from dssim.simulation import DSAbortException, DSTimeoutContextError
+from dssim.simulation import DSSimulation, DSAbsTime
+from dssim.simulation import DSAbortException, DSInterruptibleContext
 from dssim.simulation import DSSchedulable, DSFuture, DSProcess, DSCallback
 from dssim.cond import DSFilterAggregated, DSFilter
 from contextlib import asynccontextmanager
@@ -28,13 +28,9 @@ class InvalidStateError(Exception):
     pass
 
 
-class Timeout(DSTimeoutContextManager):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.finished = False
-    
+class Timeout(DSInterruptibleContext):
     def expired(self):
-        return self.finished
+        return self.interrupted()
 
 
 class DSAsyncSimulation(DSSimulation):
@@ -198,7 +194,7 @@ async def sleep(delay, result=None):
 async def wait_for(aw, timeout):
     async with _timeout(timeout) as cm:
         retval = await aw
-    if cm.expired():
+    if cm.interrupted():
         raise TimeoutError()
     return retval
 
@@ -224,7 +220,7 @@ async def timeout(delay):
     except TimeoutError as e:
         if cm.exc is not e:
             raise
-        cm.finished = True
+        cm.set_interrupted()
     finally:
         cm.cleanup()
 _timeout = timeout

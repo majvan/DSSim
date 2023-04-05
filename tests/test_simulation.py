@@ -19,7 +19,7 @@ import unittest
 from unittest.mock import Mock, MagicMock, call
 from dssim.simulation import DSSimulation, DSAbortException, DSFuture, DSSchedulable, DSProcess
 from dssim.simulation import DSSubscriberContextManager
-from dssim.simulation import DSTimeoutContextManager, DSTimeoutContextError
+from dssim.simulation import DSInterruptibleContext, DSTimeoutContextError
 from dssim.pubsub import DSProducer
 
 class SomeObj:
@@ -642,20 +642,20 @@ class TestTimeoutContext(unittest.TestCase):
 
     def test0_init(self):
         sim = Mock()
-        cm = DSTimeoutContextManager(None, sim=sim)
+        cm = DSInterruptibleContext(None, sim=sim)
         self.assertTrue(cm.time is None)
         self.assertTrue(cm.sim is sim)
         sim.schedule_event.assert_not_called()
 
         sim = Mock()
-        cm = DSTimeoutContextManager(0, sim=sim)
+        cm = DSInterruptibleContext(0, sim=sim)
         self.assertTrue(cm.time == 0)
         self.assertTrue(cm.sim is sim)
         sim.schedule_event.assert_has_calls([call(0, None),])
 
         sim = Mock()
         event = DSTimeoutContextError()
-        cm = DSTimeoutContextManager(0, event, sim=sim)
+        cm = DSInterruptibleContext(0, event, sim=sim)
         self.assertTrue(cm.time == 0)
         self.assertTrue(cm.sim is sim)
         sim.schedule_event.assert_has_calls([call(0, event),])
@@ -663,7 +663,7 @@ class TestTimeoutContext(unittest.TestCase):
     def test1_reschedule(self):
         sim = DSSimulation()
         sim.parent_process = 'process'
-        cm = DSTimeoutContextManager(None, 'hello', sim=sim)
+        cm = DSInterruptibleContext(None, 'hello', sim=sim)
         self.assertTrue(len(sim.time_queue) == 0)
         cm.reschedule(2)
         self.assertTrue(len(sim.time_queue) == 1)
@@ -674,7 +674,7 @@ class TestTimeoutContext(unittest.TestCase):
 
         sim = DSSimulation()
         sim.parent_process = 'process'
-        cm = DSTimeoutContextManager(0, 'hi', sim=sim)
+        cm = DSInterruptibleContext(0, 'hi', sim=sim)
         self.assertTrue(len(sim.time_queue) == 1)
         self.assertTrue(sim.time_queue.get0() == (0, ('process', 'hi')))
         cm.reschedule(2)
@@ -685,7 +685,7 @@ class TestTimeoutContext(unittest.TestCase):
         self.assertTrue(sim.time_queue.get0() == (1, ('process', 'hi')))
 
         event = 'hi'
-        cm = DSTimeoutContextManager(3, 'bye', sim=sim)
+        cm = DSInterruptibleContext(3, 'bye', sim=sim)
         self.assertTrue(len(sim.time_queue) == 2)
         self.assertTrue(sim.time_queue.get0() == (1, ('process', 'hi')))
         cm.reschedule(0)
@@ -699,7 +699,7 @@ class TestTimeoutContext(unittest.TestCase):
     def test2_sim_timeout_positive(self):
         sim = DSSimulation()
         sim.parent_process = 'process'
-        with sim.timeout(0) as cm:
+        with sim.interruptible(0) as cm:
             self.assertTrue(len(sim.time_queue) == 1)
             queued = sim.time_queue.get0()
             self.assertTrue(queued[0] == 0)
@@ -715,11 +715,11 @@ class TestTimeoutContext(unittest.TestCase):
 
     def test2_sim_timeout_negative(self):
         def process(sim, timeout):
-            with sim.timeout(timeout) as cm:
-                self.assertFalse(cm.expired)
+            with sim.interruptible(timeout) as cm:
+                self.assertFalse(cm.interrupted())
                 yield from sim.gwait(10)
                 self.assertTrue(timeout > 10)
-            self.assertTrue(cm.expired == (timeout < 10))
+            self.assertTrue(cm.interrupted() == (timeout < 10))
 
         sim = DSSimulation()
         p = process(sim, 20)

@@ -88,12 +88,12 @@ class DSSubscriberContextManager:
         return self
 
 
-class DSTimeoutContextManager:
+class DSInterruptibleContext:
     def __init__(self, time, exc=None, *, sim):
         self.sim = sim
         self.time = time  # None or a value
         self.exc = exc
-        self.expired = False
+        self._interrupted = False
         if time is not None:
             self.sim.schedule_event(time, exc)
 
@@ -110,8 +110,11 @@ class DSTimeoutContextManager:
             # timequeue.
             self.sim.delete(cond=lambda e: e[1] is self.exc)
     
-    def set_expired(self):
-        self.expired = True
+    def set_interrupted(self):
+        self._interrupted = True
+
+    def interrupted(self):
+        return self._interrupted
     
 
 class _ConsumerMetadata:
@@ -547,15 +550,15 @@ class DSSimulation:
         return DSSubscriberContextManager(self.parent_process, 'post', components, **kwargs)
 
     @contextmanager
-    def timeout(self, time):
+    def interruptible(self, time):
         exc = DSTimeoutContextError()
-        cm = DSTimeoutContextManager(time, sim=self, exc=exc)
+        cm = DSInterruptibleContext(time, sim=self, exc=exc)
         try:
             yield cm
         except DSTimeoutContextError as e:
             if cm.exc is not e:
                 raise
-            cm.set_expired()
+            cm.set_interrupted()
         finally:
             cm.cleanup()
 
