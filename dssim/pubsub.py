@@ -168,3 +168,28 @@ class DSProducer(DSConsumer, SignalMixin):
         with self.sim.consume(self):
             retval = await self.sim.wait(timeout, cond, val)
         return retval
+
+class DSTransformation(DSProducer):
+    ''' A producer which takes a signal, transforms / wraps it to another signal and
+    sends to a consumer.
+    The typical use case is to transform events from one endpoint to a process as exceptions.
+    '''
+    def __init__(self, ep, transformation, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.ep = ep
+        self.transformation = transformation
+
+    def add_subscriber(self, subscriber, *args, **kwargs):
+        self.ep.add_subscriber(self, *args, **kwargs)
+        retval = super().add_subscriber(subscriber, *args, **kwargs)
+        return retval
+    
+    def remove_subscriber(self, subscriber, *args, **kwargs):
+        self.ep.remove_subscriber(self, *args, **kwargs)
+        retval = super().remove_subscriber(subscriber, *args, **kwargs)
+        return retval
+
+    def send(self, event):
+        event = self.transformation(event)
+        retval = super().send(event)
+        return retval
