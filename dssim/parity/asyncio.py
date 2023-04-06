@@ -13,7 +13,7 @@
 # limitations under the License.
 import inspect
 from dssim.simulation import DSSimulation, DSAbsTime
-from dssim.simulation import DSAbortException, DSInterruptibleContext
+from dssim.simulation import DSAbortException, DSTimeoutContext
 from dssim.simulation import DSSchedulable, DSFuture, DSProcess, DSCallback
 from dssim.cond import DSFilterAggregated, DSFilter
 from contextlib import asynccontextmanager
@@ -28,7 +28,7 @@ class InvalidStateError(Exception):
     pass
 
 
-class Timeout(DSInterruptibleContext):
+class Timeout(DSTimeoutContext):
     def expired(self):
         return self.interrupted()
 
@@ -120,7 +120,7 @@ class FutureAsyncMixin:
             return self.exc
         
     def get_loop(self):
-        return self.sim
+        return self.sim  
 
 
 class Future(DSFuture, FutureAsyncMixin):
@@ -133,6 +133,10 @@ class Future(DSFuture, FutureAsyncMixin):
         if self.finished():
             raise InvalidStateError()
         self.fail(exc)
+
+    def __await__(self):
+        yield from super().__await__()
+        return self.value
 
 
 class Task(DSProcess, FutureAsyncMixin):

@@ -1,16 +1,17 @@
 import dssim.parity.asyncio as asyncio
 
+output = []
 async def cancel_me():
-    print('cancel_me(): before sleep')
+    output.append('cancel_me(): before sleep')
 
     try:
         # Wait for 1 hour
         await asyncio.sleep(3600)
     except asyncio.CancelledError:
-        print('cancel_me(): cancel sleep')
+        output.append('cancel_me(): cancel sleep')
         raise
     finally:
-        print('cancel_me(): after sleep')
+        output.append('cancel_me(): after sleep')
 
 async def main():
     # Create a "cancel_me" Task
@@ -23,13 +24,13 @@ async def main():
     try:
         await task
     except asyncio.CancelledError:
-        print("main(): cancel_me is cancelled now")
+        output.append('main(): cancel_me is cancelled now')
 
 asyncio.run(main())
-
-# Expected output:
-#
-#     cancel_me(): before sleep
-#     cancel_me(): cancel sleep
-#     cancel_me(): after sleep
-#     main(): cancel_me is cancelled now
+assert output == [
+    'cancel_me(): before sleep',
+    'cancel_me(): cancel sleep',
+    'cancel_me(): after sleep',
+    'main(): cancel_me is cancelled now',
+    ]
+assert asyncio.get_current_loop().time == 1

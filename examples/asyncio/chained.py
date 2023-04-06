@@ -45,4 +45,5 @@ if __name__ == "__main__":
         (2, 'result2-2 derived from result2-1'),
         (3, 'result3-2 derived from result3-1'),
     ]
-    print(f"{__file__} executed in {elapsed:0.2f} seconds. Simulation time is {asyncio.get_current_loop().time}.")
+    assert asyncio.get_current_loop().time == 11
+    print(f"Simulation time is {asyncio.get_current_loop().time}.")

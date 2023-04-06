@@ -1,6 +1,6 @@
 import dssim.parity.asyncio as asyncio
-#import asyncio
 
+output = []
 async def set_after(fut, delay, value):
     # Sleep for *delay* seconds.
     await asyncio.sleep(delay)
@@ -14,7 +14,7 @@ async def main():
 
     # Create a new Future object.
     fut = loop.create_future()
-    fut.add_done_callback(lambda cb: print('Future done!'))
+    fut.add_done_callback(lambda cb: output.append('Future done!'))
 
     # Run "set_after()" coroutine in a parallel Task.
     # We are using the low-level "loop.create_task()" API here because
@@ -23,9 +23,15 @@ async def main():
     loop.create_task(
         set_after(fut, 1, '... world'))
 
-    print('hello ...')
+    output.append('hello ...')
 
     # Wait until *fut* has a result (1 second) and print it.
-    print(await fut)
+    output.append(await fut)
 
 asyncio.run(main())
+assert output == [
+    "hello ...",
+    "Future done!",
+    '... world',
+    ]
+assert asyncio.get_current_loop().time == 1

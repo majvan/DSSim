@@ -707,7 +707,7 @@ class TestTimeoutContext(unittest.TestCase):
         cm = DSTimeoutContext(0, sim=sim)
         self.assertTrue(cm.time == 0)
         self.assertTrue(cm.sim is sim)
-        sim.schedule_event.assert_has_calls([call(0, None),])
+        sim.schedule_event.assert_has_calls([call(0, cm.exc),])
 
         sim = Mock()
         event = DSTimeoutContextError()

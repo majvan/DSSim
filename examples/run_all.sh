@@ -46,3 +46,22 @@ echo "Process events"
 python $SCRIPT_DIR/process_events.py
 echo "UART loop"
 python $SCRIPT_DIR/uart_loop.py
+
+echo "Asyncio chained"
+python $SCRIPT_DIR/asyncio/chained.py
+echo "Asyncio count"
+python $SCRIPT_DIR/asyncio/countasync.py
+echo "Asyncio rand"
+python $SCRIPT_DIR/asyncio/rand.py
+echo "Asyncio task"
+python $SCRIPT_DIR/asyncio/test_asyncio_task.py
+echo "Asyncio taskgroup"
+python $SCRIPT_DIR/asyncio/test_asyncio_taskgroup.py
+echo "Asyncio cancel"
+python $SCRIPT_DIR/asyncio/test_cancel.py
+echo "Asyncio future"
+python $SCRIPT_DIR/asyncio/test_future.py
+echo "Asyncio gather"
+python $SCRIPT_DIR/asyncio/test_gather.py
+echo "Asyncio timeout"
+python $SCRIPT_DIR/asyncio/test_timeout.py

@@ -112,7 +112,7 @@ class DSSubscriberContextManager:
 
 
 class DSTimeoutContext:
-    def __init__(self, time, exc=None, *, sim):
+    def __init__(self, time, exc=DSTimeoutContextError(), *, sim):
         self.sim = sim
         self.time = time  # None or a value
         self.exc = exc

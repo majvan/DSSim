@@ -30,3 +30,4 @@ async def main():
     print('Done.')
 
 asyncio.run(main())
+assert asyncio.get_current_loop().time == 15

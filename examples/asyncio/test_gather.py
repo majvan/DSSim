@@ -17,5 +17,7 @@ async def main():
         factorial("C", 4),
     )
     print(L)
+    assert L == [2, 6, 24]
 
 asyncio.run(main())
+assert asyncio.get_current_loop().time == 3

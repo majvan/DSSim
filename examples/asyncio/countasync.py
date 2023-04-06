@@ -3,10 +3,11 @@
 
 import dssim.parity.asyncio as asyncio
 
+output = []
 async def count():
-    print("One")
+    output.append("One")
     await asyncio.sleep(1)
-    print("Two")
+    output.append("Two")
     return True
 
 async def main():
@@ -15,7 +16,7 @@ async def main():
 
 if __name__ == "__main__":
     import time
-    s = time.perf_counter()
     asyncio.run(main())
-    elapsed = time.perf_counter() - s
-    print(f"{__file__} executed in {elapsed:0.2f} seconds. Simulation time is {asyncio.get_current_loop().time}.")
+    assert asyncio.get_current_loop().time == 1
+    assert output == ["One", "One", "One", "Two", "Two", "Two", ]
+    print(f"Simulation time is {asyncio.get_current_loop().time}.")

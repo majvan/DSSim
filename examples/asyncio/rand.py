@@ -35,4 +35,5 @@ if __name__ == "__main__":
     print(f"r1: {r1}, r2: {r2}, r3: {r3}")
     elapsed = time.perf_counter() - start
     assert (r1, r2, r3) == (10, 10, 9)
-    print(f"{__file__} executed in {elapsed:0.2f} seconds. Simulation time is {asyncio.get_current_loop().time}.")
+    assert asyncio.get_current_loop().time == 12
+    print(f"Simulation time is {asyncio.get_current_loop().time}.")
