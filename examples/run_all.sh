@@ -25,6 +25,8 @@ echo "Running conditions process"
 python $SCRIPT_DIR/conditions_process.py
 echo "Running gas station"
 python $SCRIPT_DIR/gasstation.py
+echo "Running interruptible context"
+python $SCRIPT_DIR/interruptible_context.py
 #   echo "I2C loopback"
 #   python $SCRIPT_DIR/i2c_master_slave.py
 echo "Processcomponent"
