@@ -36,9 +36,16 @@ class DSTimeoutContextError(Exception):
     pass
 
 
+class DSInterruptibleContextError(Exception):
+    def __init__(self, value, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.value = value
+
+
 class DSAbsTime:
     def __init__(self, value):
         self.value = value
+
 
 class Awaitable:
     def __init__(self, val=None):
@@ -47,6 +54,22 @@ class Awaitable:
     def __await__(self):
         retval = yield self.val
         return retval
+
+class ICondition:
+    def check(self): pass
+
+
+class DSTransferableCondition(ICondition):
+    def __init__(self, cond, transfer=lambda e:e):
+        self.cond = _StackedCond().push(cond)
+        self.transfer = transfer
+        self.value = None
+
+    def check(self, value):
+        signaled, retval = self.cond.check(value)
+        if signaled:
+            retval = self.transfer(retval)
+        return signaled, retval
 
 
 class DSSubscriberContextManager:
@@ -88,7 +111,7 @@ class DSSubscriberContextManager:
         return self
 
 
-class DSInterruptibleContext:
+class DSTimeoutContext:
     def __init__(self, time, exc=None, *, sim):
         self.sim = sim
         self.time = time  # None or a value
@@ -117,45 +140,68 @@ class DSInterruptibleContext:
         return self._interrupted
 
 
-class _StackedCond:
+class DSInterruptibleContext:
+    def __init__(self, cond, *, sim):
+        self.sim = sim
+        self.value = None
+        self.cond = DSTransferableCondition(cond, transfer=lambda e: DSInterruptibleContextError(e))
+        self._interrupted = False
+        self.event = None
+
+    def set_interrupted(self, value):
+        self._interrupted = True
+        self.value = value
+
+    def interrupted(self):
+        return self._interrupted
+
+
+class _StackedCond(ICondition):
     def __init__(self):
         self.conds = []
+        self.value = None
 
     def push(self, cond):
         self.conds.append(cond)
+        return self
 
     def pop(self):
-        self.conds.pop()
-
-    def check_always(self, event):
-        ''' Returns pair of info ("event passing", "value of event") '''
-        # Check the event first
-        if event is None:  # timeout received
-            return True, None
-        elif isinstance(event, Exception):  # any exception raised
-            return True, event
-        else:  # the event does not match our condition
-            return False, None
+        return self.conds.pop()
 
     def check_one(self, cond, event):
         ''' Returns pair of info ("event passing", "value of event") '''
+        # Check the event first
+        # Instead of the following generic rule, it is better to add it as a stacked condition
+        # for "None" value, it will be caught later by cond == event rule.
+        # if event is None:  # timeout received
+        #     return True, None
+        if isinstance(event, Exception):  # any exception raised
+            return True, event
         # Check the type of condition
         if cond == event:  # we are expecting exact event and it came
             return True, event
+        elif isinstance(cond, ICondition):
+            return cond.check(event)
         elif callable(cond) and cond(event):  # there was a filter function set and the condition is met
             return True, event
         else:  # the event does not match our condition and hence will be ignored
             return False, None
     
     def check(self, event):
-        signaled, retval = self.check_always(event)
-        if signaled:
-            return signaled, retval
-        for cond in reversed(self.conds):
-            signaled, retval = self.check_one(cond, event)
+        signaled, retval = None, event
+        for cond in self.conds:
+            signaled, event = self.check_one(cond, retval)
             if signaled:
+                if hasattr(cond, 'cond_value'):
+                    retval = cond.cond_value()
+                else:
+                    retval = event
+                self.value = retval
                 break
         return signaled, retval
+
+    def cond_value(self):
+        return self.value
 
 
 class _ConsumerMetadata:
@@ -179,12 +225,6 @@ class SignalMixin:
     def schedule_kw_event(self, time, **event):
         ''' Signal event later. '''
         return self.sim.schedule_event(time, event, self)
-
-
-class ICondition:
-    @abstractmethod
-    def cond_value(self, event):
-        return event
 
 
 class DSSimulation:
@@ -231,6 +271,9 @@ class DSSimulation:
             meta = process.create_metadata()
         else:
             meta = _ConsumerMetadata()
+            # Instead of pushing acceptance of None in timeouts in each wait() / gwait(),
+            # we put the None as a general condition to accept from the beginning
+            meta.cond.push(None)
             self._consumer_metadata[process] = meta
         return meta
 
@@ -279,19 +322,18 @@ class DSSimulation:
         else:
             raise ValueError(f'The assigned code {schedulable} is not generator, neither coroutine.')
         self.parent_process = new_process
-        # The following will change the process default metadata cond
-        self._kick(new_process)
-        # Restore the default metadata cond by creating a new default one.
+        # Create new metadata.
         # It is useful for processes which will not use await sim.wait(...)
         self.create_metadata(new_process)
+
+        self._kick(new_process)
 
         self.parent_process = old_process
         return new_process
 
     def check_condition(self, schedulable, event):
         conds = self.get_consumer_metadata(schedulable).cond
-        retval, event = conds.check(event)
-        return retval
+        return conds.check(event)
 
     def send_object(self, schedulable, event):
         ''' Send an event object to a schedulable consumer '''
@@ -339,7 +381,8 @@ class DSSimulation:
         # We do it early in order to know if the schedulable is going to reject the event or
         # not. The information from accepting / rejecting the event gives us valuable info.
         # pre_check means that the check of condition for the schedulable was already done
-        if not self.check_condition(schedulable, event):
+        signaled, event = self.check_condition(schedulable, event)
+        if not signaled:
             return False  # not signalled
         retval = self.send_object(schedulable, event)
         return retval
@@ -407,7 +450,6 @@ class DSSimulation:
         if event is not None and time != float('inf'):
             # If we terminated before timeout and the timeout event is on time queue- remove it
             self.delete(lambda e: e == (self.parent_process, None))
-
         return event
 
     def gwait(self, timeout=float('inf'), cond=lambda e: False, val=True):
@@ -427,11 +469,12 @@ class DSSimulation:
         conds = self.get_consumer_metadata(self.parent_process).cond
         # Set the condition object (lambda / object / ...) in the process metadata
         conds.push(cond)
-        event = yield from self._gwait_for_event(timeout, val)
-        # Remove the last condition
-        conds.pop()
+        try:
+            event = yield from self._gwait_for_event(timeout, val)
+        finally:
+            conds.pop()
         if hasattr(cond, 'cond_value'):
-            event = cond.cond_value(event)
+            event = cond.cond_value()
         return event
 
     def check_and_gwait(self, timeout=float('inf'), cond=lambda e: False, val=True):
@@ -442,12 +485,14 @@ class DSSimulation:
         conds = self.get_consumer_metadata(self.parent_process).cond
         # Set the condition object (lambda / object / ...) in the process metadata
         conds.push(cond)
-        _, event = conds.check(self._TestObject())
-        if not event:
-            event = yield from self._gwait_for_event(timeout, val)
-        if hasattr(cond, 'cond_value'):
-            event = cond.cond_value(event)
-        conds.pop()
+        try:
+            signaled, event = conds.check(self._TestObject())
+            if not signaled:
+                event = yield from self._gwait_for_event(timeout, val)
+            else:
+                event = conds.cond_value()
+        finally:
+            conds.pop()
         return event
 
     async def _wait_for_event(self, timeout, val=None):
@@ -495,11 +540,12 @@ class DSSimulation:
         conds = self.get_consumer_metadata(self.parent_process).cond
         # Set the condition object (lambda / object / ...) in the process metadata
         conds.push(cond)
-        event = await self._wait_for_event(timeout, val)
-        # Remove the last condition
-        conds.pop()
+        try:
+            event = await self._wait_for_event(timeout, val)
+        finally:
+            conds.pop()
         if hasattr(cond, 'cond_value'):
-            event = cond.cond_value(event)
+            event = cond.cond_value()
         return event
 
     async def check_and_wait(self, timeout=float('inf'), cond=lambda e: False, val=True):
@@ -510,12 +556,14 @@ class DSSimulation:
         conds = self.get_consumer_metadata(self.parent_process).cond
         # Set the condition object (lambda / object / ...) in the process metadata
         conds.push(cond)
-        _, event = conds.check(self._TestObject())
-        if not event:
-            event = await self._wait_for_event(timeout, val)
-        if hasattr(cond, 'cond_value'):
-            event = cond.cond_value(event)
-        conds.pop()
+        try:
+            signaled, event = conds.check(self._TestObject())
+            if not signaled:
+                event = await self._wait_for_event(timeout, val)
+            else:
+                event = conds.cond_value()
+        finally:
+            conds.pop()
         return event
 
     def _kick(self, schedulable):
@@ -580,18 +628,26 @@ class DSSimulation:
             conds.pop()
 
     @contextmanager
-    def interruptible(self, time, cond=lambda e: False):
-        with self.extend_cond(cond):
-            exc = DSTimeoutContextError()
-            cm = DSInterruptibleContext(time, sim=self, exc=exc)
+    def timeout(self, time):
+        exc = DSTimeoutContextError()
+        cm = DSTimeoutContext(time, sim=self, exc=exc)
+        try:
+            yield cm
+        except DSTimeoutContextError as e:
+            if cm.exc is not e:
+                raise
+            cm.set_interrupted()
+        finally:
+            cm.cleanup()
+
+    @contextmanager
+    def interruptible(self, cond=lambda e: False):
+        cm = DSInterruptibleContext(cond, sim=self)
+        with self.extend_cond(cm.cond):
             try:
                 yield cm
-            except DSTimeoutContextError as e:
-                if cm.exc is not e:
-                    raise
-                cm.set_interrupted()
-            finally:
-                cm.cleanup()
+            except DSInterruptibleContextError as e:
+                cm.set_interrupted(e.value)
 
 
 class DSComponent:
@@ -710,7 +766,8 @@ class DSFuture(DSConsumer, SignalMixin):
     
     def create_metadata(self):
         self.meta = _ConsumerMetadata()
-        # By default, a future accepts event from self
+        # By default, a future accepts timeout events (None) and events to self
+        self.meta.cond.push(None)
         self.meta.cond.push(self)
         return self.meta
 

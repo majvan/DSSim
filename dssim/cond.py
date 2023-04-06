@@ -19,7 +19,7 @@ import inspect
 import copy
 from dssim.simulation import DSFuture, DSProcess, ICondition, _ConsumerMetadata
 
-class DSFilter(DSFuture, ICondition):
+class DSFilter(DSFuture):
     ''' Differences from DSFuture:
     1. DSFilter can be reevaluated, i.e. the finished() is not monostable. It can
     once return True and the next call return False (if reevaluate is True).
@@ -145,14 +145,14 @@ class DSFilter(DSFuture, ICondition):
             # We have to re-evaluate only when finish() was called asynchronously.
             self._finish_tx.signal(self)
 
-    def cond_value(self, event):
+    def cond_value(self):
         return self.value
 
     def get_process(self):
         return self.cond if isinstance(self.cond, DSProcess) else None        
 
 
-class DSFilterAggregated(DSFuture, ICondition):
+class DSFilterAggregated(DSFuture):
     ''' DSFilterAggregated aggregates several DSFutures into AND / OR circuit.
     It evaluates the circuit after every event. The finished()
     1. DSFilter can be reevaluated, i.e. the finished() is not monostable. It can
@@ -210,16 +210,16 @@ class DSFilterAggregated(DSFuture, ICondition):
         self.positive = False
         return self
 
-    def cond_value(self, event):
+    def cond_value(self):
         retval = {}
         for el in self.setters:
             if not el.finished():
                 continue
             if isinstance(el, DSFilterAggregated):
-                embedded = el.cond_value(event)
+                embedded = el.cond_value()
                 retval.update(embedded)
             elif hasattr(el, 'cond_value'):
-                retval[el] = el.cond_value(event)
+                retval[el] = el.cond_value()
             else:
                 retval[el] = el.value
         return retval
@@ -283,6 +283,6 @@ class DSFilterAggregated(DSFuture, ICondition):
                     signaled = self.expression(results)
             self.signaled = signaled
             if signaled:
-                self.finish(self.cond_value(event))
+                self.finish(self.cond_value())
         return signaled
     
