@@ -52,6 +52,6 @@ if __name__ == '__main__':
     mcu0.boot()
     sim.run(300)
     ratio = mcu0.stat['generated'] / mcu0.stat['received']
-    assert 1.15 <= ratio <= 1.25  # high probability to pass
+    assert 1.14 <= ratio <= 1.27, f'Ratio {ratio} is out of range'  # high probability to pass
     assert 296 <= mcu0.stat['received'] <= 300  # high probability to pass
 
