@@ -23,6 +23,25 @@ from abc import abstractmethod
 from contextlib import contextmanager
 
 
+class DSTrackableEvent:
+    def __init__(self, value):
+        self.value = value
+        self.producers = []
+
+    def track(self, producer):
+        self.producers.append(producer)
+
+    def __repr__(self):
+        return f'DSTrackableEvent({self.value})'
+
+
+def TrackEvent(fcn):
+    def api(self, event, *args, **kwargs):
+        if isinstance(event, DSTrackableEvent):
+            event.producers.append(self)
+        return fcn(self, event, *args, **kwargs)
+    return api
+
 class DSAbortException(Exception):
     ''' Exception used to abort waiting process '''
 
@@ -708,12 +727,15 @@ def DSSchedulable(api_func):
 class DSConsumer(DSComponent):
     def __init__(self, *args, **kwargs):
         super().__init__(self, *args, **kwargs)
-        self.create_metadata()
+        self.create_metadata(**kwargs)
        
-    def create_metadata(self):
+    def create_metadata(self, **kwargs):
         self.meta = _ConsumerMetadata()
+        if 'cond' in kwargs:
+            self.meta.cond.push(kwargs['cond'])
         return self.meta
 
+    @TrackEvent
     @abstractmethod
     def send(self, event):
         ''' Receive event. This interface should be used only by DSSimulator instance as
@@ -730,15 +752,11 @@ class DSCallback(DSConsumer):
     The callback interface is called from the simulator when a process sends events.
     '''
     def __init__(self, forward_method, cond=lambda e: True, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(cond=cond, **kwargs)
         # TODO: check if forward method is not a generator / process; otherwise throw an error
         self.forward_method = forward_method
 
-    def create_metadata(self):
-        self.meta = _ConsumerMetadata()
-        self.meta.cond.push(lambda e:True)
-        return
-
+    @TrackEvent
     def send(self, event):
         ''' The function calls the registered callback. '''
         retval = self.forward_method(event)
@@ -747,6 +765,7 @@ class DSCallback(DSConsumer):
 
 class DSKWCallback(DSCallback):
 
+    @TrackEvent
     def send(self, event):
         ''' The function calls registered callback providing that the event is dict. '''
         retval = self.forward_method(**event)
@@ -820,6 +839,7 @@ class DSFuture(DSConsumer, SignalMixin):
         self.sim.cleanup(self)
         self._finish_tx.signal(self)
 
+    @TrackEvent
     def send(self, event):
         self.finish(event)
         return event
@@ -848,6 +868,7 @@ class DSProcess(DSFuture, SignalMixin):
         self.value = self.scheduled_generator.send(None)
         return self.value
 
+    @TrackEvent
     def send(self, event):
         ''' Pushes an event to the task and gets new state. '''
         self.value = self.scheduled_generator.send(event)

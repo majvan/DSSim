@@ -19,7 +19,7 @@ Consumer: an object which takes signal from producer and then stops
   further spread.
 '''
 from abc import abstractmethod
-from dssim.simulation import DSComponent, DSConsumer, SignalMixin
+from dssim.simulation import DSConsumer, SignalMixin, TrackEvent
 
 class NotifierDict():
     def __init__(self):
@@ -137,6 +137,7 @@ class DSProducer(DSConsumer, SignalMixin):
             subs = self.subs[phase]
             subs.dec(subscriber, **kwargs)
 
+    @TrackEvent
     def send(self, event):
         ''' Send signal object to the subscribers '''
 
@@ -191,6 +192,7 @@ class DSTransformation(DSProducer):
         retval = super().remove_subscriber(subscriber, *args, **kwargs)
         return retval
 
+    @TrackEvent
     def send(self, event):
         event = self.transformation(event)
         retval = super().send(event)
