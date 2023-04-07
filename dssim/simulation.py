@@ -783,7 +783,7 @@ class DSFuture(DSConsumer, SignalMixin):
         self.value, self.exc = None, None
         self._finish_tx = DSProducer(name=self.name+'.future', sim=self.sim)
     
-    def create_metadata(self):
+    def create_metadata(self, **kwargs):
         self.meta = _ConsumerMetadata()
         # By default, a future accepts timeout events (None) and events to self
         self.meta.cond.push(None)

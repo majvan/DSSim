@@ -17,7 +17,7 @@ to be able create advanced expressions.
 '''
 import inspect
 import copy
-from dssim.simulation import DSFuture, DSProcess, ICondition, _ConsumerMetadata
+from dssim.simulation import DSFuture, DSProcess, _ConsumerMetadata
 
 class DSFilter(DSFuture):
     ''' Differences from DSFuture:
@@ -66,7 +66,7 @@ class DSFilter(DSFuture):
             if not self.cond.started():
                 self.cond = self.cond.schedule(0)  # start the process
 
-    def create_metadata(self):
+    def create_metadata(self, **kwargs):
         self.meta = _ConsumerMetadata()
         # A condition accepts any event 
         self.meta.cond.push(lambda e:True)
@@ -245,6 +245,10 @@ class DSFilterAggregated(DSFuture):
 
     def get_future_eps(self):
         retval = set()
+        # Including self._finish_tx would create loop dependency when waiting on self (i.e. await self):
+        # 1. When this is finished, it would signal _finish_tx
+        # 2. _finish_tx would produce an event which would be caught by self and self would signal again
+        # Another solution for this is not to produce signaled state if the event comes from self._finish_tx
         for s in self.signals:
             retval |= s.get_future_eps()
         return retval

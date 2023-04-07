@@ -13,6 +13,8 @@ echo "Running bottleneck"
 python $SCRIPT_DIR/bottleneck.py
 echo "Running bottleneck controller"
 python $SCRIPT_DIR/bottleneck_controller.py
+echo "Running circuits callback"
+python $SCRIPT_DIR/circuits_callback.py
 echo "Running conditions"
 python $SCRIPT_DIR/conditions.py
 echo "Running conditions generator"
