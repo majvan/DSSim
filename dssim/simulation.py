@@ -350,12 +350,12 @@ class DSSimulation:
         self.parent_process = old_process
         return new_process
 
-    def check_condition(self, schedulable, event):
-        conds = self.get_consumer_metadata(schedulable).cond
+    def check_condition(self, consumer, event):
+        conds = self.get_consumer_metadata(consumer).cond
         return conds.check(event)
 
-    def send_object(self, schedulable, event):
-        ''' Send an event object to a schedulable consumer '''
+    def send_object(self, consumer, event):
+        ''' Send an event object to a consumer '''
 
         retval = False
 
@@ -365,24 +365,24 @@ class DSSimulation:
         pid = self.parent_process
 
         try:
-            # We want to kick from this process another 'schedulable' process. So we will change
+            # We want to kick from this process another 'consumer' process. So we will change
             # the process ID (we call it self.parent_process). This is needed because if the new
             # created process would schedule a wait cycle for his own, he would like to know his own
             # process ID (see the wait method). That's why we have to set him his PID now.
-            # In other words, the schedulable.send() will invoke a context switch
+            # In other words, the consumer.send() can invoke a context switch
             # without a handler- so this is the context switch handler, currently only
             # changing process ID.
-            self.parent_process = schedulable
-            retval = schedulable.send(event)
+            self.parent_process = consumer
+            retval = consumer.send(event)
         except StopIteration as exc:
-            if isinstance(schedulable, DSFuture):
-                retval = schedulable.finish(exc.value)
+            if isinstance(consumer, DSFuture):
+                retval = consumer.finish(exc.value)
             else:
                 retval = exc.value
-                self.cleanup(schedulable)
+                self.cleanup(consumer)
         except ValueError as exc:
-            if isinstance(schedulable, DSFuture):
-                retval = schedulable.fail(exc)
+            if isinstance(consumer, DSFuture):
+                retval = consumer.fail(exc)
             global _exiting
             if 'generator already executing' in str(exc) and not _exiting:
                 _exiting = True
@@ -392,18 +392,17 @@ class DSSimulation:
             self.parent_process = pid
         return retval
 
-    def send(self, schedulable, event):
+    def send(self, consumer, event):
         ''' Send an event object to a consumer process. Convert event from parameters to object. '''
 
-        # We will be sending signal (event) to a schedulable, which has some condition set
+        # We will be sending signal (event) to a consumer, which has some condition set
         # upon waiting for a pattern event.
-        # We do it early in order to know if the schedulable is going to reject the event or
-        # not. The information from accepting / rejecting the event gives us valuable info.
-        # pre_check means that the check of condition for the schedulable was already done
-        signaled, event = self.check_condition(schedulable, event)
+        # The idea is that the consumer will get the event only if the condition is met-
+        # an early check.
+        signaled, event = self.check_condition(consumer, event)
         if not signaled:
             return False  # not signalled
-        retval = self.send_object(schedulable, event)
+        retval = self.send_object(consumer, event)
         return retval
 
     def abort(self, schedulable, **info):
@@ -417,13 +416,12 @@ class DSSimulation:
         self.time_queue.add_element(time, (consumer, event))
         return event
 
-    def schedule_event(self, time, event, process=None):
+    def schedule_event(self, time, event, consumer=None):
         ''' Schedules an event object into timequeue. Finally the target process will be signalled. '''
         time = self._compute_time(time)
-        consumer = process or self.parent_process  # schedule to a process or to itself
+        consumer = consumer or self.parent_process  # schedule to a process or to itself
         self.time_queue.add_element(time, (consumer, event))
         return event
-
 
     async def _scheduled_fcn(self, time, schedulable):
         ''' Start a schedulable process with possible delay '''
@@ -592,16 +590,16 @@ class DSSimulation:
         except StopIteration as exp:
             pass
 
-    def cleanup(self, schedulable):
-        # The schedulable has finished and is not waiting anymore.
+    def cleanup(self, consumer):
+        # The consumer has finished.
         # We make a cleanup of a waitable condition. There is still waitable condition kept
-        # for the schedulable. Since the process has finished, it will never need it, however
+        # for the consumer. Since the process has finished, it will never need it, however
         # there may be events for the process planned.
         # Remove the condition
-        meta = self.get_consumer_metadata(schedulable)
+        meta = self.get_consumer_metadata(consumer)
         meta.cond = _StackedCond()
-        # Remove all the events for this schedulable
-        self.time_queue.delete(lambda e:e[0] is schedulable)
+        # Remove all the events for this consumer
+        self.time_queue.delete(lambda e:e[0] is consumer)
 
     def run(self, up_to=None, future=object()):
         ''' This is the simulation machine. In a loop it takes first event and process it.
@@ -734,6 +732,9 @@ class DSConsumer(DSComponent):
         if 'cond' in kwargs:
             self.meta.cond.push(kwargs['cond'])
         return self.meta
+
+    def get_cond(self):
+        return self.meta.cond
 
     @TrackEvent
     @abstractmethod
@@ -993,7 +994,7 @@ def print_cyclic_signal_exception(exc):
             filename = frame.f_code.co_filename
         elif frame.f_code.co_name == 'send_object':
             from_process = frame.f_locals['pid']
-            to_process = frame.f_locals['schedulable']
+            to_process = frame.f_locals['consumer']
             event = frame.f_locals['event']
             d = [method, line, filename, from_process, to_process, event, False, False]
             process_stack.append(d)
