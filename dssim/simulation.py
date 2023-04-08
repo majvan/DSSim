@@ -392,7 +392,7 @@ class DSSimulation:
             self.parent_process = pid
         return retval
 
-    def send(self, consumer, event):
+    def send_with_cond(self, consumer, event):
         ''' Send an event object to a consumer process. Convert event from parameters to object. '''
 
         # We will be sending signal (event) to a consumer, which has some condition set
@@ -620,7 +620,7 @@ class DSSimulation:
             self.num_events += 1
             self.time = tevent
             self.time_queue.pop()
-            self.send(consumer, event_obj)
+            self.send_with_cond(consumer, event_obj)
         else:
             retval_time = self.time
             self.time = up_to

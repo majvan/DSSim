@@ -85,7 +85,7 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertEqual(retval, 'Success')
 
         process = DSProcess(self.__fcn(), sim=sim)
-        retval = sim.send(process, None)
+        retval = sim.send_with_cond(process, None)
         self.assertEqual(retval, 'Success')
         self.assertEqual(process.value, 'Success')
 
@@ -119,7 +119,7 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertEqual(retval, 'First return')
         retval = next(process)
         self.assertEqual(retval, 'Second return')
-        retval = sim.send(process, None)
+        retval = sim.send_with_cond(process, None)
         self.assertEqual(retval, 'Success')
         self.assertEqual(process.value, 'Success')
 
@@ -235,14 +235,14 @@ class TestException(unittest.TestCase):
     def __first_cyclic(self, sim):
         process2 = yield 'Kick-on first'
         yield
-        sim.send(process2, 'Signal from first process')
+        sim.send_with_cond(process2, 'Signal from first process')
         yield 'After signalling first'
         return 'Done first'
 
     def __second_cyclic(self, sim):
         process1 = yield 'Kick-on second'
         yield
-        sim.send(process1, 'Signal from second process')
+        sim.send_with_cond(process1, 'Signal from second process')
         yield 'After signalling second'
         return 'Done second'
 
@@ -256,7 +256,7 @@ class TestException(unittest.TestCase):
         sim.get_consumer_metadata(process).cond.push(lambda e:True)  # Accept all events
         exc_to_check = None
         try:
-            sim.send(process, 'My data')
+            sim.send_with_cond(process, 'My data')
             # we should not get here, exception is expected
             self.assertTrue(1 == 2)
         except ZeroDivisionError as exc:
@@ -270,10 +270,10 @@ class TestException(unittest.TestCase):
         sim._kick(process2)
         sim.get_consumer_metadata(process1).cond.push(lambda e:True)  # Accept all events
         sim.get_consumer_metadata(process2).cond.push(lambda e:True)  # Accept all events
-        sim.send(process1, process2)  # Inform processes about the other process
-        sim.send(process2, process1)
+        sim.send_with_cond(process1, process2)  # Inform processes about the other process
+        sim.send_with_cond(process2, process1)
         try:
-            sim.send(process2, 'My data')
+            sim.send_with_cond(process2, 'My data')
             # we should not get here, exception is expected
             self.assertTrue(1 == 2)
         except ValueError as exc:
@@ -287,10 +287,10 @@ class TestException(unittest.TestCase):
         process2.meta.cond.push(lambda e:True)  # accept any event
         sim._kick(process1)
         sim._kick(process2)
-        sim.send(process1, process2)  # Inform processes about the other process
-        sim.send(process2, process1)
+        sim.send_with_cond(process1, process2)  # Inform processes about the other process
+        sim.send_with_cond(process2, process1)
         try:
-            sim.send(process1, 'My data')
+            sim.send_with_cond(process1, 'My data')
             # we should not get here, exception is expected
             self.assertTrue(1 == 2)
         except ValueError as exc:
@@ -342,7 +342,7 @@ class TestConditionChecking(unittest.TestCase):
         cond.cond_value = lambda: 'condition value result'
         retval = next(waitable)
         try:
-            retval = sim.send(waitable, 'something')
+            retval = sim.send_with_cond(waitable, 'something')
         except StopIteration as e:
             retval = e.value
         cond.push.assert_called_once_with('condition')
@@ -416,7 +416,7 @@ class TestConditionChecking(unittest.TestCase):
         sim.check_condition = Mock(return_value=(False, 'abc'))  # it will not allow to accept the event
         sim.send_object = Mock()
         consumer = Mock()
-        sim.send(consumer, None)
+        sim.send_with_cond(consumer, None)
         sim.check_condition.assert_called_once()
         sim.send_object.assert_not_called()
 
@@ -430,7 +430,7 @@ class TestConditionChecking(unittest.TestCase):
             return True
         sim.check_condition = Mock(side_effect=lambda *a, **kw: called_check_condition(*a, **kw))  # it will allow to accept the event
         sim.send_object = Mock(side_effect=lambda *a, **kw: called_send_object(*a, **kw))
-        sim.send(consumer, None)
+        sim.send_with_cond(consumer, None)
         sim.check_condition.assert_called_once()
         sim.send_object.assert_called_once()
         self.assertEqual(call_order, [call('check_condition', consumer, None), call('send_object', consumer, 'abc')])
@@ -529,11 +529,11 @@ class TestConditionChecking(unittest.TestCase):
         p = DSProcess(my_process(), sim=self.sim)
         p = self.sim.schedule(0, p)
         # kick does not return value
-        retval = self.sim.send(p, None)
+        retval = self.sim.send_with_cond(p, None)
         self.assertTrue(retval == 1)
-        retval = self.sim.send(p, None)
+        retval = self.sim.send_with_cond(p, None)
         self.assertTrue(retval == 2)
-        retval = self.sim.send(p, None)
+        retval = self.sim.send_with_cond(p, None)
         self.assertTrue(retval == 3)
 
     def test7_wait_return(self):
@@ -583,11 +583,11 @@ class TestConditionChecking(unittest.TestCase):
         p = DSProcess(my_process(), sim=self.sim)
         p = self.sim.schedule(0, p)
         # kick does not return value
-        retval = self.sim.send(p, None)
+        retval = self.sim.send_with_cond(p, None)
         self.assertTrue(retval == 1)
-        retval = self.sim.send(p, None)
+        retval = self.sim.send_with_cond(p, None)
         self.assertTrue(retval == 2)
-        retval = self.sim.send(p, None)
+        retval = self.sim.send_with_cond(p, None)
         self.assertTrue(retval == 3)
 
 
@@ -1039,7 +1039,7 @@ class TestSim(unittest.TestCase):
         sim = DSSimulation()
         process = DSProcess(my_process(sim), sim=sim)
         sim.parent_process = process
-        sim.schedule_event(4, 'some_event', process=process)
+        sim.schedule_event(4, 'some_event', consumer=process)
         retval = process.send(None)  # go to the waiting
         self.assertTrue(len(sim.time_queue) == 2)
         retval = process.send('value')  # sending some event makes that the waiting timeout will be removed

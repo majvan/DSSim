@@ -104,7 +104,7 @@ class DSFilter(DSFuture):
             # now we should get this signaled only after return
             if self.forward_events:
                 # forward message to the consumer
-                self.sim.send(self.cond, event)
+                self.sim.send_with_cond(self.cond, event)
             if self.cond.finished():
                 if self.cond.exc is not None:
                     pass

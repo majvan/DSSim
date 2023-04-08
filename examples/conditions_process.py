@@ -3,7 +3,7 @@ from dssim.cond import DSFilter as _f
 
 @DSSchedulable
 def pusher(name, where_to_push):
-    sim.send(where_to_push, f'signal from pusher {name}')
+    sim.signal(where_to_push, f'signal from pusher {name}')
 
 def process_with_no_external_events():
     yield from sim.gwait(1)
@@ -97,4 +97,4 @@ if __name__ == '__main__':
     sim = DSSimulation()
     sim.schedule(0, main())
     retval = sim.run(100)
-    assert retval == (31, 21)
+    assert retval == (31, 25)
