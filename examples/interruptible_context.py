@@ -52,7 +52,7 @@ class MyComponent(DSComponent):
         '''
         print('Process2')
         cond_stack = self.sim.get_consumer_metadata(self.sim.parent_process).cond.conds
-        assert cond_stack == [None, self.sim.parent_process]
+        assert cond_stack == [None,]
         t = self.sim.time
         with self.sim.timeout(10) as cm0:
             with self.sim.timeout(20) as cm1:
@@ -64,7 +64,7 @@ class MyComponent(DSComponent):
         assert not cm1.interrupted()
         assert cm0.interrupted()
         print(self.sim.time, 'Interrupted.')
-        assert cond_stack == [None, self.sim.parent_process]
+        assert cond_stack == [None,]
 
     async def process3(self):
         ''' The process has extended condition, so the wait can be signalled also with 'Hi'

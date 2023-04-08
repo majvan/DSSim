@@ -437,7 +437,8 @@ class TestDSFilter(unittest.TestCase):
         fa = _f(g, sim=sim)
         # The future aready kicked a process and waits- wait added its own condition at the end
         # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        sim.get_consumer_metadata(fa.get_process()).cond.conds.insert(2, lambda e:True)  # The consumer has to accept any event
+        conds = sim.get_consumer_metadata(fa.get_process()).cond.conds
+        conds.insert(len(conds) - 1, lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.cond.finished() == False)
@@ -466,7 +467,8 @@ class TestDSFilter(unittest.TestCase):
         fa = _f(coro(), sim=sim)
         # The future aready kicked a process and waits- wait added its own condition at the end
         # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        sim.get_consumer_metadata(fa.get_process()).cond.conds.insert(2, lambda e:True)  # The consumer has to accept any event
+        conds = sim.get_consumer_metadata(fa.get_process()).cond.conds
+        conds.insert(len(conds) - 1, lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.cond.finished() == False)
@@ -493,7 +495,8 @@ class TestDSFilter(unittest.TestCase):
         fa = _f(p, sim=sim)
         # The future aready kicked a process and waits- wait added its own condition at the end
         # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        sim.get_consumer_metadata(fa.get_process()).cond.conds.insert(2, lambda e:True)  # The consumer has to accept any event
+        conds = sim.get_consumer_metadata(fa.get_process()).cond.conds
+        conds.insert(len(conds) - 1, lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         retval = fa('Hi')  # This will NOT forward the event to the process
@@ -593,7 +596,8 @@ class TestDSFilter(unittest.TestCase):
         fa = _f(gen(), sigtype=_f.SignalType.REEVALUATE, sim=sim)
         # The future aready kicked a process and waits- wait added its own condition at the end
         # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        sim.get_consumer_metadata(fa.get_process()).cond.conds.insert(2, lambda e:True)  # The consumer has to accept any event
+        conds = sim.get_consumer_metadata(fa.get_process()).cond.conds
+        conds.insert(len(conds) - 1, lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.cond.finished() == False)
@@ -622,7 +626,8 @@ class TestDSFilter(unittest.TestCase):
         fa = _f(coro(), sigtype=_f.SignalType.REEVALUATE, sim=sim)
         # The future aready kicked a process and waits- wait added its own condition at the end
         # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        sim.get_consumer_metadata(fa.get_process()).cond.conds.insert(2, lambda e:True)  # The consumer has to accept any event
+        conds = sim.get_consumer_metadata(fa.get_process()).cond.conds
+        conds.insert(len(conds) - 1, lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.cond.finished() == False)
@@ -649,7 +654,8 @@ class TestDSFilter(unittest.TestCase):
         fa = _f(p, sim=sim)
         # The future aready kicked a process and waits- wait added its own condition at the end
         # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        sim.get_consumer_metadata(fa.get_process()).cond.conds.insert(2, lambda e:True)  # The consumer has to accept any event
+        conds = sim.get_consumer_metadata(fa.get_process()).cond.conds
+        conds.insert(len(conds) - 1, lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         retval = fa('Hi')  # This will NOT forward the event to the process
@@ -750,7 +756,8 @@ class TestDSFilter(unittest.TestCase):
         fa = _f(gen(), sigtype=_f.SignalType.PULSED, sim=sim)
         # The future aready kicked a process and waits- wait added its own condition at the end
         # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        sim.get_consumer_metadata(fa.get_process()).cond.conds.insert(2, lambda e:True)  # The consumer has to accept any event
+        conds = sim.get_consumer_metadata(fa.get_process()).cond.conds
+        conds.insert(len(conds) - 1, lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.cond.finished() == False)
@@ -783,7 +790,8 @@ class TestDSFilter(unittest.TestCase):
         fa = _f(coro(), sigtype=_f.SignalType.PULSED, sim=sim)
         # The future aready kicked a process and waits- wait added its own condition at the end
         # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        sim.get_consumer_metadata(fa.get_process()).cond.conds.insert(2, lambda e:True)  # The consumer has to accept any event
+        conds = sim.get_consumer_metadata(fa.get_process()).cond.conds
+        conds.insert(len(conds) - 1, lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.cond.finished() == False)
@@ -814,7 +822,8 @@ class TestDSFilter(unittest.TestCase):
         fa = _f(p, sim=sim)
         # The future aready kicked a process and waits- wait added its own condition at the end
         # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        sim.get_consumer_metadata(fa.get_process()).cond.conds.insert(2, lambda e:True)  # The consumer has to accept any event
+        conds = sim.get_consumer_metadata(fa.get_process()).cond.conds
+        conds.insert(len(conds) - 1, lambda e:True)  # The consumer has to accept any event
         self.assertTrue(fa.signaled == False)
         self.assertTrue(fa.finished() == False)
         retval = fa('Hi')  # This will NOT forward the event to the process

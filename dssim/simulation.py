@@ -785,9 +785,6 @@ class DSFuture(DSConsumer, SignalMixin):
     
     def create_metadata(self, **kwargs):
         self.meta = _ConsumerMetadata()
-        # By default, a future accepts timeout events (None) and events to self
-        self.meta.cond.push(None)
-        self.meta.cond.push(self)
         return self.meta
 
     def get_future_eps(self):
@@ -858,6 +855,12 @@ class DSProcess(DSFuture, SignalMixin):
             # TODO: if we want to support this use case, we should merge the metadata from the generator
             raise ValueError('The DSProcess can be used only on non-started generators / coroutines')
         super().__init__(*args, **kwargs)
+
+    def create_metadata(self, **kwargs):
+        self.meta = _ConsumerMetadata()
+        # By default, a future accepts timeout events (None) and events to self
+        self.meta.cond.push(None)
+        return self.meta
 
     def __iter__(self):
         ''' Required to use the class to get events from it. '''
