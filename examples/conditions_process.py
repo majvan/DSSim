@@ -21,7 +21,7 @@ def main():
     # print(sim.time, ret)
 
     time = sim.time
-    proc = DSProcess(process_with_no_external_events())
+    proc = DSProcess(process_with_no_external_events()).schedule(0)
     with sim.observe_pre(proc):
         ret = yield from sim.gwait(cond=_f(proc))
     print(sim.time, ret)
@@ -72,7 +72,7 @@ def main():
     assert ret == 'Hello from extrovert, last event I had was "signal from pusher third"'
 
     time = sim.time
-    filt = _f(DSProcess(process_with_external_events()))
+    filt = _f(DSProcess(process_with_external_events()).schedule(0))
     proc = filt.get_process()
     sim.schedule(7, pusher('forth', proc))
     with sim.observe_pre(proc):
@@ -97,4 +97,4 @@ if __name__ == '__main__':
     sim = DSSimulation()
     sim.schedule(0, main())
     retval = sim.run(100)
-    assert retval == (31, 25)
+    assert retval == (31, 30)

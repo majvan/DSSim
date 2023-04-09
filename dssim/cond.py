@@ -55,16 +55,12 @@ class DSFilter(DSFuture):
         self.signal_timeout = signal_timeout
         if inspect.isgenerator(self.cond) or inspect.iscoroutine(self.cond):
             # We create a new process from generator
-            self.cond = DSProcess(self.cond, sim=self.sim)  # convert to DSProcess so we could get return value
+            self.cond = DSProcess(self.cond, sim=self.sim).schedule(0)  # convert to DSProcess so we could get return value
             # It is assumed that the coro / generator runs in the same 'context' as the current process.
             # The coro / generator gets events which were planned for the current running process by default.
             self.forward_events = (forward_events != False)  # True => True, None => True, False => False
         else:
             self.forward_events = (forward_events == True)  # True => True, None => False, False => False
-        if isinstance(self.cond, DSProcess):
-            self.sim = self.cond.sim
-            if not self.cond.started():
-                self.cond = self.cond.schedule(0)  # start the process
 
     def create_metadata(self, **kwargs):
         self.meta = _ConsumerMetadata()

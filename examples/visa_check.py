@@ -31,7 +31,7 @@ class Person(DSComponent):
 
     def abort_waiting(self):
         if self.waiting_process:
-            self.sim.abort(self.waiting_process)
+            self.waiting_process.abort()
 
     def wait_in_queue(self):
         try:

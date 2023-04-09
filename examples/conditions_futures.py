@@ -146,5 +146,5 @@ if __name__ == '__main__':
     sim = DSSimulation()
     proc = sim.schedule(0, demo_filtering())
     retval = sim.run()
-    assert retval == (79, 68)
+    assert retval == (79, 69)
 

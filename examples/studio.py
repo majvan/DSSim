@@ -33,16 +33,16 @@ class Studio(DSComponent):
             self.stat['finish'] += 1
             self.sim.signal(self.moderator, 'finished')
         except DSAbortException as e:
-            print(e.info['msg'])
+            print('No time left')
             self.stat['abort'] += 1
 
     def moderator_process(self):
         for s in self.speakers:
-            self.sim.schedule(0, s)  # Invite next speaker
+            s = self.sim.schedule(0, s)  # Invite next speaker
             result = yield from sim.gwait(30, cond=lambda e: True)
             if result is None:
                 # We finished with timeout
-                self.sim.abort(s, msg='No time left')
+                s.abort()
 
 if __name__ == '__main__':
     sim = DSSimulation()

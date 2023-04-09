@@ -321,34 +321,16 @@ class DSSimulation:
 
     def schedule(self, time, schedulable):
         ''' Schedules the start of a (new) process. '''
-        if not isinstance(schedulable, Iterable) and not inspect.iscoroutine(schedulable):
+        if isinstance(schedulable, DSProcess):
+            process = schedulable
+        elif inspect.iscoroutine(schedulable) or inspect.isgenerator(schedulable):
+            process = DSProcess(schedulable, sim=self)
+        else:
             raise ValueError('The provided function is probably missing @DSSchedulable decorator')
         if time < 0:
             raise ValueError('The time is relative from now and cannot be negative')
-        # Create a new process which at the beginning waits (see _scheduled_fcn method) and
-        # then start it.
-        # This method was probably called by another scheduled process.
-        # However to kick a new process, we just setup a new process ID to the simulation,
-        # kick the process and then set back for the simulation the previous process ID.
-        old_process = self.parent_process
-
-        if hasattr(schedulable, '_schedule'):
-            new_process = schedulable._schedule(time)
-        elif inspect.iscoroutine(schedulable):
-            new_process = self._scheduled_fcn(time, schedulable)
-        elif inspect.isgenerator(schedulable):
-            new_process = self._scheduled_gfcn(time, schedulable)
-        else:
-            raise ValueError(f'The assigned code {schedulable} is not generator, neither coroutine.')
-        self.parent_process = new_process
-        # Create new metadata.
-        # It is useful for processes which will not use await sim.wait(...)
-        self.create_metadata(new_process)
-
-        self._kick(new_process)
-
-        self.parent_process = old_process
-        return new_process
+        process._schedule(time)
+        return process
 
     def check_condition(self, consumer, event):
         conds = self.get_consumer_metadata(consumer).cond
@@ -379,7 +361,7 @@ class DSSimulation:
                 retval = consumer.finish(exc.value)
             else:
                 retval = exc.value
-                self.cleanup(consumer)
+            self.cleanup(consumer)
         except ValueError as exc:
             if isinstance(consumer, DSFuture):
                 retval = consumer.fail(exc)
@@ -405,10 +387,6 @@ class DSSimulation:
         retval = self.send_object(consumer, event)
         return retval
 
-    def abort(self, schedulable, **info):
-        ''' Send abort exception to a consumer process. Convert event from parameters to object. '''
-        self.send_object(schedulable, DSAbortException(self.parent_process, **info))
-
     def signal(self, process, event, time=0):
         ''' Schedules an event object into timequeue. Finally the target process will be signalled. '''
         time = self._compute_time(time)
@@ -423,24 +401,6 @@ class DSSimulation:
         self.time_queue.add_element(time, (consumer, event))
         return event
 
-    async def _scheduled_fcn(self, time, schedulable):
-        ''' Start a schedulable process with possible delay '''
-        try:
-            await self.wait(time)
-        except DSAbortException as exc:
-            return
-        retval = await schedulable
-        return retval
-
-    def _scheduled_gfcn(self, time, schedulable):
-        ''' Start a schedulable process with possible delay '''
-        try:
-            yield from self.gwait(time)
-        except DSAbortException as exc:
-            return
-        retval = yield from schedulable
-        return retval
-
     def _gwait_for_event(self, timeout, val=None):
         # Re-compute abs/relative time to abs for the timeout
         time = self._compute_time(timeout)
@@ -448,6 +408,7 @@ class DSSimulation:
         if time != float('inf'):
             self.time_queue.add_element(time, (self.parent_process, None))
         try:
+            event = True
             # Pass value to the feeder and wait for next event
             event = yield val
             # We received an event. In the lazy evaluation case, we would be now calling
@@ -460,13 +421,10 @@ class DSSimulation:
             # Convert exception signal to a real exception
             if isinstance(event, Exception):
                 raise event
-        except Exception as exc:
-            # If we got any exception, we will not use the other events anymore
-            self.delete(lambda e: e == (self.parent_process, None))
-            raise
-        if event is not None and time != float('inf'):
-            # If we terminated before timeout and the timeout event is on time queue- remove it
-            self.delete(lambda e: e == (self.parent_process, None))
+        finally:
+            if event is not None and time != float('inf'):
+                # If we terminated before timeout and the timeout event is on time queue- remove it
+                self.delete(lambda e: e == (self.parent_process, None))
         return event
 
     def gwait(self, timeout=float('inf'), cond=lambda e: False, val=True):
@@ -519,6 +477,7 @@ class DSSimulation:
         if time != float('inf'):
             self.time_queue.add_element(time, (self.parent_process, None))
         try:
+            event = True
             # Pass value to the feeder and wait for next event
             event = await Awaitable(val)
             # We received an event. In the lazy evaluation case, we would be now calling
@@ -531,13 +490,10 @@ class DSSimulation:
             # Convert exception signal to a real exception
             if isinstance(event, Exception):
                 raise event
-        except Exception as exc:
-            # If we got any exception, we will not use the other events anymore
-            self.delete(lambda e: e == (self.parent_process, None))
-            raise
-        if event is not None and time != float('inf'):
-            # If we terminated before timeout and the timeout event is on time queue- remove it
-            self.delete(lambda e: e == (self.parent_process, None))
+        finally:
+            if event is not None and time != float('inf'):
+                # If we terminated before timeout and the timeout event is on time queue- remove it
+                self.delete(lambda e: e == (self.parent_process, None))
         return event
 
     async def wait(self, timeout=float('inf'), cond=lambda e: False, val=True):
@@ -582,13 +538,6 @@ class DSSimulation:
         finally:
             conds.pop()
         return event
-
-    def _kick(self, schedulable):
-        ''' Provides first kick (run) of a schedulable process. '''
-        try:
-            schedulable.send(None)  # next() would be enough for generators, but not for coroutines
-        except StopIteration as exp:
-            pass
 
     def cleanup(self, consumer):
         # The consumer has finished.
@@ -786,6 +735,7 @@ class DSFuture(DSConsumer, SignalMixin):
     
     def create_metadata(self, **kwargs):
         self.meta = _ConsumerMetadata()
+        self.meta.cond.push(self)  # sending to self => signaling the end of future
         return self.meta
 
     def get_future_eps(self):
@@ -797,9 +747,9 @@ class DSFuture(DSConsumer, SignalMixin):
     def abort(self, exc=None):
         ''' Aborts an awaitable with an exception. '''
         if exc is None:
-            exc = DSAbortException(self.sim.parent_process)
+            exc = DSAbortException(self)
         try:
-            self.send(exc)
+            self.sim.send_with_cond(self, exc)
         except StopIteration as e:
             self.finish(e)
         except Exception as e:
@@ -848,10 +798,13 @@ class DSProcess(DSFuture, SignalMixin):
     This class "extends" generator / coroutine for additional info.
     The best practise is to use DSProcess instead of generators.
     '''
+    class _ScheduleEvent: pass
+
     def __init__(self, generator, *args, **kwargs):
         ''' Initializes DSProcess. The input has to be a generator function. '''
         self.generator = generator
         self.scheduled_generator = generator
+        self._scheduled = False
         if self.started():  # check if the generator / coro has already been started...
             # TODO: if we want to support this use case, we should merge the metadata from the generator
             raise ValueError('The DSProcess can be used only on non-started generators / coroutines')
@@ -859,8 +812,6 @@ class DSProcess(DSFuture, SignalMixin):
 
     def create_metadata(self, **kwargs):
         self.meta = _ConsumerMetadata()
-        # By default, a future accepts timeout events (None) and events to self
-        self.meta.cond.push(None)
         return self.meta
 
     def __iter__(self):
@@ -875,35 +826,30 @@ class DSProcess(DSFuture, SignalMixin):
     @TrackEvent
     def send(self, event):
         ''' Pushes an event to the task and gets new state. '''
-        self.value = self.scheduled_generator.send(event)
+        if self.started():
+            self.value = self.scheduled_generator.send(event)
+        else:
+            self.get_cond().pop()  # for the first kick, we added temoprarily "_ScheduleEvent" condition (see _schedule) 
+            # By default, a future accepts timeout events (None) and events to self
+            self.meta.cond.push(None)
+            self.value = self.scheduled_generator.send(None)
         return self.value
-
-    def _scheduled_gfcn(self, time):
-        ''' Start a schedulable process with possible delay '''
-        yield from self.sim.gwait(time)
-        retval = yield from self.generator
-        return retval
-
-    async def _scheduled_fcn(self, time):
-        ''' Start a schedulable process with possible delay '''
-        await self.sim.wait(time)
-        retval = await self.generator
-        return retval
 
     def _schedule(self, time):
         ''' This api is used with sim.schedule(...) '''
-        if inspect.iscoroutine(self.generator):
-            self.scheduled_generator = self._scheduled_fcn(time)
-        elif inspect.isgenerator(self.generator):
-            self.scheduled_generator = self._scheduled_gfcn(time)
+        if not self._scheduled:
+            self._scheduled = self._ScheduleEvent()
+            self.get_cond().push(self._scheduled)
+            self.sim.schedule_event(time, self._scheduled, self)
+            retval = self
         else:
-            raise ValueError(f'The assigned code {self.generator} to the process {self} is not generator, neither coroutine.')
-        return self
+            retval = None
+        return retval
 
     def schedule(self, time):
         ''' This api is to schedule directly task.schedule(...) '''
         return self.sim.schedule(time, self)
-
+    
     def started(self):
         if inspect.iscoroutine(self.scheduled_generator):
             retval = inspect.getcoroutinestate(self.scheduled_generator) != inspect.CORO_CREATED
