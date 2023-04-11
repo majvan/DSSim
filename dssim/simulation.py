@@ -374,7 +374,7 @@ class DSSimulation:
             self.parent_process = pid
         return retval
 
-    def send_with_cond(self, consumer, event):
+    def try_send(self, consumer, event):
         ''' Send an event object to a consumer process. Convert event from parameters to object. '''
 
         # We will be sending signal (event) to a consumer, which has some condition set
@@ -569,7 +569,7 @@ class DSSimulation:
             self.num_events += 1
             self.time = tevent
             self.time_queue.pop()
-            self.send_with_cond(consumer, event_obj)
+            self.try_send(consumer, event_obj)
         else:
             retval_time = self.time
             self.time = up_to
@@ -749,7 +749,7 @@ class DSFuture(DSConsumer, SignalMixin):
         if exc is None:
             exc = DSAbortException(self)
         try:
-            self.sim.send_with_cond(self, exc)
+            self.sim.try_send(self, exc)
         except StopIteration as e:
             self.finish(e)
         except Exception as e:
