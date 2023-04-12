@@ -64,35 +64,35 @@ class MyComponent(DSComponent):
     def dummy_gjoin(self, name):
         print(self.sim.time, self.taskDummy, '0 run with', name)
         print(self.sim.time, self.taskDummy, '0 waiting for', self.taskA, 'to finish...')
-        yield from self.taskA.gjoin()
+        yield from self.taskA.gwait()
         print(self.sim.time, self.taskDummy, '1 waiting for', self.taskB, 'to finish...')
-        yield from self.taskB.gjoin()
+        yield from self.taskB.gwait()
         print(self.sim.time, self.taskDummy, '2 waiting for', self.taskC, 'to finish...')
-        yield from self.taskC.gjoin()
+        yield from self.taskC.gwait()
         print(self.sim.time, self.taskDummy, '3 all tasks finished')
 
     @DSSchedulable
     async def dummy_join(self, name):
         print(self.sim.time, self.taskDummy, '0 run with', name)
         print(self.sim.time, self.taskDummy, '0 waiting for', self.taskA, 'to finish...')
-        await self.taskA.join()
+        await self.taskA
         print(self.sim.time, self.taskDummy, '1 waiting for', self.taskB, 'to finish...')
-        await self.taskB.join()
+        await self.taskB.wait()
         print(self.sim.time, self.taskDummy, '2 waiting for', self.taskC, 'to finish...')
-        await self.taskC.join()
+        await self.taskC.wait()
         print(self.sim.time, self.taskDummy, '3 all tasks finished')
 
     @DSSchedulable
     async def dummy(self, name):
         print(self.sim.time, self.taskDummy, '0 run with', name)
         print(self.sim.time, self.taskDummy, '0 waiting for', self.taskA, 'to finish...')
-        await self.taskA.join()
+        await self.taskA
         assert self.sim.time == 17
         print(self.sim.time, self.taskDummy, '1 waiting for', self.taskB, 'to finish...')
-        await self.taskB.join()
+        await self.taskB.wait()
         assert self.sim.time == 18
         print(self.sim.time, self.taskDummy, '2 waiting for', self.taskC, 'to finish...')
-        await self.taskC.join()
+        await self.taskC.wait()
         assert self.sim.time == 18
         print(self.sim.time, self.taskDummy, '3 all tasks finished')
 
@@ -111,6 +111,7 @@ if __name__ == '__main__':
     for obj in (obj0, obj1, obj2):
         print('Scheduling task', obj.taskDummy, 'in 2 sec')
         sim.schedule(2, obj.taskDummy)
+
     sim.run(20)
     assert inspect.getgeneratorstate(obj0.taskDummy) == inspect.GEN_CLOSED
     assert inspect.getcoroutinestate(obj1.taskDummy) == inspect.CORO_CLOSED

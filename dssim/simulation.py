@@ -882,17 +882,7 @@ class DSProcess(DSFuture, SignalMixin):
         self.exc = exc
         self.sim.cleanup(self)
         self._finish_tx.signal(self)
-
-    async def join(self, timeout=float('inf')):
-        with self.sim.observe_pre(self):
-            retval = await self.sim.check_and_wait(cond=lambda e:self.finished())
-        return retval
-    
-    def gjoin(self, timeout=float('inf')):
-        with self.sim.observe_pre(self):
-            retval = yield from self.sim.check_and_gwait(cond=lambda e:self.finished())
-        return retval
-
+        
 
 class DSExceptionContextManager:
     ''' This class is used to be able to schedule exception (i.e. timeout exc).

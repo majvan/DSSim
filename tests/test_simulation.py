@@ -63,7 +63,7 @@ class TestDSSchedulable(unittest.TestCase):
 
     @DSSchedulable
     def __waiting_for_join(self, process):
-        yield from process.join()
+        yield from process.wait()
         yield "After process finished"
 
 
@@ -175,11 +175,11 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertEqual(process.value, 1)
 
 
-    def test8_joining_process(self):
+    def test8_waiting_process(self):
         sim = DSSimulation()
         process = DSProcess(self.__generator(), sim=sim)
-        process.join = MagicMock()
-        process.join.return_value = iter(['Join called',])
+        process.wait = MagicMock()
+        process.wait.return_value = iter(['Wait called',])
         process_waiting = DSProcess(self.__waiting_for_join(process), sim=DSSimulation())
         retval = next(process)
         self.assertEqual(retval, 'First return')
@@ -187,10 +187,10 @@ class TestDSSchedulable(unittest.TestCase):
         sim.parent_process = process_waiting
         retval = next(process_waiting)
         self.assertEqual(process.value, 'First return')  # process not changed
-        self.assertEqual(process_waiting.value, 'Join called')
+        self.assertEqual(process_waiting.value, 'Wait called')
         retval = next(process)
         self.assertEqual(process.value, 'Second return')
-        self.assertEqual(process_waiting.value, 'Join called')
+        self.assertEqual(process_waiting.value, 'Wait called')
         with self.assertRaises(StopIteration):
             retval = next(process)
         # self.assertEqual(process.value, 'Success')  # This will not work as the process.value is set only with simulation run
