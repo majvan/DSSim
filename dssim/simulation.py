@@ -66,7 +66,7 @@ class DSAbsTime:
         self.value = value
 
 
-class Awaitable:
+class _Awaitable:
     def __init__(self, val=None):
         self.val = val
 
@@ -80,7 +80,7 @@ class ICondition:
 
 class DSTransferableCondition(ICondition):
     def __init__(self, cond, transfer=lambda e:e):
-        self.cond = _StackedCond().push(cond)
+        self.cond = StackedCond().push(cond)
         self.transfer = transfer
         self.value = None
 
@@ -175,7 +175,7 @@ class DSInterruptibleContext:
         return self._interrupted
 
 
-class _StackedCond(ICondition):
+class StackedCond(ICondition):
     def __init__(self):
         self.conds = []
         self.value = None
@@ -225,7 +225,7 @@ class _StackedCond(ICondition):
 
 class _ConsumerMetadata:
     def __init__(self):
-        self.cond = _StackedCond()
+        self.cond = StackedCond()
 
 
 class SignalMixin:
@@ -465,7 +465,7 @@ class DSSimulation:
         try:
             event = True
             # Pass value to the feeder and wait for next event
-            event = await Awaitable(val)
+            event = await _Awaitable(val)
             # We received an event. In the lazy evaluation case, we would be now calling
             # _check_cond and returning or raising an event only if the condition matches,
             # otherwise we would be waiting in an infinite loop here.
@@ -532,7 +532,7 @@ class DSSimulation:
         # there may be events for the process planned.
         # Remove the condition
         meta = consumer.meta
-        meta.cond = _StackedCond()
+        meta.cond = StackedCond()
         # Remove all the events for this consumer
         self.time_queue.delete(lambda e:e[0] is consumer)
 

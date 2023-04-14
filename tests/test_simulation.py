@@ -18,7 +18,7 @@ Tests for simulation module
 import unittest
 from unittest.mock import Mock, MagicMock, call
 from dssim.simulation import DSSimulation, DSAbortException, DSFuture, DSSchedulable, DSProcess
-from dssim.simulation import _StackedCond
+from dssim.simulation import StackedCond
 from dssim.simulation import DSSubscriberContextManager
 from dssim.simulation import DSTimeoutContext, DSTimeoutContextError
 from dssim.pubsub import DSProducer
@@ -285,7 +285,7 @@ class TestConditionChecking(unittest.TestCase):
     def test2_check_one_cond(self):
         ''' Test all types of conditions - see _check_cond '''
         exception = Exception('error')
-        stack = _StackedCond()
+        stack = StackedCond()
         for cond, event, expected_result in (
             (lambda e:False, None, (False, None)),
             (lambda e:True, None, (True, None)),
@@ -310,7 +310,7 @@ class TestConditionChecking(unittest.TestCase):
         ''' Test all types of conditions - see _check_cond '''
         # Now test with default 'None' timeout
         exception = Exception('error')
-        stack = _StackedCond()
+        stack = StackedCond()
         stack.push(None)
         for cond, event, expected_result in (
             (lambda e:False, None, (True, None)),
