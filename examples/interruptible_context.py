@@ -13,7 +13,7 @@ class MyComponent(DSComponent):
         The exception interrupts the context.
         '''
         print('Process0')
-        cond_stack = self.sim.get_consumer_metadata(self.sim.parent_process).cond.conds
+        cond_stack = self.sim.parent_process.get_cond().conds
         assert cond_stack == [None,]
         t = self.sim.time
         try:
@@ -35,7 +35,7 @@ class MyComponent(DSComponent):
         ''' The same as previous, but transforming into DSTimeout
         '''
         print('Process1')
-        cond_stack = self.sim.get_consumer_metadata(self.sim.parent_process).cond.conds
+        cond_stack = self.sim.parent_process.get_cond().conds
         assert cond_stack == [None,]
         t = self.sim.time
         with self.sim.timeout(10) as cm:
@@ -51,7 +51,7 @@ class MyComponent(DSComponent):
         ''' Two timeouts cascading. Showing how they are interrupted.
         '''
         print('Process2')
-        cond_stack = self.sim.get_consumer_metadata(self.sim.parent_process).cond.conds
+        cond_stack = self.sim.parent_process.get_cond().conds
         assert cond_stack == [None,]
         t = self.sim.time
         with self.sim.timeout(10) as cm0:
@@ -70,7 +70,7 @@ class MyComponent(DSComponent):
         ''' The process has extended condition, so the wait can be signalled also with 'Hi'
         '''
         print('Process3')
-        cond_stack = self.sim.get_consumer_metadata(self.sim.parent_process).cond.conds
+        cond_stack = self.sim.parent_process.get_cond().conds
         assert cond_stack == [None,]
         t = self.sim.time
         event = None
@@ -88,7 +88,7 @@ class MyComponent(DSComponent):
         ''' Similar to previous, but with interruptible. Interruptible condition however breaks the context.
         '''
         print('Process4')
-        cond_stack = self.sim.get_consumer_metadata(self.sim.parent_process).cond.conds
+        cond_stack = self.sim.parent_process.get_cond().conds
         assert cond_stack == [None,]
         t = self.sim.time
         event = None
@@ -108,7 +108,7 @@ class MyComponent(DSComponent):
         ''' The same code as previous. This time the timeout will be taken.
         '''
         print('Process5')
-        cond_stack = self.sim.get_consumer_metadata(self.sim.parent_process).cond.conds
+        cond_stack = self.sim.parent_process.get_cond().conds
         assert cond_stack == [None,]
         t = self.sim.time
         event = None
@@ -129,7 +129,7 @@ class MyComponent(DSComponent):
         ''' The same code as previous. This time the timeout will be taken.
         '''
         print('Process6')
-        cond_stack = self.sim.get_consumer_metadata(self.sim.parent_process).cond.conds
+        cond_stack = self.sim.parent_process.get_cond().conds
         assert cond_stack == [None,]
         t = self.sim.time
         event = None

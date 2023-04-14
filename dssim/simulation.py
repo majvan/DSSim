@@ -260,7 +260,6 @@ class DSSimulation:
         all the producers which belong to the same simulation entity.
         '''
         self.name = name
-        self._consumer_metadata = {}
         self._restart(time=0)
         if DSSimulation.sim_singleton is None:
             DSSimulation.sim_singleton = self  # The first sim environment will be the first initialized one
@@ -284,24 +283,6 @@ class DSSimulation:
         self.num_events = 0
         self.time = time
         self.parent_process = None
-
-    def create_metadata(self, process):
-        if hasattr(process, 'create_metadata'):
-            meta = process.create_metadata()
-        else:
-            meta = _ConsumerMetadata()
-            # Instead of pushing acceptance of None in timeouts in each wait() / gwait(),
-            # we put the None as a general condition to accept from the beginning
-            meta.cond.push(None)
-            self._consumer_metadata[process] = meta
-        return meta
-
-    def get_consumer_metadata(self, process):
-        retval = getattr(process, 'meta', None)
-        if not retval:
-            retval = self._consumer_metadata.get(process, None)
-            retval = retval or self.create_metadata(process)
-        return retval
 
     def _compute_time(self, time):
         ''' Recomputes a rel/abs time to absolute time value '''
@@ -333,7 +314,7 @@ class DSSimulation:
         return process
 
     def check_condition(self, consumer, event):
-        conds = self.get_consumer_metadata(consumer).cond
+        conds = consumer.get_cond()
         return conds.check(event)
 
     def send_object(self, consumer, event):
@@ -441,7 +422,7 @@ class DSSimulation:
         # _wait_for_event method, the return from the subprocess would not defer here, but rather
         # just ended and disappeared in scheduler. But we need that the scheduler is said to plan
         # another timeout for this process.
-        conds = self.get_consumer_metadata(self.parent_process).cond
+        conds = self.parent_process.meta.cond
         # Set the condition object (lambda / object / ...) in the process metadata
         conds.push(cond)
         try:
@@ -457,7 +438,7 @@ class DSSimulation:
         # invariant to the passed event, for instance to check for a state of an object
         # so if the state matches, it returns immediately
         # Otherwise it jumps to the waiting process.
-        conds = self.get_consumer_metadata(self.parent_process).cond
+        conds = self.parent_process.meta.cond
         # Set the condition object (lambda / object / ...) in the process metadata
         conds.push(cond)
         try:
@@ -510,7 +491,7 @@ class DSSimulation:
         # _wait_for_event method, the return from the subprocess would not defer here, but rather
         # just ended and disappeared in scheduler. But we need that the scheduler is said to plan
         # another timeout for this process.
-        conds = self.get_consumer_metadata(self.parent_process).cond
+        conds = self.parent_process.meta.cond
         # Set the condition object (lambda / object / ...) in the process metadata
         conds.push(cond)
         try:
@@ -526,7 +507,7 @@ class DSSimulation:
         # invariant to the passed event, for instance to check for a state of an object
         # so if the state matches, it returns immediately
         # Otherwise it jumps to the waiting process.
-        conds = self.get_consumer_metadata(self.parent_process).cond
+        conds = self.parent_process.meta.cond
         # Set the condition object (lambda / object / ...) in the process metadata
         conds.push(cond)
         try:
@@ -545,7 +526,7 @@ class DSSimulation:
         # for the consumer. Since the process has finished, it will never need it, however
         # there may be events for the process planned.
         # Remove the condition
-        meta = self.get_consumer_metadata(consumer)
+        meta = consumer.meta
         meta.cond = _StackedCond()
         # Remove all the events for this consumer
         self.time_queue.delete(lambda e:e[0] is consumer)
@@ -586,7 +567,7 @@ class DSSimulation:
     
     @contextmanager
     def extend_cond(self, cond):
-        conds = self.get_consumer_metadata(self.parent_process).cond
+        conds = self.parent_process.meta.cond
         conds.push(cond)
         try:
             yield

@@ -155,10 +155,11 @@ class TestDSSchedulable(unittest.TestCase):
                 i = i + 1
                 yield from sim.gwait(cond=lambda c: True, val=i)
 
-        sim=DSSimulation()
+        sim = DSSimulation()
         process = DSProcess(my_wait(sim), sim=sim)
         process.get_cond().push(lambda e:True)
-        retval = next(process)
+        sim.parent_process = process  # needed because after kick the process will gwait
+        retval = process.send(None)
         retval = process.send('from_test0')
         self.assertEqual(retval, 2)
         self.assertEqual(process.value, 2)
@@ -258,24 +259,6 @@ class TestConditionChecking(unittest.TestCase):
         while True:
             yield 1
 
-    def test0_process_metadata(self):
-        sim = DSSimulation()
-        self.assertTrue(len(sim._consumer_metadata) == 0)
-        p = DSProcess(self.__my_process(), sim=sim)
-        p.meta = 'My meta'
-        meta = sim.get_consumer_metadata(p)
-        self.assertEqual(meta, p.meta)
-        self.assertTrue(len(sim._consumer_metadata) == 0)
-
-        p = self.__my_process()
-        self.assertTrue(len(sim._consumer_metadata) == 0)
-        meta = sim.get_consumer_metadata(p)
-        self.assertIsNotNone(meta)
-        self.assertTrue(len(sim._consumer_metadata) == 1)  # write the metadata of the generator into the simulation registry
-        meta = sim.get_consumer_metadata(p)
-        self.assertIsNotNone(meta)
-        self.assertTrue(len(sim._consumer_metadata) == 1)  # the next retrieve does not increase the registry
-
     def test1_check_storing_cond_in_metadata(self):
         ''' By calling wait, the metadata.cond should be stored '''
         def my_process():
@@ -284,24 +267,19 @@ class TestConditionChecking(unittest.TestCase):
             yield 101
 
         sim = DSSimulation()
-        waitable = sim.gwait(cond='condition')
+        waitable = DSProcess(sim.gwait(cond='condition'), sim=sim).schedule(0)
         sim.parent_process = waitable
-        retval = next(waitable)
-        self.assertTrue(waitable in sim._consumer_metadata.keys())
-
-        waitable = sim.gwait(cond='condition')
-        sim.parent_process = waitable
-        meta = sim._consumer_metadata[waitable] = Mock()
+        meta = waitable.meta = Mock()
         cond = meta.cond = Mock()
         cond.push, cond.pop = Mock(), Mock()
         cond.check = Mock(return_value=(True, 'return event'))
         cond.cond_value = lambda: 'condition value result'
-        retval = next(waitable)
+        retval = sim.send_object(waitable, None)  # kick the process
+        cond.push.assert_has_calls([call(None), call('condition'),])
         try:
             retval = sim.try_send(waitable, 'something')
         except StopIteration as e:
             retval = e.value
-        cond.push.assert_called_once_with('condition')
         self.assertTrue(retval == 'return event')  # this is what was sent to the process
     
     def test2_check_one_cond(self):
@@ -391,56 +369,6 @@ class TestConditionChecking(unittest.TestCase):
         sim.send_object.assert_called_once()
         self.assertEqual(call_order, [call('check_condition', consumer, None), call('send_object', consumer, 'abc')])
 
-    def test5_check_and_gwait(self):
-        ''' Test check_and_wait function. First it should call check and if check does not pass, it should call wait '''
-        sim = DSSimulation()
-        retval = 'abc'
-        # The generator sim.check_and_wait yields in the middle with the value back, which is by default "True"
-        retval = next(sim.check_and_gwait(cond=lambda c:False))
-        self.assertTrue(retval == True)
-        sim.get_consumer_metadata(None).cond.pop()  # remove stored condition for this task
-        try:
-            retval = next(sim.check_and_gwait(cond=lambda c:True))
-        except StopIteration as e:
-            retval = e.value
-        self.assertTrue(isinstance(retval, object)) # we get back the object which was created in the check_and_wait function
-
-        condition = SomeCallableObj()
-        condition.cond_value = lambda: 'condition value was computed in lambda'
-        try:
-            retval = next(sim.check_and_gwait(cond=condition))
-            sim.get_consumer_metadata(None).cond.pop()  # remove stored condition for this task
-        except StopIteration as e:
-            retval = e.value
-        self.assertTrue(retval == 'condition value was computed in lambda')
-
-    def test5_check_and_wait(self):
-        ''' Test check_and_wait function. First it should call check and if check does not pass, it should call wait '''
-        sim = DSSimulation()
-        retval = 'abc'
-        # The generator sim.check_and_wait yields in the middle with the value back, which is by default "True"
-        coro = sim.check_and_wait(cond=lambda c:False)
-        retval = coro.send(None)
-        sim.get_consumer_metadata(None).cond.pop()  # remove stored condition for this task
-        self.assertTrue(retval == True)
-        try:
-            coro = sim.check_and_wait(cond=lambda c:True)
-            retval = coro.send(None)
-            sim.get_consumer_metadata(None).cond.pop()  # remove stored condition for this task
-        except StopIteration as e:
-            retval = e.value
-        self.assertTrue(isinstance(retval, object)) # we get back the object which was created in the check_and_wait function
-
-        condition = SomeCallableObj()
-        condition.cond_value = lambda: 'condition value was computed in lambda'
-        try:
-            coro = sim.check_and_wait(cond=condition)
-            retval = coro.send(None)
-            sim.get_consumer_metadata(None).cond.pop()  # remove stored condition for this task
-        except StopIteration as e:
-            retval = e.value
-        self.assertTrue(retval == 'condition value was computed in lambda')
-
     def test6_gwait_return(self):
         def my_process():
             yield 1
@@ -448,25 +376,23 @@ class TestConditionChecking(unittest.TestCase):
             return 3
         self.sim = DSSimulation()
         p = DSProcess(my_process(), sim=self.sim).schedule(0)
-        retval = p.send(None)  # kick the process
-        # self.assertTrue(retval == 1)  # kick does not return value
-        retval = p.send(None)
+        retval = self.sim.send_object(p, None)  # kick the process
+        retval = self.sim.send_object(p, None)
         self.assertTrue(retval == 2)
         try:
-            retval = p.send(None)
+            retval = self.sim.send_object(p, None)
         except StopIteration as e:
             retval = e.value
         self.assertTrue(retval == 3)
 
         p = my_process()
         p = self.sim.schedule(0, p)
-        # kick does not return value
-        retval = p.send(None)
+        retval = self.sim.send_object(p, None)  # kick the process
         self.assertTrue(retval == 1)
-        retval = p.send(None)
+        retval = self.sim.send_object(p, None)
         self.assertTrue(retval == 2)
         try:
-            retval = p.send(None)
+            retval = self.sim.send_object(p, None)
         except StopIteration as e:
             retval = e.value
         self.assertTrue(retval == 3)
@@ -474,7 +400,6 @@ class TestConditionChecking(unittest.TestCase):
         p = DSProcess(my_process(), sim=self.sim)
         p = self.sim.schedule(0, p)
         p.get_cond().push(lambda e:True)
-        # kick does not return value
         retval = self.sim.try_send(p, None)
         self.assertTrue(retval == 1)
         retval = self.sim.try_send(p, None)
@@ -492,25 +417,23 @@ class TestConditionChecking(unittest.TestCase):
             return 3
         self.sim = DSSimulation()
         p = DSProcess(my_process(), sim=self.sim).schedule(0)
-        retval = p.send(None)
-        # self.assertTrue(retval == 1)  # kick does not return value
-        retval = p.send(None)
+        retval = self.sim.send_object(p, None)  # kick the process
+        retval = self.sim.send_object(p, None)
         self.assertTrue(retval == 2)
         try:
-            retval = p.send(None)
+            retval = self.sim.send_object(p, None)
         except StopIteration as e:
             retval = e.value
         self.assertTrue(retval == 3)
 
         p = my_process()
         p = self.sim.schedule(0, p)
-        # kick does not return value
-        retval = p.send(None)
+        retval = self.sim.send_object(p, None)  # kick the process
         self.assertTrue(retval == 1)
-        retval = p.send(None)
+        retval = self.sim.send_object(p, None)
         self.assertTrue(retval == 2)
         try:
-            retval = p.send(None)
+            retval = self.sim.send_object(p, None)
         except StopIteration as e:
             retval = e.value
         self.assertTrue(retval == 3)
@@ -518,7 +441,6 @@ class TestConditionChecking(unittest.TestCase):
         p = DSProcess(my_process(), sim=self.sim)
         p = self.sim.schedule(0, p)
         p.get_cond().push(lambda e:True)
-        # kick does not return value
         retval = self.sim.try_send(p, None)
         self.assertTrue(retval == 1)
         retval = self.sim.try_send(p, None)
@@ -899,9 +821,10 @@ class TestSim(unittest.TestCase):
 
     def test8_run_producer(self):
         self.sim = DSSimulation()
-        producer = SomeObj()  # Instead of 
-        self.sim.get_consumer_metadata(producer).cond.push(lambda e:True)  # Accept any event
+        producer = Mock()
+        producer.meta.cond.check = lambda e:(True, e)  # Accept any event
         producer.send = Mock()
+        producer.get_cond = lambda: producer.meta.cond
         self.sim.schedule_event(1, 3, producer)
         self.sim.schedule_event(2, 2, producer)
         self.sim.schedule_event(3, 1, producer)
@@ -981,8 +904,7 @@ class TestSim(unittest.TestCase):
         # the following process will create events for the time queue process
         process = self.sim.schedule(0, self.__my_wait_process())
         # those events are required to contain a producer
-        producer = EventForwarder(self, process)
-        self.sim.schedule_event(1, {'producer': producer, 'data': 1})
+        self.sim.schedule_event(1, {'data': 1}, process)
         num_events = self.sim.run(2.5)
         # first event is dropped, because though it was taken by the time_process, the process condition was
         # to wait till timeout
@@ -991,7 +913,7 @@ class TestSim(unittest.TestCase):
         ]
         self.__time_process_event.assert_has_calls(calls)
         self.assertEqual(len(self.sim.time_queue), 0)  # there is no event left from process
-        self.sim.schedule_event(float('inf'), {'producer': producer, 'data': 2}, process)
+        self.sim.schedule_event(float('inf'), {'data': 2}, process)
         num_events = self.sim.run(2.5)
         self.__time_process_event.assert_has_calls([])
         self.assertEqual(len(self.sim.time_queue), 1)  # there are still timeout event left from process

@@ -164,10 +164,16 @@ class TestProducer(unittest.TestCase):
 
     def test1_producer_remove(self):
         p = DSProducer(sim=DSSimulation())
-        c0 = SomeObj()
+        c0 = Mock()
         c0.send = Mock(return_value=False)
-        c1 = SomeObj()
+        c0.meta.cond = Mock()
+        c0.meta.cond.check = Mock(return_value=(True, None))
+        c0.get_cond = lambda: c0.meta.cond
+        c1 = Mock()
         c1.send = Mock(return_value=False)
+        c1.meta.cond = Mock()
+        c1.meta.cond.check = Mock(return_value=(True, None))
+        c1.get_cond = lambda: c0.meta.cond
         p.subs['pre'].d = {}
         p.subs['act'].d = {c0: 1}
         p.subs['post'].d = {}
