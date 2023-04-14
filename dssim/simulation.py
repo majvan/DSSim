@@ -302,15 +302,20 @@ class DSSimulation:
 
     def schedule(self, time, schedulable):
         ''' Schedules the start of a (new) process. '''
-        if isinstance(schedulable, DSProcess):
+        if isinstance(schedulable, DSConsumer):
             process = schedulable
         elif inspect.iscoroutine(schedulable) or inspect.isgenerator(schedulable):
             process = DSProcess(schedulable, sim=self)
+        elif callable(schedulable):
+            process = DSCallback(schedulable, sim=self)
         else:
-            raise ValueError('The provided function is probably missing @DSSchedulable decorator')
+            raise ValueError(f'The provided function {schedulable} is probably missing @DSSchedulable decorator')
         if time < 0:
             raise ValueError('The time is relative from now and cannot be negative')
-        process._schedule(time)
+        if hasattr(process, '_schedule'):
+            process._schedule(time)
+        else:
+            self.schedule_event(time, None, process)
         return process
 
     def check_condition(self, consumer, event):

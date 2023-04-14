@@ -16,7 +16,7 @@ A resource is an object representing a pool of abstract resources with amount fi
 Compared to queue, resource works with non-integer amounts but it does not contain object
 in the pool, just an abstract pool level information (e.g. amount of water in a tank).
 '''
-from dssim.simulation import DSComponent, DSSchedulable
+from dssim.simulation import DSComponent
 from dssim.pubsub import DSProducer
 
 

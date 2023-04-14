@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.simulation import DSSchedulable, DSProcess, DSComponent, DSSimulation
+from dssim.simulation import DSProcess, DSComponent, DSSimulation
 import inspect
 
 class MyComponent(DSComponent):
@@ -60,7 +60,6 @@ class MyComponent(DSComponent):
         assert self.sim.time == 12
         print(self.sim.time, self.taskC, '2 Finish')
 
-    @DSSchedulable
     def dummy_gjoin(self, name):
         print(self.sim.time, self.taskDummy, '0 run with', name)
         print(self.sim.time, self.taskDummy, '0 waiting for', self.taskA, 'to finish...')
@@ -71,7 +70,6 @@ class MyComponent(DSComponent):
         yield from self.taskC.gwait()
         print(self.sim.time, self.taskDummy, '3 all tasks finished')
 
-    @DSSchedulable
     async def dummy_join(self, name):
         print(self.sim.time, self.taskDummy, '0 run with', name)
         print(self.sim.time, self.taskDummy, '0 waiting for', self.taskA, 'to finish...')
@@ -82,7 +80,6 @@ class MyComponent(DSComponent):
         await self.taskC.wait()
         print(self.sim.time, self.taskDummy, '3 all tasks finished')
 
-    @DSSchedulable
     async def dummy(self, name):
         print(self.sim.time, self.taskDummy, '0 run with', name)
         print(self.sim.time, self.taskDummy, '0 waiting for', self.taskA, 'to finish...')
