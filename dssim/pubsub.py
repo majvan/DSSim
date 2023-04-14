@@ -26,7 +26,7 @@ class NotifierDict():
         self.d = {}
 
     def __iter__(self):
-        return iter(self.d.items())
+        return iter(list(self.d.items()))
 
     def rewind(self, *args, **kwargs):
         return
@@ -49,10 +49,11 @@ class NotifierRoundRobin():
 
     def __iter__(self):
         self.current_index = 0
+        self.max_index = len(self.queue)
         return self
 
     def __next__(self):
-        if self.current_index >= len(self.queue):
+        if self.current_index >= self.max_index:
             raise StopIteration
         retval = self.queue[self.current_index]
         self.current_index += 1
@@ -88,7 +89,7 @@ class NotifierPriority():
         self.d = {}
 
     def __iter__(self):
-        return iter(self.iterate_by_priority())
+        return iter(list(self.iterate_by_priority()))
 
     def iterate_by_priority(self):
         for prio in sorted(self.d.keys()):

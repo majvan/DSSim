@@ -395,7 +395,17 @@ class TestNotifierDict(unittest.TestCase):
         n.dec('a'), n.dec('a')
         self.assertEqual(n.d, {'a': 0, 'b': 2})
 
-    def test1_cleanup(self):
+    def test1_iter_change(self):
+        n = NotifierDict()
+        n.inc('a')
+        count = 0
+        for item in n:
+            n.inc('b')
+            n.dec('a')
+            count += 1
+        self.assertTrue(count == 1)
+
+    def test2_cleanup(self):
         n = NotifierDict()
         self.assertEqual(n.d, {})
         n.cleanup()
@@ -412,7 +422,7 @@ class TestNotifierDict(unittest.TestCase):
         n.cleanup()
         self.assertEqual(n.d, {})
 
-    def test2_iter(self):
+    def test3_iter(self):
         n = NotifierDict()
         n.d = {'c': 1, 'a': 2, 'b': 4}
         it = iter(n)
@@ -456,7 +466,17 @@ class TestNotifierRoundRobin(unittest.TestCase):
         n.dec('a'), n.dec('a')
         self.assertEqual(n.queue, [['a', 0], ['b', 2]])
 
-    def test1_cleanup(self):
+    def test1_iter_change(self):
+        n = NotifierRoundRobin()
+        n.inc('a')
+        count = 0
+        for item in n:
+            n.inc('b')
+            n.dec('a')
+            count += 1
+        self.assertTrue(count == 1)
+
+    def test2_cleanup(self):
         n = NotifierRoundRobin()
         self.assertEqual(n.queue, [])
         n.cleanup()
@@ -473,7 +493,7 @@ class TestNotifierRoundRobin(unittest.TestCase):
         n.cleanup()
         self.assertEqual(n.queue, [])
 
-    def test2_iter(self):
+    def test3_iter(self):
         n = NotifierRoundRobin()
         n.queue = [['c', 1], ['a', 2], ['b', 4]]
         it = iter(n)
@@ -519,7 +539,17 @@ class TestNotifierPriority(unittest.TestCase):
         n.dec('a', priority=2)
         self.assertEqual(n.d, {1: {'a': 0, 'b': 2}, 2: {'a': 0}})
 
-    def test1_cleanup(self):
+    def test1_iter_change(self):
+        n = NotifierPriority()
+        n.inc('a', priority=1)
+        count = 0
+        for item in n:
+            n.inc('b', priority=1)
+            n.dec('a', priority=1)
+            count += 1
+        self.assertTrue(count == 1)
+
+    def test2_cleanup(self):
         n = NotifierPriority()
         self.assertEqual(n.d, {})
         n.cleanup()
@@ -538,7 +568,7 @@ class TestNotifierPriority(unittest.TestCase):
         n.cleanup()
         self.assertEqual(n.d, {})
 
-    def test2_iter(self):
+    def test3_iter(self):
         n = NotifierPriority()
         n.d = {2: {'c': 1, 'a': 2, 'b': 4}, 1: {'d': 12, 'e': 14}}
         it = iter(n)
@@ -555,7 +585,7 @@ class TestNotifierPriority(unittest.TestCase):
         with self.assertRaises(StopIteration):
             el = next(it)
 
-    def test3_rewind(self):
+    def test4_rewind(self):
         n = NotifierPriority()
         n.d = {2: {'c': 1, 'a': 2, 'b': 4}, 1: {'d': 12, 'e': 14}}
         it = iter(n)
