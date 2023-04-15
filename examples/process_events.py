@@ -1,3 +1,4 @@
+# Copyright 2020- majvan (majvan@gmail.com)
 # Copyright 2020 NXP Semiconductors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -92,4 +93,3 @@ if __name__ == '__main__':
     assert obj0.stat["tries"] == 1800001
     # assert sim.num_events == obj0.stat["tries"] + obj0.stat["errors"] + 1
     assert 3948000 <= sim.num_events <= 3952000  # high probability to pass
-

@@ -1,3 +1,4 @@
+# Copyright 2020- majvan (majvan@gmail.com)
 # Copyright 2020 NXP Semiconductors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,6 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+'''
+The code is inspired from SimPy code and showing a code parity.
+'''
 from dssim import DSComponent, DSAbortException, DSSimulation
 from random import randint
 

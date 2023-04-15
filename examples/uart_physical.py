@@ -1,3 +1,4 @@
+# Copyright 2020- majvan (majvan@gmail.com)
 # Copyright 2020 NXP Semiconductors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

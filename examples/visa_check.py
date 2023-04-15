@@ -1,3 +1,4 @@
+# Copyright 2021- majvan (majvan@gmail.com)
 # Copyright 2021 NXP Semiconductors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -147,4 +148,4 @@ if __name__ == '__main__':
     print("Done.")
     total_processed = sum([check.stat['processed'] for check in eu_visa_checks + ww_visa_checks])
 
-    assert total_processed > 120  # high probability to pass
+    assert total_processed > 120, f'The number of processed {total_processed} should be high'  # high probability to pass
