@@ -23,7 +23,7 @@ from abc import abstractmethod
 from dssim.base import StackedCond, DSComponent, TrackEvent, SignalMixin
 
 
-class _ConsumerMetadata:
+class ConsumerMetadata:
     def __init__(self):
         self.cond = StackedCond()
 
@@ -34,7 +34,7 @@ class DSConsumer(DSComponent):
         self.create_metadata(**kwargs)
        
     def create_metadata(self, **kwargs):
-        self.meta = _ConsumerMetadata()
+        self.meta = ConsumerMetadata()
         if 'cond' in kwargs:
             self.meta.cond.push(kwargs['cond'])
         return self.meta

@@ -18,7 +18,7 @@ to be able create advanced expressions for conditions.
 '''
 import inspect
 import copy
-from dssim.pubsub import _ConsumerMetadata
+from dssim.pubsub import ConsumerMetadata
 from dssim.future import DSFuture
 from dssim.process import DSProcess
 
@@ -66,16 +66,16 @@ class DSFilter(DSFuture):
             self.forward_events = (forward_events == True)  # True => True, None => False, False => False
 
     def create_metadata(self, **kwargs):
-        self.meta = _ConsumerMetadata()
+        self.meta = ConsumerMetadata()
         # A condition accepts any event 
         self.meta.cond.push(lambda e:True)
         return self.meta
 
     def __or__(self, other):
-        return DSFilterAggregated.build(self, other, any)
+        return DSCircuit.build(self, other, any)
 
     def __and__(self, other):
-        return DSFilterAggregated.build(self, other, all)
+        return DSCircuit.build(self, other, all)
    
     def __neg__(self):
         if not self.positive:
@@ -151,8 +151,8 @@ class DSFilter(DSFuture):
         return self.cond if isinstance(self.cond, DSProcess) else None        
 
 
-class DSFilterAggregated(DSFuture):
-    ''' DSFilterAggregated aggregates several DSFutures into AND / OR circuit.
+class DSCircuit(DSFuture):
+    ''' DSCircuit aggregates several DSFutures into AND / OR circuit.
     It evaluates the circuit after every event. The finished()
     1. DSFilter can be reevaluated, i.e. the finished() is not monostable. It can
     once return True and the next call return False (if reevaluate is True).
@@ -175,7 +175,7 @@ class DSFilterAggregated(DSFuture):
     @staticmethod
     def build(first, second, expr):
         if (first.expression == expr) and (second.expression == expr):
-            return DSFilterAggregated(expr, [first.signals] + [second.signals])
+            return DSCircuit(expr, [first.signals] + [second.signals])
         if (second.expression == expr) and (first.expression == DSFilter.ONE_LINER):
             first, second = second, first
         if (first.expression == expr) and (second.expression == DSFilter.ONE_LINER):
@@ -189,7 +189,7 @@ class DSFilterAggregated(DSFuture):
                 first.signals.append(second)
                 first.set_signals()
                 return first
-        return DSFilterAggregated(expr, [first, second])
+        return DSCircuit(expr, [first, second])
 
     def set_signals(self):
         self.setters, self.resetters = [], []
@@ -200,10 +200,10 @@ class DSFilterAggregated(DSFuture):
                 self.resetters.append(s)
 
     def __or__(self, other):
-        return DSFilterAggregated.build(self, other, any)
+        return DSCircuit.build(self, other, any)
 
     def __and__(self, other):
-        return DSFilterAggregated.build(self, other, all)
+        return DSCircuit.build(self, other, all)
 
     def __neg__(self):
         self.positive = False
@@ -214,7 +214,7 @@ class DSFilterAggregated(DSFuture):
         for el in self.setters:
             if not el.finished():
                 continue
-            if isinstance(el, DSFilterAggregated):
+            if isinstance(el, DSCircuit):
                 embedded = el.cond_value()
                 retval.update(embedded)
             elif hasattr(el, 'cond_value'):
@@ -236,7 +236,7 @@ class DSFilterAggregated(DSFuture):
     def _gather_results(self, event, futures):
         retval = []
         for fut in futures:
-            if isinstance(fut, DSFilter) or isinstance(fut, DSFilterAggregated):
+            if isinstance(fut, DSFilter) or isinstance(fut, DSCircuit):
                 retval.append(fut(event))
             else:
                 retval.append(fut.finished())

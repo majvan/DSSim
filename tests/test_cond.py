@@ -19,7 +19,7 @@ import unittest
 from contextlib import contextmanager
 from unittest.mock import Mock, MagicMock, call
 from dssim import DSSimulation, DSProcess, DSFuture
-from dssim.cond import DSFilter as _f, DSFilterAggregated
+from dssim.cond import DSFilter as _f, DSCircuit
 
 class TestDSFilter(unittest.TestCase):
 
@@ -871,7 +871,7 @@ class TestDSFilter(unittest.TestCase):
     The second part is for agregated 
     '''
 
-class TestDSFilterAggregated(unittest.TestCase):
+class TestDSCircuit(unittest.TestCase):
 
     def test0_build(self):
         sim = DSSimulation()
@@ -881,7 +881,7 @@ class TestDSFilterAggregated(unittest.TestCase):
         self.assertTrue(c.expression == any)
         self.assertTrue(c.positive)
         self.assertTrue(c.get_future_eps() == {fa._finish_tx, fb._finish_tx,})
-        self.assertEqual(repr(c), "<class 'dssim.cond.DSFilterAggregated'>0")
+        self.assertEqual(repr(c), "<class 'dssim.cond.DSCircuit'>0")
         self.assertEqual(str(c), "(DSFilter(a) | DSFilter(b))")
         self.assertTrue((c.setters, c.resetters) == ([fa, fb], []))
         d = fa | fb | fc
@@ -889,7 +889,7 @@ class TestDSFilterAggregated(unittest.TestCase):
         self.assertTrue(d.expression == any)
         self.assertTrue(d.positive)
         self.assertTrue(d.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
-        self.assertEqual(repr(d), "<class 'dssim.cond.DSFilterAggregated'>1")
+        self.assertEqual(repr(d), "<class 'dssim.cond.DSCircuit'>1")
         self.assertEqual(str(d), "(DSFilter(a) | DSFilter(b) | DSFilter(c))")
         self.assertTrue((d.setters, d.resetters) == ([fa, fb, fc], []))
 
@@ -898,7 +898,7 @@ class TestDSFilterAggregated(unittest.TestCase):
         self.assertTrue(c.expression == all)
         self.assertTrue(c.positive)
         self.assertTrue(c.get_future_eps() == {fa._finish_tx, fb._finish_tx,})
-        self.assertEqual(repr(c), "<class 'dssim.cond.DSFilterAggregated'>2")
+        self.assertEqual(repr(c), "<class 'dssim.cond.DSCircuit'>2")
         self.assertEqual(str(c), "(DSFilter(a) & DSFilter(b))")
         self.assertTrue((c.setters, c.resetters) == ([fa, fb], []))
         d = fa & fb & fc
@@ -906,7 +906,7 @@ class TestDSFilterAggregated(unittest.TestCase):
         self.assertTrue(d.expression == all)
         self.assertTrue(d.positive)
         self.assertTrue(d.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
-        self.assertEqual(repr(d), "<class 'dssim.cond.DSFilterAggregated'>3")
+        self.assertEqual(repr(d), "<class 'dssim.cond.DSCircuit'>3")
         self.assertEqual(str(d), "(DSFilter(a) & DSFilter(b) & DSFilter(c))")
         self.assertTrue((d.setters, d.resetters) == ([fa, fb, fc], []))
 

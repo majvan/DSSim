@@ -19,7 +19,7 @@ from dssim import DSSimulation, DSAbsTime, DSAbortException
 from dssim import DSSchedulable, DSFuture, DSProcess, DSCallback
 # other imports
 from dssim.process import DSTimeoutContext
-from dssim.cond import DSFilterAggregated, DSFilter
+from dssim.cond import DSCircuit, DSFilter
 from contextlib import asynccontextmanager
 
 
@@ -190,7 +190,7 @@ def get_event_loop():
 async def gather(*coros_or_futures, return_exceptions=False):
     loop = get_running_loop()
     filters = [DSFilter(c, sim=loop) for c in coros_or_futures]
-    f = DSFilterAggregated(all, filters, sim=loop)
+    f = DSCircuit(all, filters, sim=loop)
     retval = await f
     return [retval[f] for f in filters]  # values have to be sorted by input order
 
@@ -211,9 +211,9 @@ async def wait(aws, *, timeout=None, return_when=ALL_COMPLETED):
     loop = get_running_loop()
     filters = [DSFilter(c, sim=loop) for c in aws if inspect.iscoroutine]
     if return_when == ALL_COMPLETED:
-        f = DSFilterAggregated(all, filters)
+        f = DSCircuit(all, filters)
     else:
-        f = DSFilterAggregated(any, filters)
+        f = DSCircuit(any, filters)
     retval = await f
     return [retval[f] for f in filters]  # values have to be sorted by input order
 

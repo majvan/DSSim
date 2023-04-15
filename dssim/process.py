@@ -20,7 +20,7 @@ from contextlib import contextmanager
 from functools import wraps
 import inspect
 from dssim.base import DSTransferableCondition, SignalMixin, TrackEvent
-from dssim.pubsub import _ConsumerMetadata
+from dssim.pubsub import ConsumerMetadata
 from dssim.future import DSFuture
 
 
@@ -135,7 +135,7 @@ class DSProcess(DSFuture, SignalMixin):
         super().__init__(*args, **kwargs)
 
     def create_metadata(self, **kwargs):
-        self.meta = _ConsumerMetadata()
+        self.meta = ConsumerMetadata()
         return self.meta
 
     def __iter__(self):

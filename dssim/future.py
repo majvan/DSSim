@@ -16,7 +16,7 @@ This file implements future class (see the paradigm in async programming).
 '''
 from contextlib import contextmanager
 from dssim.base import SignalMixin, DSAbortException, TrackEvent
-from dssim.pubsub import _ConsumerMetadata, DSConsumer, DSProducer
+from dssim.pubsub import ConsumerMetadata, DSConsumer, DSProducer
 
 
 class DSFuture(DSConsumer, SignalMixin):
@@ -30,7 +30,7 @@ class DSFuture(DSConsumer, SignalMixin):
         self._finish_tx = DSProducer(name=self.name+'.future', sim=self.sim)
     
     def create_metadata(self, **kwargs):
-        self.meta = _ConsumerMetadata()
+        self.meta = ConsumerMetadata()
         self.meta.cond.push(self)  # sending to self => signaling the end of future
         return self.meta
 
