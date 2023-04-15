@@ -11,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.simulation import DSAbortException, DSSchedulable, DSComponent, DSSimulation
-from dssim.components.queue import Queue
+from dssim import DSAbortException, DSSchedulable, DSComponent, DSSimulation, Queue
 from random import randint
 
 SIM_TIME = 60 * 10

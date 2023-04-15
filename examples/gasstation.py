@@ -1,6 +1,4 @@
-from dssim.simulation import DSSimulation
-from dssim.processcomponent import DSProcessComponent
-from dssim.components.resource import Resource
+from dssim import DSSimulation, DSProcessComponent, Resource
 from random import randint
 
 GAS_STATION_SIZE = 200.0  # liters

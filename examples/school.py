@@ -1,6 +1,4 @@
-from dssim.simulation import DSComponent, DSProcess, DSSimulation
-from dssim.pubsub import DSProducer
-from dssim.processcomponent import DSProcessComponent
+from dssim import DSComponent, DSProcess, DSSimulation, DSProducer, DSProcessComponent
 from random import randint
 
 class School(DSComponent):

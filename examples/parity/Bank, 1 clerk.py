@@ -14,9 +14,7 @@
 '''
 The example is showing a code parity with example from salabim project
 '''
-from dssim.simulation import DSSimulation
-from dssim.processcomponent import DSProcessComponent
-from dssim.components.queue import Queue
+from dssim import DSSimulation, DSProcessComponent, Queue
 import random
 
 

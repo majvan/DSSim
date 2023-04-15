@@ -16,10 +16,10 @@
 Tests for simulation module
 '''
 import unittest
-from unittest.mock import Mock, MagicMock, call
-from dssim.simulation import DSSimulation, DSProcess, DSFuture, DSAbortException
-from dssim.cond import DSFilter as _f, DSFilterAggregated
 from contextlib import contextmanager
+from unittest.mock import Mock, MagicMock, call
+from dssim import DSSimulation, DSProcess, DSFuture
+from dssim.cond import DSFilter as _f, DSFilterAggregated
 
 class TestDSFilter(unittest.TestCase):
 

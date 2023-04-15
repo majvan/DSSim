@@ -14,9 +14,7 @@
 '''
 The example is showing a code parity with example from salabim project
 '''
-from dssim.simulation import DSSimulation, DSSchedulable
-from dssim.processcomponent import DSProcessComponent
-from dssim.pubsub import DSProducer
+from dssim import DSSimulation, DSProcessComponent, DSProducer
 import random
 
 

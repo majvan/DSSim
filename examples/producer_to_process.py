@@ -1,5 +1,4 @@
-from dssim.simulation import DSSimulation, DSProcess, DSComponent, DSCallback
-from dssim.components.clock import Timer
+from dssim import DSSimulation, DSProcess, DSComponent, DSCallback, Timer
 
 class MyComponent(DSComponent):
     def __init__(self, *args, **kwargs):

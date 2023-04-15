@@ -15,8 +15,7 @@
 Easy propagation delay component. The original producer is preserved at the
 producer output.
 '''
-from dssim.simulation import DSComponent, DSCallback
-from dssim.pubsub import DSProducer
+from dssim import DSComponent, DSCallback, DSProducer
 
 
 class Delay(DSComponent):

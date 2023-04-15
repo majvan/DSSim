@@ -16,8 +16,8 @@ Tests for pubsub module
 '''
 import unittest
 from unittest.mock import Mock, call
-from dssim.simulation import DSProcess, DSCallback, DSKWCallback, DSSimulation
-from dssim.pubsub import DSProducer, NotifierDict, NotifierRoundRobin, NotifierPriority
+from dssim import DSProcess, DSCallback, DSKWCallback, DSSimulation
+from dssim import DSProducer, NotifierDict, NotifierRoundRobin, NotifierPriority
 
 class SimMock:
     pass

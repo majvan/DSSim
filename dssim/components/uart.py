@@ -16,8 +16,7 @@ UART components- physical layer nad link layer.
 Link layer components can (but not necessarily has to) use physical layer
 '''
 import random as _rand
-from dssim.simulation import DSSchedulable, DSComponent, DSKWCallback, DSProcess
-from dssim.pubsub import DSProducer
+from dssim import DSSchedulable, DSComponent, DSKWCallback, DSProcess, DSProducer
 from dssim.utils import ParityComputer, ByteAssembler
 
 

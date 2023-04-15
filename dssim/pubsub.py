@@ -19,7 +19,64 @@ Consumer: an object which takes signal from producer and then stops
   further spread.
 '''
 from abc import abstractmethod
-from dssim.simulation import DSConsumer, SignalMixin, TrackEvent
+from dssim.base import StackedCond, DSComponent, TrackEvent, SignalMixin
+
+
+class _ConsumerMetadata:
+    def __init__(self):
+        self.cond = StackedCond()
+
+
+class DSConsumer(DSComponent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, *args, **kwargs)
+        self.create_metadata(**kwargs)
+       
+    def create_metadata(self, **kwargs):
+        self.meta = _ConsumerMetadata()
+        if 'cond' in kwargs:
+            self.meta.cond.push(kwargs['cond'])
+        return self.meta
+
+    def get_cond(self):
+        return self.meta.cond
+
+    @TrackEvent
+    @abstractmethod
+    def send(self, event):
+        ''' Receive event. This interface should be used only by DSSimulator instance as
+        the main dispatcher for directly sending messages.
+        Bypassing DSSimulator by calling the consumer send() directly would bypass the
+        condition check and could also result into dependency issues.
+        The name 'send' is required as python's generator.send() is de-facto consumer, too.
+        '''
+        raise NotImplementedError('Abstract method, use derived classes')
+
+
+class DSCallback(DSConsumer):
+    ''' A callback interface.
+    The callback interface is called from the simulator when a process sends events.
+    '''
+    def __init__(self, forward_method, cond=lambda e: True, **kwargs):
+        super().__init__(cond=cond, **kwargs)
+        # TODO: check if forward method is not a generator / process; otherwise throw an error
+        self.forward_method = forward_method
+
+    @TrackEvent
+    def send(self, event):
+        ''' The function calls the registered callback. '''
+        retval = self.forward_method(event)
+        return retval
+
+
+class DSKWCallback(DSCallback):
+
+    @TrackEvent
+    def send(self, event):
+        ''' The function calls registered callback providing that the event is dict. '''
+        retval = self.forward_method(**event)
+        return retval
+
 
 class NotifierDict():
     def __init__(self):
@@ -172,6 +229,7 @@ class DSProducer(DSConsumer, SignalMixin):
         with self.sim.consume(self):
             retval = await self.sim.wait(timeout, cond, val)
         return retval
+
 
 class DSTransformation(DSProducer):
     ''' A producer which takes a signal, transforms / wraps it to another signal and

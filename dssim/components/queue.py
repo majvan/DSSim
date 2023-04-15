@@ -14,8 +14,8 @@
 '''
 A queue of events with runtime flexibility of put / get events.
 '''
-from dssim.simulation import DSConsumer, SignalMixin
-from dssim.pubsub import DSProducer
+from dssim.base import SignalMixin
+from dssim.pubsub import DSConsumer, DSProducer
 
 
 class Queue(DSConsumer, SignalMixin):

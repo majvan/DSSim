@@ -17,11 +17,11 @@ Tests for simulation module
 '''
 import unittest
 from unittest.mock import Mock, MagicMock, call
-from dssim.simulation import DSSimulation, DSAbortException, DSFuture, DSSchedulable, DSProcess
-from dssim.simulation import StackedCond
-from dssim.simulation import DSSubscriberContextManager
-from dssim.simulation import DSTimeoutContext, DSTimeoutContextError
-from dssim.pubsub import DSProducer
+from dssim import DSSimulation, DSAbortException
+from dssim import DSFuture, DSSchedulable, DSProcess
+from dssim.process import DSSubscriberContextManager, DSTimeoutContext, DSTimeoutContextError
+from dssim import DSProducer
+from dssim.base import StackedCond
 
 class SomeObj:
     pass

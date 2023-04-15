@@ -14,9 +14,7 @@ the youngest prince to become king.
 This is demo of the trigger/waitfor mechanism,
 just to allow one waiter to be honored.
 """
-from dssim.simulation import DSSimulation, DSAbsTime as _abs
-from dssim.components.resource import Mutex
-from dssim.processcomponent import DSProcessComponent
+from dssim import DSSimulation, DSAbsTime as _abs, Mutex, DSProcessComponent
 import random
 
 

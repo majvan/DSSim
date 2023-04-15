@@ -24,9 +24,7 @@ The default values set in the code are as follows:
         From level n to level n: load_n_n = 100
         From level n to level 0: load_n_0 = 100
 """
-from dssim.simulation import DSSimulation
-from dssim.processcomponent import DSProcessComponent
-from dssim.components.queue import Queue
+from dssim import DSSimulation, DSProcessComponent, Queue
 import random
 
 

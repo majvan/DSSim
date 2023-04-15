@@ -11,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.simulation import DSProcess, DSComponent, DSSimulation
-from dssim.pubsub import DSProducer
+from dssim import DSProcess, DSComponent, DSSimulation, DSProducer
 
 class Switch(DSComponent):
 

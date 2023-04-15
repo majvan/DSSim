@@ -1,6 +1,4 @@
-from dssim.simulation import DSSimulation
-from dssim.components.queue import Queue
-from dssim.processcomponent import DSProcessComponent
+from dssim import DSSimulation, Queue, DSProcessComponent
 from random import randint
 
 class CustomerGenerator(DSProcessComponent):

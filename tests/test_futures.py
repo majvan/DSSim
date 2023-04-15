@@ -16,9 +16,9 @@
 Tests for simulation module
 '''
 import unittest
-from unittest.mock import Mock, MagicMock, call
-from dssim.simulation import DSSimulation, DSFuture, DSAbortException
 from contextlib import contextmanager
+from unittest.mock import Mock, MagicMock, call
+from dssim import DSSimulation, DSFuture, DSAbortException
 
 class SimMockWithObserveContext(Mock):
     def __init__(self, *args, **kwargs):

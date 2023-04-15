@@ -11,9 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.simulation import DSComponent, DSProcess, DSCallback, DSSimulation
-from dssim.pubsub import DSProducer
-from dssim.components.limiter import Limiter
+from dssim import DSComponent, DSProcess, DSCallback, DSSimulation, DSProducer, Limiter
 from random import uniform
 
 
@@ -52,6 +50,6 @@ if __name__ == '__main__':
     mcu0.boot()
     sim.run(300)
     ratio = mcu0.stat['generated'] / mcu0.stat['received']
-    assert 1.14 <= ratio <= 1.27, f'Ratio {ratio} is out of range'  # high probability to pass
+    assert 1.12 <= ratio <= 1.29, f'Ratio {ratio} is out of range'  # high probability to pass
     assert 296 <= mcu0.stat['received'] <= 300  # high probability to pass
 

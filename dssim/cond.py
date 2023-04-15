@@ -17,7 +17,9 @@ to be able create advanced expressions.
 '''
 import inspect
 import copy
-from dssim.simulation import DSFuture, DSProcess, _ConsumerMetadata
+from dssim.pubsub import _ConsumerMetadata
+from dssim.future import DSFuture
+from dssim.process import DSProcess
 
 class DSFilter(DSFuture):
     ''' Differences from DSFuture:

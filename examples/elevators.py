@@ -1,7 +1,5 @@
 from math import floor
-from dssim.processcomponent import DSProcessComponent
-from dssim.pubsub import DSProducer
-from dssim.simulation import DSCallback
+from dssim import DSProcessComponent, DSProducer
 
 class Person(DSProcessComponent):
     def __init__(self, init_floor, requested_floor, *args, **kwargs):

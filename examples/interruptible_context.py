@@ -1,6 +1,5 @@
-from dssim.simulation import DSSimulation, DSComponent, DSTimeoutContextError
-from dssim.pubsub import DSProducer, DSTransformation
-from dssim.simulation import DSProcess
+from dssim import DSSimulation, DSComponent
+from dssim import DSProducer, DSTransformation, DSProcess
 
 class MyComponent(DSComponent):
     def __init__(self, *args, **kwargs):

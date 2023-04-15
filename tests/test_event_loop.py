@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Tests for pubsub module
+Tests for event loop (asyncio)
 '''
 import unittest
 from dssim.parity.asyncio import DSAsyncSimulation
@@ -35,5 +35,3 @@ class TestEventLoop(unittest.TestCase):
         sim.schedule_event(10, 'test')
         sim.run_until_complete(p)
         self.assertEqual(sim.time, 1)
-
-

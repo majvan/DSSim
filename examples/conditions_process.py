@@ -1,5 +1,5 @@
-from dssim.simulation import DSProcess, DSSchedulable, DSSimulation
-from dssim.cond import DSFilter as _f
+from dssim import DSProcess, DSSchedulable, DSSimulation, DSFilter as _f
+
 
 @DSSchedulable
 def pusher(name, where_to_push):

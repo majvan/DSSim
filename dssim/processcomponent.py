@@ -15,8 +15,10 @@
 The file provides process-centric API to easy the design of process-oriented
 application.
 '''
-from dssim.simulation import DSSchedulable, DSComponent, DSProcess, DSAbortException
 import inspect
+from dssim.base import DSComponent, DSAbortException
+from dssim.process import DSProcess
+from dssim.process import DSSchedulable
 
 class DSProcessComponent(DSComponent):
     _dscomponent_instances = 0

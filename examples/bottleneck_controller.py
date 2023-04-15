@@ -11,10 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.simulation import DSComponent, DSProcess, DSCallback, DSSimulation
-from dssim.pubsub import DSProducer
-from dssim.components.limiter import Limiter
-
+from dssim import DSComponent, DSCallback, DSProcess, DSProducer, DSSimulation, Limiter
 
 class MCU(DSComponent):
     def __init__(self, **kwargs):

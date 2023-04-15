@@ -1,6 +1,4 @@
-from dssim.simulation import DSComponent, DSCallback, DSSimulation, DSTrackableEvent
-from dssim.pubsub import DSProducer
-from dssim.cond import DSFilter as _f
+from dssim import DSComponent, DSCallback, DSSimulation, DSTrackableEvent, DSProducer, DSFilter as _f
 
 
 class Board(DSComponent):

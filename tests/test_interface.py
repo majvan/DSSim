@@ -16,7 +16,7 @@ Tests for instance module
 '''
 import unittest
 from unittest.mock import Mock
-from dssim.simulation import DSComponent
+from dssim import DSComponent
 
 class MyComponent(DSComponent):
     pass

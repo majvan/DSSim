@@ -1,5 +1,5 @@
-from dssim.simulation import DSComponent, DSSimulation, DSProcess
-from dssim.pubsub import NotifierDict, NotifierRoundRobin, NotifierPriority, DSProducer
+from dssim import DSComponent, DSSimulation, DSProcess
+from dssim import NotifierDict, NotifierRoundRobin, NotifierPriority, DSProducer
 
 class SingleProducerMultipleConsumers(DSComponent):
     def __init__(self, notifier_method, *args, **kwargs):

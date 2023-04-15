@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-from dssim.simulation import DSSimulation, DSAbsTime
-from dssim.simulation import DSAbortException, DSTimeoutContext
-from dssim.simulation import DSSchedulable, DSFuture, DSProcess, DSCallback
+from dssim import DSSimulation, DSAbsTime, DSAbortException
+from dssim import DSSchedulable, DSFuture, DSProcess, DSCallback
+# other imports
+from dssim.process import DSTimeoutContext
 from dssim.cond import DSFilterAggregated, DSFilter
 from contextlib import asynccontextmanager
 

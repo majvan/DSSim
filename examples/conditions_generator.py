@@ -11,8 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim.cond import DSFilter as f
-from dssim.simulation import DSSimulation
+from dssim import DSSimulation, DSFilter as f
 
 
 def return_apologize_after_10():
