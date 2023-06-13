@@ -21,7 +21,7 @@ from dssim.pubsub import ConsumerMetadata, DSConsumer, DSProducer
 
 class DSFuture(DSConsumer, SignalMixin):
     ''' Typical future which can be used in the simulations.
-    This represents a base for all awaitables.
+    A future can be 'signaled', i.e. finished.
     '''
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

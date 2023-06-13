@@ -23,15 +23,20 @@ from dssim.future import DSFuture
 from dssim.process import DSProcess
 
 class DSFilter(DSFuture):
-    ''' Differences from DSFuture:
+    ''' A future which can be used in the circuit. It can be used as a signal to a
+    circuit.
+
+    Features:
     1. DSFilter can be reevaluated, i.e. the finished() is not monostable. It can
     once return True and the next call return False (if reevaluate is True).
     2. DSFilter can be pulsed, i.e. the finished() never returns True, but the call
     to DSFilter can return True (signaled). This requires the filter to be reevaluated.
     3. DSFilter can be negated. This is possible: filter = -DSFilter(...).
     Such expression will always change the filter policy to be pulsed.
-    4. DSFilter forwards all the events to the wrapped DSProcess.
+    4. DSFilter can forward all the events to the attached cond (default for generators
+    and coroutines).
     '''
+
     class SignalType:
         DEFAULT = 0  # Monostable. If once signaled, always signaled
         REEVALUATE = 1  # Reevaluated after every event, i.e. the value changes after every event
@@ -152,14 +157,11 @@ class DSFilter(DSFuture):
 
 
 class DSCircuit(DSFuture):
-    ''' DSCircuit aggregates several DSFutures into AND / OR circuit.
-    It evaluates the circuit after every event. The finished()
-    1. DSFilter can be reevaluated, i.e. the finished() is not monostable. It can
-    once return True and the next call return False (if reevaluate is True).
-    2. DSFilter can be pulsed, i.e. the finished() never returns True, but the call
-    to DSFilter can return True (signaled). This requires the filter to be reevaluated.
-    3. DSFilter can be negated. This is possible: filter = -DSFilter(...).
-    Such expression will always change the filter policy to be pulsed.
+    ''' DSCircuit aggregates several DSFutures / DSCircuits into logical
+    circuit (AND / OR).
+
+    It evaluates the circuit after every event by propagating down (to the signals)
+    all the events.
     '''
 
     def __init__(self, expression, signals, *args, **kwargs):
