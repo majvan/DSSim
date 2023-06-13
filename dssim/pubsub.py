@@ -20,7 +20,8 @@ Consumer: an object which takes signal from producer and then stops
   further spread.
 '''
 from abc import abstractmethod
-from dssim.base import StackedCond, DSComponent, TrackEvent, SignalMixin
+from typing import List, Dict, Any, Type, Generator, Callable, Tuple, Iterator
+from dssim.base import TimeType, CondType, StackedCond, DSComponent, DSEvent, EventType, EventRetType, SignalMixin
 
 
 class ConsumerMetadata:
@@ -28,12 +29,36 @@ class ConsumerMetadata:
         self.cond = StackedCond()
 
 
+class DSTrackableEvent(DSEvent):
+    ''' The class encapsulates an event and adds a trace log for producers '''
+
+    def __init__(self, value: Any) -> None:
+        self.value = value
+        self.producers: List[DSProducer] = []
+
+    def track(self, producer: "DSProducer") -> None:
+        self.producers.append(producer)
+
+    def __repr__(self) -> str:
+        return f'DSTrackableEvent({self.value})'
+
+
+def TrackEvent(fcn):
+    ''' Wrapper (decorator) for methods which add new log into trackable event '''
+
+    def api(self, event: EventType, *args, **kwargs) -> Any:
+        if isinstance(event, DSTrackableEvent):
+            event.producers.append(self)
+        return fcn(self, event, *args, **kwargs)
+    return api
+
+
 class DSConsumer(DSComponent):
     def __init__(self, *args, **kwargs):
         super().__init__(self, *args, **kwargs)
         self.create_metadata(**kwargs)
        
-    def create_metadata(self, **kwargs):
+    def create_metadata(self, **kwargs) -> ConsumerMetadata:
         self.meta = ConsumerMetadata()
         if 'cond' in kwargs:
             self.meta.cond.push(kwargs['cond'])
@@ -58,13 +83,12 @@ class DSCallback(DSConsumer):
     ''' A callback interface.
     The callback interface is called from the simulator when a process sends events.
     '''
-    def __init__(self, forward_method, cond=lambda e: True, **kwargs):
+    def __init__(self, forward_method: Callable[..., EventType], cond: CondType = lambda e: True, **kwargs):
         super().__init__(cond=cond, **kwargs)
-        # TODO: check if forward method is not a generator / process; otherwise throw an error
         self.forward_method = forward_method
 
     @TrackEvent
-    def send(self, event):
+    def send(self, event: EventType):
         ''' The function calls the registered callback. '''
         retval = self.forward_method(event)
         return retval
@@ -73,99 +97,156 @@ class DSCallback(DSConsumer):
 class DSKWCallback(DSCallback):
 
     @TrackEvent
-    def send(self, event):
+    def send(self, event: dict) -> EventType:
         ''' The function calls registered callback providing that the event is dict. '''
         retval = self.forward_method(**event)
         return retval
+    
+
+class VoidConsumer(DSConsumer):
+    ''' A void consumer which should never be called.
+    It is even not assigned to an simulation instance.
+    The singleton instance of this consumer is used only to satisfy
+    not-null consumer type requirements in some default functions
+    to simplify the code.
+    '''
+    def __init__(self, *args, **kwargs) -> None:
+        self.name: str = "Default source / consumer"
+
+    def send(self, event: EventType) -> None:
+        raise RuntimeError('A void consumer is never expected to be called.')
+
+void_consumer = VoidConsumer()
 
 
-class NotifierDict():
-    def __init__(self):
-        self.d = {}
+class NotifierPolicy:
+    @abstractmethod
+    def __iter__(self) -> Iterator: ...
 
-    def __iter__(self):
+    @abstractmethod
+    def rewind(self) -> None: ...
+
+    @abstractmethod
+    def inc(self, key: DSConsumer, **kwargs: Any) -> None: ...
+
+    @abstractmethod
+    def dec(self, key: DSConsumer, **kwargs: Any) -> None: ...
+
+    @abstractmethod
+    def cleanup(self) -> None: ...
+
+
+NotifierTypeIter = Tuple[DSConsumer, int]
+NotifierDictItemType = int
+NotifierDictItemsType = Dict[DSConsumer, NotifierDictItemType]
+
+class NotifierDict(NotifierPolicy):
+    def __init__(self) -> None:
+        self.d: NotifierDictItemsType = {}
+
+    def __iter__(self) -> Iterator[NotifierTypeIter]:
         return iter(list(self.d.items()))
 
-    def rewind(self, *args, **kwargs):
+    def rewind(self) -> None:
         return
 
-    def inc(self, key, **kwargs):
+    def inc(self, key: DSConsumer, **kwargs: Any) -> None:
         self.d[key] = self.d.get(key, 0) + 1
 
-    def dec(self, key, **kwargs):
+    def dec(self, key: DSConsumer, **kwargs: Any) -> None:
         self.d[key] = self.d.get(key, 0) - 1
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         old_dict = self.d
         new_dict = {k: v for k, v in old_dict.items() if v > 0}
         self.d = new_dict
 
 
-class NotifierRoundRobin():
-    def __init__(self):
-        self.queue = []
+class NotifierRoundRobinItem:
+    def __init__(self, key: DSConsumer, value: int) -> None:
+        self.key, self.value = key, value
 
-    def __iter__(self):
-        self.current_index = 0
-        self.max_index = len(self.queue)
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, tuple):
+            return (self.key, self.value) == other
+        elif isinstance(other, NotifierRoundRobinItem):
+            return (self.key, self.value) == (other.key, other.value)
+        else:
+            raise NotImplementedError(f"Cannot compare {self} and {other}")
+
+
+NotifierRRItemType = NotifierRoundRobinItem
+NotifierRRItemsType = List[NotifierRoundRobinItem]
+
+class NotifierRoundRobin(NotifierPolicy):
+    def __init__(self) -> None:
+        self.queue: NotifierRRItemsType = []
+
+    def __iter__(self) -> "NotifierRoundRobin":
+        self.current_index: int = 0
+        self.max_index: int = len(self.queue)
         return self
 
-    def __next__(self):
+    def __next__(self) -> NotifierTypeIter:
         if self.current_index >= self.max_index:
             raise StopIteration
-        retval = self.queue[self.current_index]
+        item = self.queue[self.current_index]
         self.current_index += 1
-        return retval
+        return (item.key, item.value)
 
-    def rewind(self, *args, **kwargs):
+    def rewind(self) -> None:
         self.queue = self.queue[self.current_index:] + self.queue[:self.current_index:]
 
-    def inc(self, key, **kwargs):
+    def inc(self, key: DSConsumer, **kwargs: Any) -> None:
         for item in self.queue:
-            if item[0] == key:
-                item[1] += 1
+            if item.key == key:
+                item.value += 1
                 return
-        self.queue.append([key, 1])
+        self.queue.append(NotifierRoundRobinItem(key, 1))
 
-    def dec(self, key, **kwargs):
+    def dec(self, key: DSConsumer, **kwargs: Any) -> None:
         for item in self.queue:
-            if item[0] == key:
-                item[1] -= 1
+            if item.key == key:
+                item.value -= 1
                 return
         raise ValueError('A key was supposed to be in the queue')
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         new_queue = []
         for item in self.queue:
-            if item[1] > 0:
+            if item.value > 0:
                 new_queue.append(item)
         self.queue = new_queue
 
 
-class NotifierPriority():
-    def __init__(self):
-        self.d = {}
+NotifierPriorityItemType = Tuple[int, Dict[DSConsumer, int]]
+NotifierPriorityItemsType = Dict[int, Dict[DSConsumer, int]]
+NotifierPriorityItemIter = Tuple[DSConsumer, int]
 
-    def __iter__(self):
-        return iter(list(self.iterate_by_priority()))
+class NotifierPriority(NotifierPolicy):
+    def __init__(self) -> None:
+        self.d: NotifierPriorityItemsType = {}
 
-    def iterate_by_priority(self):
+    def __iter__(self) -> Any: #Iterator[NotifierPriorityItemType]:
+        return iter(list(self._iterate_by_priority()))
+
+    def _iterate_by_priority(self) -> Iterator[NotifierPriorityItemIter]:
         for prio in sorted(self.d.keys()):
             for d in self.d[prio].items():
                 yield d
 
-    def rewind(self, *args, **kwargs):
+    def rewind(self) -> None:
         return
 
-    def inc(self, key, priority, **kwargs):
+    def inc(self, key: DSConsumer, priority: int = 0, **kwargs: Any) -> None:
         priority_dict = self.d[priority] = self.d.get(priority, {})
         priority_dict[key] = priority_dict.get(key, 0) + 1
 
-    def dec(self, key, priority, **kwargs):
+    def dec(self, key: DSConsumer, priority: int = 0, **kwargs: Any) -> None:
         priority_dict = self.d[priority] = self.d.get(priority, {})
         priority_dict[key] = priority_dict.get(key, 0) - 1
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         new_prio_dict = {}
         for key, old_dict in self.d.items():
             new_dict = {k: v for k, v in old_dict.items() if v > 0}
@@ -176,7 +257,7 @@ class NotifierPriority():
 
 class DSProducer(DSConsumer, SignalMixin):
     ''' Full feature producer which consume signal events and resends it to the attached consumers. '''
-    def __init__(self, notifier=NotifierDict, **kwargs):
+    def __init__(self, notifier: Type[NotifierPolicy] = NotifierDict, **kwargs) -> None:
         super().__init__(**kwargs)
         self.subs = {
             'pre': notifier(),
@@ -186,18 +267,16 @@ class DSProducer(DSConsumer, SignalMixin):
         # A producer takes any event - no conditional
         self.meta.cond.push(lambda e: True)
 
-    def add_subscriber(self, subscriber, phase='act', **kwargs):
-        if subscriber:
-            subs = self.subs[phase]
-            subs.inc(subscriber, **kwargs)
+    def add_subscriber(self, subscriber: DSConsumer, phase: str = 'act', **kwargs: Any) -> None:
+        subs = self.subs[phase]
+        subs.inc(subscriber, **kwargs)
 
-    def remove_subscriber(self, subscriber, phase='act', **kwargs):
-        if subscriber:
-            subs = self.subs[phase]
-            subs.dec(subscriber, **kwargs)
+    def remove_subscriber(self, subscriber: DSConsumer, phase: str = 'act', **kwargs: Any) -> None:
+        subs = self.subs[phase]
+        subs.dec(subscriber, **kwargs)
 
     @TrackEvent
-    def send(self, event):
+    def send(self, event: EventType) -> None:
         ''' Send signal object to the subscribers '''
 
         # Emit the signal to all pre-observers
@@ -221,12 +300,12 @@ class DSProducer(DSConsumer, SignalMixin):
         for queue in self.subs.values():
             queue.cleanup()
 
-    def gwait(self, timeout=float('inf'), cond=lambda e: False, val=True):
+    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
         with self.sim.consume(self):
             retval = yield from self.sim.gwait(timeout, cond, val)
         return retval
 
-    async def wait(self, timeout=float('inf'), cond=lambda e: False, val=True):
+    async def wait(self, timeout: TimeType = float('inf'), cond: CondType =lambda e: False, val: EventRetType = True) -> EventType:
         with self.sim.consume(self):
             retval = await self.sim.wait(timeout, cond, val)
         return retval
@@ -237,23 +316,20 @@ class DSTransformation(DSProducer):
     sends to a consumer.
     The typical use case is to transform events from one endpoint to a process as exceptions.
     '''
-    def __init__(self, ep, transformation, *args, **kwargs):
+    def __init__(self, ep: DSProducer, transformation: Callable[[EventType], EventType], *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.ep = ep
         self.transformation = transformation
 
-    def add_subscriber(self, subscriber, *args, **kwargs):
+    def add_subscriber(self, subscriber: DSConsumer, *args: Any, **kwargs: Any) -> None:
         self.ep.add_subscriber(self, *args, **kwargs)
-        retval = super().add_subscriber(subscriber, *args, **kwargs)
-        return retval
+        super().add_subscriber(subscriber, *args, **kwargs)
     
-    def remove_subscriber(self, subscriber, *args, **kwargs):
+    def remove_subscriber(self, subscriber: DSConsumer, *args: Any, **kwargs: Any) -> None:
         self.ep.remove_subscriber(self, *args, **kwargs)
-        retval = super().remove_subscriber(subscriber, *args, **kwargs)
-        return retval
+        super().remove_subscriber(subscriber, *args, **kwargs)
 
     @TrackEvent
-    def send(self, event):
+    def send(self, event: EventType) -> None:
         event = self.transformation(event)
-        retval = super().send(event)
-        return retval
+        super().send(event)

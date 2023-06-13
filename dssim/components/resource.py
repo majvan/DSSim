@@ -16,7 +16,8 @@ A resource is an object representing a pool of abstract resources with amount fi
 Compared to queue, resource works with non-integer amounts but it does not contain object
 in the pool, just an abstract pool level information (e.g. amount of water in a tank).
 '''
-from dssim.base import DSComponent
+from typing import Any, Generator
+from dssim.base import TimeType, EventType, DSComponent
 from dssim.pubsub import DSProducer
 
 
@@ -26,7 +27,7 @@ class Resource(DSComponent):
     not individual objects. The amount can be divisable to any extent, it is represented
     by float type.
     '''
-    def __init__(self, amount=0, capacity=float('inf'), *args, **kwargs):
+    def __init__(self, amount: float = 0, capacity: float = float('inf'), *args: Any, **kwargs: Any) -> None:
         ''' Init Resource component.
         Capacity is max. capacity the resource can handle.
         Amount is initial amount of the resources.
@@ -38,53 +39,70 @@ class Resource(DSComponent):
         self.amount = amount
         self.capacity = capacity
 
-    def put_nowait(self, amount):
+    def put_nowait(self, amount: float) -> float:
         if self.amount + amount > self.capacity:
-            retval = None
+            retval: float = 0
         else:
             self.amount += amount
             self.tx_changed.schedule_event(0, 'resource changed')
-        return amount
+            retval = amount
+        return retval
 
-    async def put(self, timeout=float('inf'), amount=1):
+    async def put(self, timeout: TimeType = float('inf'), amount: float = 1) -> float:
         ''' Put amount into the resource pool.  '''
         with self.sim.consume(self.tx_changed):
-            retval = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
-        self.amount += amount
-        self.tx_changed.schedule_event(0, 'resource changed')
+            obj = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
+        if obj is None:
+            retval: float = 0
+        else:
+            self.amount += amount
+            self.tx_changed.schedule_event(0, 'resource changed')
+            retval = amount
+        return retval
 
-    def gput(self, timeout=float('inf'), amount=1):
+    def gput(self, timeout: TimeType = float('inf'), amount: float = 1) -> Generator[EventType, None, float]:
         ''' Put amount into the resource pool.  '''
         with self.sim.consume(self.tx_changed):
-            retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
-        self.amount += amount
-        self.tx_changed.schedule_event(0, 'resource changed')
+            obj = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
+        if obj is None:
+            retval: float = 0
+        else:
+            self.amount += amount
+            self.tx_changed.schedule_event(0, 'resource changed')
+            retval = amount
+        return retval
 
-
-    def get_nowait(self, amount=1):
+    def get_nowait(self, amount: float = 1):
         if amount > self.amount:
-            retval = None
+            retval: float = 0
         else:
             self.amount -= amount
             self.tx_changed.schedule_event(0, 'resource changed')
-        return amount
-
-    async def get(self, timeout=float('inf'), amount=1):
-        ''' Get resource. If the resource has not enough amount, wait to have enough requested amount. '''
-        with self.sim.consume(self.tx_changed):
-            retval = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount >= amount)
-        if retval is not None:
-            self.amount -= amount
-            self.tx_changed.schedule_event(0, 'resource changed')
+            retval = amount
         return retval
 
-    def gget(self, timeout=float('inf'), amount=1):
+    async def get(self, timeout: TimeType = float('inf'), amount: float = 1) -> float:
         ''' Get resource. If the resource has not enough amount, wait to have enough requested amount. '''
         with self.sim.consume(self.tx_changed):
-            retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount >= amount)
-        if retval is not None:
+            obj = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount >= amount)
+        if obj is None:
+            retval: float = 0
+        else:
             self.amount -= amount
             self.tx_changed.schedule_event(0, 'resource changed')
+            retval = amount
+        return retval
+
+    def gget(self, timeout: TimeType = float('inf'), amount: float = 1) -> Generator[EventType, None, float]:
+        ''' Get resource. If the resource has not enough amount, wait to have enough requested amount. '''
+        with self.sim.consume(self.tx_changed):
+            obj = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount >= amount)
+        if obj is None:
+            retval: float = 0
+        else:
+            self.amount -= amount
+            self.tx_changed.schedule_event(0, 'resource changed')
+            retval = amount
         return retval
 
 
@@ -132,3 +150,22 @@ class Mutex(Resource):
         # release the mutex only if we own the acquired mutex
         if self.last_owner == self.sim.parent_process:
             self.release()
+
+
+# In the following, self is in fact of type DSProcessComponent, but PyLance makes troubles with variable types
+class ResourceMixin:
+    async def get(self: Any, resource: Resource, amount: float = 1, timeout: TimeType = float('inf')) -> float:
+        retval = await resource.get(timeout, amount)
+        return retval
+            
+    def gget(self: Any, resource: Resource, amount: float = 1, timeout: TimeType = float('inf')) -> Generator[EventType, None, float]:
+        retval = yield from resource.gget(timeout, amount)
+        return retval
+            
+    async def put(self: Any, resource: Resource, amount: float = 1, timeout: TimeType = float('inf')) -> float:
+        retval = await resource.put(timeout, amount)
+        return retval
+
+    def gput(self: Any, resource: Resource, amount: float = 1, timeout: TimeType = float('inf')) -> Generator[EventType, None, float]:
+        retval = yield from resource.gput(timeout, amount)
+        return retval

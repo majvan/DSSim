@@ -14,33 +14,36 @@
 '''
 This file implements future class (see the paradigm in async programming).
 '''
+from typing import Any, Set, Optional, Generator
 from contextlib import contextmanager
-from dssim.base import SignalMixin, DSAbortException, TrackEvent
-from dssim.pubsub import ConsumerMetadata, DSConsumer, DSProducer
+from dssim.base import TimeType, EventType
+from dssim.base import SignalMixin, DSAbortException
+from dssim.pubsub import ConsumerMetadata, DSConsumer, DSProducer, TrackEvent
 
 
 class DSFuture(DSConsumer, SignalMixin):
     ''' Typical future which can be used in the simulations.
     A future can be 'signaled', i.e. finished.
     '''
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         # We store the latest value or excpetion. Useful to check the status after finish.
-        self.value, self.exc = None, None
+        self.value: Any = None
+        self.exc: Optional[Exception] = None
         self._finish_tx = DSProducer(name=self.name+'.future', sim=self.sim)
     
-    def create_metadata(self, **kwargs):
+    def create_metadata(self, **kwargs) -> ConsumerMetadata:
         self.meta = ConsumerMetadata()
         self.meta.cond.push(self)  # sending to self => signaling the end of future
         return self.meta
 
-    def get_future_eps(self):
+    def get_future_eps(self) -> Set[DSProducer]:
         return {self._finish_tx,}
 
-    def finished(self):
+    def finished(self) -> bool:
         return (self.value, self.exc) != (None, None)
 
-    def abort(self, exc=None):
+    def abort(self, exc: Optional[Exception] = None) -> None:
         ''' Aborts an awaitable with an exception. '''
         if exc is None:
             exc = DSAbortException(self)
@@ -51,7 +54,7 @@ class DSFuture(DSConsumer, SignalMixin):
         except Exception as e:
             self.fail(e)
 
-    def gwait(self, timeout=float('inf')):
+    def gwait(self, timeout: TimeType = float('inf')) -> Generator[EventType, EventType, EventType]:
         retval = None
         if not self.finished():
             with self.sim.observe_pre(self):
@@ -60,7 +63,7 @@ class DSFuture(DSConsumer, SignalMixin):
             raise self.exc
         return retval
 
-    async def wait(self, timeout=float('inf')):
+    async def wait(self, timeout: TimeType = float('inf')) -> EventType:
         retval = None
         if not self.finished():
             with self.sim.observe_pre(self):
@@ -69,21 +72,23 @@ class DSFuture(DSConsumer, SignalMixin):
             raise self.exc
         return retval
 
-    def __await__(self):
+    def __await__(self) -> Generator[EventType, EventType, EventType]:
         retval = yield from self.gwait()
         return retval
 
-    def finish(self, value):
+    def finish(self, value: EventType) -> EventType:
         self.value = value
         self.sim.cleanup(self)
         self._finish_tx.signal(self)
+        return value
     
-    def fail(self, exc):
+    def fail(self, exc: Exception) -> Exception:
         self.exc = exc
         self.sim.cleanup(self)
         self._finish_tx.signal(self)
+        return exc
 
     @TrackEvent
-    def send(self, event):
+    def send(self, event: EventType) -> EventType:
         self.finish(event)
         return event

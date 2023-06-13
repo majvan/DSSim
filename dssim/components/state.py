@@ -16,45 +16,46 @@ A resource is an object representing a pool of abstract resources with amount fi
 Compared to queue, resource works with non-integer amounts but it does not contain object
 in the pool, just an abstract pool level information (e.g. amount of water in a tank).
 '''
-from dssim.base import DSComponent
+from typing import Dict, Any
+from dssim.base import TimeType, EventType, CondType, DSComponent
 from dssim.pubsub import DSProducer
 
 
 class State(DSComponent):
     ''' The State components holds a dictionary of state variables and their values.
     '''
-    def __init__(self, state={}, *args, **kwargs):
+    def __init__(self, state: Dict = {}, *args: Any, **kwargs: Any) -> None:
         ''' Init Queue component. No special arguments here. '''
         super().__init__(*args, **kwargs)
         self.tx_changed = DSProducer(name=self.name+'.tx', sim=self.sim)
         self.state = state
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: Any, value: Any) -> bool:
         if (key not in self.state) or self.state[key] != value:
             self.state[key] = value
             self.tx_changed.schedule_event(0, 'resource changed')
             return True
         return False
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: Any) -> Any:
         return self.state[key]
 
-    def get(self, key, default=None):
+    def get(self, key: Any, default: Any = None) -> Any:
         return self.state.get(key, default)
 
-    def check_and_gwait(self, timeout=float('inf'), cond=lambda e:True):
+    def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True) -> EventType:
         ''' Wait for change in the state and returns when the condition is met '''
         with self.sim.consume(self.tx_changed):
             retval = yield from self.sim.check_and_gwait(timeout, cond=cond)
         return retval
 
-    async def check_and_wait(self, timeout=float('inf'), cond=lambda e:True):
+    async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True) -> EventType:
         ''' Wait for change in the state and returns when the condition is met '''
         with self.sim.consume(self.tx_changed):
             retval = await self.sim.check_and_wait(timeout, cond=cond)
         return retval
 
-    async def wait(self, timeout=float('inf'), cond=lambda e:True):
+    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True) -> EventType:
         ''' Wait for change in the state and returns when the condition is met '''
         with self.sim.consume(self.tx_changed):
             retval = await self.sim.wait(timeout, cond=cond)

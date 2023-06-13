@@ -14,7 +14,8 @@
 '''
 Simple controllable bottleneck components
 '''
-from dssim.base import DSComponent
+from typing import Any, List
+from dssim.base import EventType, DSComponent
 from dssim.pubsub import DSCallback, DSProducer
 from dssim.process import DSProcess
 
@@ -23,15 +24,19 @@ class IntegralLimiter(DSComponent):
     ''' Limiter which passes events with max. limited throughput.
     The limiter informs with constant frequency how many events were sent since last report.
     '''
-    def __init__(self, throughput, report_frequency=1, accumulated_report=True, **kwargs):
+    def __init__(self, throughput: float, report_frequency: float = 1, accumulated_report: bool = True, **kwargs: Any) -> None:
         ''' Initialize the limiter with max. throughput of events equal to frequency '''
         super().__init__(**kwargs)
-        self.buffer = []
+        self.buffer: List[EventType] = []
         self.throughput = throughput
         self.report_period = 1 / report_frequency
-        self.accumulated_rate = 0
+        self.accumulated_rate: float = 0
         self.accumulated_report = accumulated_report
-        self.sim.start(self.push())
+        self.pusher = DSProcess(
+            self._push(),
+            name=self.name + '.rx_push',
+            sim=self.sim,
+        ).schedule(0)
         self.rx = DSCallback(
             self._on_event,
             name=self.name + '.rx',
@@ -39,11 +44,11 @@ class IntegralLimiter(DSComponent):
         )
         self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
 
-    def _on_event(self, event):
+    def _on_event(self, event: EventType) -> None:
         ''' Feed consumer handler '''
         self.buffer.append(event)
 
-    async def push(self):
+    async def _push(self) -> None:
         ''' Push another event after events accumlated over time '''
         while True:
             await self.sim.wait(self.report_period)
@@ -64,33 +69,32 @@ class Limiter(DSComponent):
     The limiter informs with variable frequency (depending on throughput) about constant
     number of event passed.
     '''
-    def __init__(self, throughput, **kwargs):
+    def __init__(self, throughput: float, **kwargs: Any) -> None:
         ''' Throughput limitation for incoming events '''
         super().__init__(**kwargs)
-        self.buffer = []
+        self.buffer: List[EventType] = []
         self.report_period = self._compute_period(throughput)
         self._update_period = self.report_period
         self.pusher = DSProcess(
             self._push(),
             name=self.name + '.rx_push',
             sim=self.sim,
-        )
-        self.pusher.schedule(0)
+        ).schedule(0)
         self.rx = DSCallback(self._on_event, name=self.name + '.rx', sim=self.sim)
         self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
 
-    def _compute_period(self, throughput):
+    def _compute_period(self, throughput: float) -> float:
         ''' Compute when is the next time to report '''
         return 1 / throughput if throughput else float('inf')
 
-    def set_throughput(self, throughput):
+    def set_throughput(self, throughput: float) -> None:
         ''' Set throughput on runtime '''
         self._update_period = self._compute_period(throughput)
         if self.report_period == self._update_period:
             return
         self.pusher.signal(True)
 
-    def _on_event(self, event):
+    def _on_event(self, event: EventType) -> None:
         ''' Feed consumer handler '''
         if self.buffer:
             self.buffer.append(event)
@@ -98,7 +102,7 @@ class Limiter(DSComponent):
             self.buffer.append(event)
             self.pusher.signal(True)
 
-    async def _push(self):
+    async def _push(self) -> None:
         ''' Push another event after computed throughtput time '''
         previous_time = float('-inf')
         while True:

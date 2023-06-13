@@ -14,7 +14,8 @@
 '''
 A queue of events with runtime flexibility of put / get events.
 '''
-from dssim.base import SignalMixin
+from typing import Any, List, Optional, Generator
+from dssim.base import TimeType, EventType, CondType, SignalMixin, DSAbortException, DSComponent
 from dssim.pubsub import DSConsumer, DSProducer
 
 
@@ -24,17 +25,17 @@ class Queue(DSConsumer, SignalMixin):
     a queued event.
     Queue does not use any routing of signals.
     '''
-    def __init__(self, capacity=float('inf'), *args, **kwargs):
+    def __init__(self, capacity: float = float('inf'), *args: Any, **kwargs: Any) -> None:
         ''' Init Queue component. No special arguments here. '''
         super().__init__(*args, **kwargs)
         self.tx_changed = DSProducer(name=self.name+'.tx', sim=self.sim)
         self.capacity = capacity
-        self.queue = []
+        self.queue: List[EventType] = []
 
-    def send(self, event):
+    def send(self, event: EventType) -> EventType:
         return self.put_nowait(event) is not None
 
-    def put_nowait(self, *obj):
+    def put_nowait(self, *obj: EventType) -> Optional[EventType]:
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         if len(self) + len(obj) <= self.capacity:
             self.queue += list(obj)
@@ -44,7 +45,7 @@ class Queue(DSConsumer, SignalMixin):
             retval = None
         return retval
 
-    async def put(self, timeout=float('inf'), *obj):
+    async def put(self, timeout: TimeType = float('inf'), *obj: EventType) -> EventType:
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         with self.sim.consume(self.tx_changed):
             retval = await self.sim.check_and_wait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)  # wait while first element does not match the cond
@@ -53,7 +54,7 @@ class Queue(DSConsumer, SignalMixin):
             self.tx_changed.schedule_event(0, 'queue changed')
         return retval
 
-    def gput(self, timeout=float('inf'), *obj):
+    def gput(self, timeout: TimeType = float('inf'), *obj: EventType) -> Generator[EventType, EventType, EventType]:
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         with self.sim.consume(self.tx_changed):
             retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)  # wait while first element does not match the cond
@@ -62,7 +63,7 @@ class Queue(DSConsumer, SignalMixin):
             self.tx_changed.schedule_event(0, 'queue changed')
         return retval
 
-    def get_nowait(self, amount=1, cond=lambda e: True):
+    def get_nowait(self, amount: int = 1, cond: CondType = lambda e: True) -> Optional[List[EventType]]:
         if len(self) >= amount and cond(self.queue[:amount]):
             retval = self.queue[:amount]
             self.queue = self.queue[amount + 1:]
@@ -71,27 +72,31 @@ class Queue(DSConsumer, SignalMixin):
             retval = None
         return retval
 
-    async def get(self, timeout=float('inf'), amount=1, cond=lambda e: True):
+    async def get(self, timeout: TimeType = float('inf'), amount: int =1, cond: CondType = lambda e: True) -> Optional[List[EventType]]:
         ''' Get an event from queue. If the queue is empty, wait for the closest event. '''
         with self.sim.consume(self.tx_changed):
-            retval = await self.sim.check_and_wait(timeout, cond=lambda e:len(self) >= amount and cond(self.queue[0]))  # wait while first element does not match the cond
-        if retval is not None:
+            element = await self.sim.check_and_wait(timeout, cond=lambda e:len(self) >= amount and cond(self.queue[0]))  # wait while first element does not match the cond
+        if element is None:
+            retval = None
+        else:
             retval = self.queue[:amount]
             self.queue = self.queue[amount:]
             self.tx_changed.schedule_event(0, 'queue changed')
         return retval
 
-    def gget(self, timeout=float('inf'), amount=1, cond=lambda e: True):
+    def gget(self, timeout: TimeType = float('inf'), amount: int = 1, cond: CondType = lambda e: True) -> Generator[EventType, Optional[List[EventType]], Optional[List[EventType]]]:
         ''' Get an event from queue. If the queue is empty, wait for the closest event. '''
         with self.sim.consume(self.tx_changed):
-            retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e:len(self) >= amount and cond(self.queue[0]))  # wait while first element does not match the cond
-        if retval is not None:
+            element = yield from self.sim.check_and_gwait(timeout, cond=lambda e:len(self) >= amount and cond(self.queue[0]))  # wait while first element does not match the cond
+        if element is None:
+            retval = None
+        else:
             retval = self.queue[:amount]
             self.queue = self.queue[amount:]
             self.tx_changed.schedule_event(0, 'queue changed')
         return retval
 
-    def pop(self, index=0, default=None):
+    def pop(self, index: int = 0, default: Optional[EventType] = None) -> Optional[EventType]:
         retval = None
         if len(self.queue) > index:
             try:
@@ -101,7 +106,7 @@ class Queue(DSConsumer, SignalMixin):
                 retval = default
         return retval
 
-    def remove(self, cond):
+    def remove(self, cond: CondType) -> None:
         ''' Removes event(s) from queue '''
         # Get list of elements to be removed
         length = len(self.queue)
@@ -115,7 +120,7 @@ class Queue(DSConsumer, SignalMixin):
     def __len__(self):
         return len(self.queue)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> EventType:
         return self.queue[index]
 
     def __setitem__(self, index, data):
@@ -124,3 +129,60 @@ class Queue(DSConsumer, SignalMixin):
 
     def __iter__(self):
         return iter(self.queue)
+
+
+# In the following, self is in fact of type DSProcessComponent, but PyLance makes troubles with variable types
+class QueueMixin:
+    async def enter(self: Any, queue: Queue, timeout: TimeType = float('inf')) -> EventType:
+        try:
+            retval = await queue.put(timeout, self)
+        except DSAbortException as exc:
+            self.scheduled_process.abort()
+        return retval
+
+    def genter(self: Any, queue: Queue, timeout: TimeType = float('inf')) -> Generator[EventType, EventType, EventType]:
+        try:
+            retval = yield from queue.gput(timeout, self)
+        except DSAbortException as exc:
+            self.scheduled_process.abort()
+        return retval
+
+    def enter_nowait(self: Any, queue: Queue) -> EventType:
+        retval = queue.put_nowait(self)
+        return retval
+
+    def leave(self: Any, queue: Queue) -> None:
+        queue.remove(self)
+
+    async def pop(self: Any, queue: Queue, timeout: TimeType = float('inf')) -> Optional[EventType]:
+        try:
+            elements = await queue.get(timeout)
+            if elements is None:
+                retval = None
+            else:
+                assert len(elements) == 1
+                retval = elements[0]
+        except DSAbortException as exc:
+            self.scheduled_process.abort()
+        return retval
+
+    def gpop(self: Any, queue: Queue, timeout: TimeType = float('inf')) -> Generator[EventType, EventType, EventType]:
+        try:
+            elements = yield from queue.gget(timeout)
+            if elements is None:
+                retval = None
+            else:
+                assert len(elements) == 1
+                retval = elements[0]
+        except DSAbortException as exc:
+            self.scheduled_process.abort()
+        return retval
+
+    def pop_nowait(self: Any, queue: Queue) -> EventType:
+        elements = queue.get_nowait()
+        if elements is None:
+            retval = None
+        else:
+            assert len(elements) == 1
+            retval = elements[0]
+        return retval

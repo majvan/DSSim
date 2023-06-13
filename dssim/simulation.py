@@ -17,19 +17,26 @@ The file provides basic logic to run the simulation and supported methods.
 '''
 import sys
 import inspect
+from typing import List, Union, Tuple, Callable, Generator, Coroutine, Optional, overload, TYPE_CHECKING
 from dssim.timequeue import TimeQueue
-from dssim.base import DSAbsTime, StackedCond, DSComponentSingleton
-from dssim.pubsub import DSConsumer, DSCallback
+from dssim.base import TimeType, DSAbsTime, EventType, EventRetType, CondType, StackedCond, DSComponentSingleton
+from dssim.pubsub import DSConsumer, DSCallback, void_consumer
 from dssim.future import DSFuture
 from dssim.process import DSProcess, SimProcessMixin
 
+if TYPE_CHECKING:
+    from dssim.base import DSComponent
+
 class _Awaitable:
-    def __init__(self, val=None):
+    def __init__(self, val: EventType = None) -> None:
         self.val = val
 
-    def __await__(self):
+    def __await__(self) -> Generator[EventType, None, EventType]:
         retval = yield self.val
         return retval
+
+
+SchedulableType = Union[DSFuture, Generator, Coroutine, Callable, DSCallback]
 
 
 class DSSimulation(SimProcessMixin, DSComponentSingleton):
@@ -39,13 +46,13 @@ class DSSimulation(SimProcessMixin, DSComponentSingleton):
         ''' An artificial object to be used for check_and_wait- see description of the method '''
         pass
 
-    def __init__(self, name='dssim', single_instance=True):
+    def __init__(self, name: str = 'dssim', single_instance: bool = True) -> None:
         ''' The simulation holds the list of producers which share the same time queue.
         The list is only for the application informational purpose to be able to identify
         all the producers which belong to the same simulation entity.
         '''
         self.name = name
-        self._restart(time=0)
+        self.names: dict = {}  # stores names of associated components
         if DSComponentSingleton.sim_singleton is None:
             DSComponentSingleton.sim_singleton = self  # The first sim environment will be the first initialized one
         elif not single_instance:
@@ -53,39 +60,54 @@ class DSSimulation(SimProcessMixin, DSComponentSingleton):
                   'This case is supported, but it is not a typical case and you may'
                   'want not intentionally to do so. To suppress this warning, call'
                   'DSSimulation(single_instance=False)')
+        self._simtime: float = 0
+        self._restart()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.name
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
-    def restart(self, time=0):
-        self._restart(time=time)
+    def restart(self, time: TimeType = 0) -> None:
+        self._simtime = time if isinstance(time, (float, int)) else time.value
+        self._restart()
 
-    def _restart(self, time):
+    @property
+    def time(self) -> float: return self._simtime
+
+    def _restart(self) -> None:
         self.time_queue = TimeQueue()
-        self.num_events = 0
-        self.time = time
-        self.parent_process = None
+        self.num_events: int = 0
+        # By default, we use fake consumer. It will be rewritten on the first 
+        self.parent_process: DSConsumer = void_consumer
 
-    def _compute_time(self, time):
+    def _compute_time(self, time: TimeType) -> float:
         ''' Recomputes a rel/abs time to absolute time value '''
         if isinstance(time, DSAbsTime):
-            time = time.value
-            if time < self.time:
+            ftime: float = time.value
+            if ftime < self.time:
                 raise ValueError('The time is absolute and cannot be lower than now')
         elif time < 0:
             raise ValueError('The time is relative from now and cannot be negative')
         else:
-            time += self.time
-        return time
+            ftime = self.time + time
+        return ftime
 
-    def delete(self, cond):
+    def delete(self, cond: Callable) -> None:
         ''' An interface method to delete events on the queue '''
         self.time_queue.delete(cond)
 
-    def schedule(self, time, schedulable):
+    @overload        
+    def schedule(self, time: TimeType, schedulable: Union[Generator, Coroutine]) -> DSProcess: ...
+
+    @overload        
+    def schedule(self, time: TimeType, schedulable: DSProcess) -> DSProcess: ...
+
+    @overload        
+    def schedule(self, time: TimeType, schedulable: Callable) -> DSCallback: ...
+
+    def schedule(self, time: TimeType, schedulable: SchedulableType) -> SchedulableType:
         ''' Schedules the start of a (new) process. '''
         if isinstance(schedulable, DSConsumer):
             process = schedulable
@@ -95,22 +117,20 @@ class DSSimulation(SimProcessMixin, DSComponentSingleton):
             process = DSCallback(schedulable, sim=self)
         else:
             raise ValueError(f'The provided function {schedulable} is probably missing @DSSchedulable decorator')
-        if time < 0:
-            raise ValueError('The time is relative from now and cannot be negative')
         if hasattr(process, '_schedule'):
             process._schedule(time)
         else:
             self.schedule_event(time, None, process)
         return process
 
-    def check_condition(self, consumer, event):
+    def check_condition(self, consumer: DSConsumer, event: EventType) -> Tuple[bool, EventType]:
         conds = consumer.get_cond()
         return conds.check(event)
 
-    def send_object(self, consumer, event):
-        ''' Send an event object to a consumer '''
+    def send_object(self, consumer: DSConsumer, event: EventType) -> EventType:
+        ''' Send an event object to a consumer. Return value from the consumer. '''
 
-        retval = False
+        retval: EventType = False
 
         # We want to kick from this process to another process (see below). However, after
         # returning back to this process, we want to renew our process ID back to be used.
@@ -145,7 +165,7 @@ class DSSimulation(SimProcessMixin, DSComponentSingleton):
             self.parent_process = pid
         return retval
 
-    def try_send(self, consumer, event):
+    def try_send(self, consumer: DSConsumer, event: EventType) -> EventType:
         ''' Send an event object to a consumer process. Convert event from parameters to object. '''
 
         # We will be sending signal (event) to a consumer, which has some condition set
@@ -158,28 +178,28 @@ class DSSimulation(SimProcessMixin, DSComponentSingleton):
         retval = self.send_object(consumer, event)
         return retval
 
-    def signal(self, process, event, time=0):
+    def signal(self, process: DSConsumer, event: EventType, time: TimeType = 0) -> EventType:
         ''' Schedules an event object into timequeue. Finally the target process will be signalled. '''
         time = self._compute_time(time)
         consumer = process if process is not None else self.parent_process  # schedule to a process or to itself
         self.time_queue.add_element(time, (consumer, event))
         return event
 
-    def schedule_event(self, time, event, consumer=None):
+    def schedule_event(self, time: TimeType, event: EventType, consumer: Optional[DSConsumer] = None) -> EventType:
         ''' Schedules an event object into timequeue. Finally the target process will be signalled. '''
         time = self._compute_time(time)
         consumer = consumer or self.parent_process  # schedule to a process or to itself
         self.time_queue.add_element(time, (consumer, event))
         return event
 
-    def _gwait_for_event(self, timeout, val=None):
+    def _gwait_for_event(self, timeout: TimeType, val: EventRetType = None) -> Generator[EventType, EventType, EventType]:
         # Re-compute abs/relative time to abs for the timeout
         time = self._compute_time(timeout)
         # Schedule the timeout to the time queue. The condition is only for higher performance
         if time != float('inf'):
             self.time_queue.add_element(time, (self.parent_process, None))
+        event: EventType = True
         try:
-            event = True
             # Pass value to the feeder and wait for next event
             event = yield val
             # We received an event. In the lazy evaluation case, we would be now calling
@@ -198,7 +218,7 @@ class DSSimulation(SimProcessMixin, DSComponentSingleton):
                 self.delete(lambda e: e == (self.parent_process, None))
         return event
 
-    def gwait(self, timeout=float('inf'), cond=lambda e: False, val=True):
+    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
         ''' Wait for an event from producer for max. timeout time. The criteria which events to be
         accepted is given by cond. An accepted event returns from the wait function. An event which
         causes cond to be False is ignored and the function is waiting.
@@ -223,7 +243,7 @@ class DSSimulation(SimProcessMixin, DSComponentSingleton):
             event = cond.cond_value()
         return event
 
-    def check_and_gwait(self, timeout=float('inf'), cond=lambda e: False, val=True):
+    def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
         # This function can be used to run a pre-check for such conditions, which are
         # invariant to the passed event, for instance to check for a state of an object
         # so if the state matches, it returns immediately
@@ -241,14 +261,14 @@ class DSSimulation(SimProcessMixin, DSComponentSingleton):
             conds.pop()
         return event
 
-    async def _wait_for_event(self, timeout, val=None):
+    async def _wait_for_event(self, timeout: TimeType, val: EventRetType = None) -> EventType:
         # Re-compute abs/relative time to abs for the timeout
         time = self._compute_time(timeout)
         # Schedule the timeout to the time queue. The condition is only for higher performance
         if time != float('inf'):
             self.time_queue.add_element(time, (self.parent_process, None))
+        event: EventType = True
         try:
-            event = True
             # Pass value to the feeder and wait for next event
             event = await _Awaitable(val)
             # We received an event. In the lazy evaluation case, we would be now calling
@@ -267,7 +287,7 @@ class DSSimulation(SimProcessMixin, DSComponentSingleton):
                 self.delete(lambda e: e == (self.parent_process, None))
         return event
 
-    async def wait(self, timeout=float('inf'), cond=lambda e: False, val=True):
+    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> EventType:
         ''' Wait for an event from producer for max. timeout time. The criteria which events to be
         accepted is given by cond. An accepted event returns from the wait function. An event which
         causes cond to be False is ignored and the function is waiting.
@@ -292,7 +312,7 @@ class DSSimulation(SimProcessMixin, DSComponentSingleton):
             event = cond.cond_value()
         return event
 
-    async def check_and_wait(self, timeout=float('inf'), cond=lambda e: False, val=True):
+    async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> EventType:
         # This function can be used to run a pre-check for such conditions, which are
         # invariant to the passed event, for instance to check for a state of an object
         # so if the state matches, it returns immediately
@@ -310,7 +330,7 @@ class DSSimulation(SimProcessMixin, DSComponentSingleton):
             conds.pop()
         return event
 
-    def cleanup(self, consumer):
+    def cleanup(self, consumer: DSConsumer) -> None:
         # The consumer has finished.
         # We make a cleanup of a waitable condition. There is still waitable condition kept
         # for the consumer. Since the process has finished, it will never need it, however
@@ -321,39 +341,42 @@ class DSSimulation(SimProcessMixin, DSComponentSingleton):
         # Remove all the events for this consumer
         self.time_queue.delete(lambda e:e[0] is consumer)
 
-    def run(self, up_to=None, future=object()):
+    def run(self, up_to: TimeType = float('inf'), future: EventType = object()) -> Tuple[float, int]:
         ''' This is the simulation machine. In a loop it takes first event and process it.
         The loop ends when the queue is empty or when the simulation time is over.
         '''
-        if up_to is None:
-            up_to = float('inf')
+        ftime: float = up_to.value if isinstance(up_to, DSAbsTime) else up_to
         while len(self.time_queue) > 0:
             # Get the first event on the queue
             tevent, (consumer, event_obj) = self.time_queue.get0()
-            if tevent >= up_to:
+            if tevent >= ftime:
                 retval_time = self.time
-                self.time = up_to
+                self._simtime = ftime
                 break
             if event_obj == future:
                 retval_time = self.time
                 break
             self.num_events += 1
-            self.time = tevent
+            self._simtime = tevent
             self.time_queue.pop()
             self.try_send(consumer, event_obj)
         else:
             retval_time = self.time
-            self.time = up_to
+            self._simtime = ftime
         return retval_time, self.num_events
 
 
 _exiting = False  # global var to prevent repeating nested exception frames
 
-def print_cyclic_signal_exception(exc):
+from types import FrameType
+
+def print_cyclic_signal_exception(exc: Exception) -> None:
     ''' The function prints out detailed information about frame stack related
     to the simulation process, filtering out unnecessary info.
     '''
     exc_type, exc_value, exc_traceback = sys.exc_info()
+    if exc_traceback is None:
+        return
     print('Error:', exc)
     print('\nAn already running schedulable (DSProcess / generator) hedule_was\n'
           'signalled and therefore Python cannot handle such state.\n'
@@ -374,9 +397,10 @@ def print_cyclic_signal_exception(exc):
         if not exc_traceback.tb_next:
             break
         exc_traceback = exc_traceback.tb_next
-    stack, process_stack = [], []
-    f = exc_traceback.tb_frame
-    while f:
+    stack = []
+    process_stack = []
+    f: Optional[FrameType] = exc_traceback.tb_frame
+    while f is not None:
         stack.append(f)
         f = f.f_back
     stack.reverse()
@@ -390,20 +414,20 @@ def print_cyclic_signal_exception(exc):
             from_process = frame.f_locals['pid']
             to_process = frame.f_locals['consumer']
             event = frame.f_locals['event']
-            d = [method, line, filename, from_process, to_process, event, False, False]
+            d: List = [method, line, filename, from_process, to_process, event, False, False]
             process_stack.append(d)
     # search for the processes to highlight (highlight the loop conflict)
     if not to_process:
         return
     print('Signal stack:')
     conflicting_process = to_process
-    for frame in reversed(process_stack):
-        if frame[3] == conflicting_process:
-            frame[-2] = True  # mark the last from_process which needs to be highlighted
+    for pframe in reversed(process_stack):
+        if pframe[3] == conflicting_process:
+            pframe[-2] = True  # mark the last from_process which needs to be highlighted
             break
     process_stack[-1][-1] = True # mark the last to_process which needs to be highlighted
-    for frame in process_stack:
-           method, line, filename, from_process, to_process, event, from_c, to_c = frame
+    for pframe in process_stack:
+           method, line, filename, from_process, to_process, event, from_c, to_c = pframe
            print(f'{method} in {filename}:{line}')
            if from_c:
                print(f'  From:  \033[0;31m{from_process}\033[0m')
@@ -415,3 +439,4 @@ def print_cyclic_signal_exception(exc):
                print(f'  To:    {to_process}')
            print(f'  Event: {event}')
     print()
+

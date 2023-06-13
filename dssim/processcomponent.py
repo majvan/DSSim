@@ -16,113 +16,65 @@
 The file provides process-centric API to easy the design of process-oriented
 application.
 '''
+from abc import abstractmethod
+from typing import Any, Optional, Generator
 import inspect
-from dssim.base import DSComponent, DSAbortException
+from dssim.base import EventType, TimeType, DSComponent, DSAbortException
 from dssim.process import DSProcess
 from dssim.process import DSSchedulable
+from dssim.components.queue import QueueMixin
+from dssim.components.resource import ResourceMixin
 
-class DSProcessComponent(DSComponent):
-    _dscomponent_instances = 0
 
-    def __init__(self, *args, name=None, **kwargs):
+class ProcessObject:
+    ''' Encapsulates events to a special object '''
+    def __init__(self, value: EventType) -> None:
+        self._value = value
+    
+    @property
+    def value(self) -> EventType:
+        return self._value
+
+
+class DSProcessComponent(DSComponent, QueueMixin, ResourceMixin):
+    _dscomponent_instances: int = 0
+
+    def __init__(self, *args: Any, name: Optional[str] = None, **kwargs: Any) -> None:
         if name is None:
             name = type(self).__name__ + '.' + str(self._dscomponent_instances)
         super().__init__(self, name=name, *args, **kwargs)
         kwargs.pop('name', None), kwargs.pop('sim', None)  # remove the two arguments
+        process: DSProcess
         if inspect.isgeneratorfunction(self.process) or inspect.iscoroutinefunction(self.process):
             process = DSProcess(self.process(*args, **kwargs), name=self.name+'.process', sim=self.sim)
         elif inspect.ismethod(self.process):
             process = DSProcess(DSSchedulable(self.process)(*args, **kwargs), name=self.name+'.process', sim=self.sim)
         else:
             raise ValueError(f'The attribute {self.__class__}.process is not method, generator, neither coroutine.')
-        retval = process.schedule(0)
-        self.scheduled_process = retval
+        self.scheduled_process: DSProcess = process.schedule(0)
         self.__class__._dscomponent_instances += 1
+    
+    @abstractmethod
+    def process(self, *args: Any, **kwargs: Any) -> Any:
+        pass
 
-    def signal(self, event):
+    def signal(self, event: EventType) -> None:
         self.scheduled_process.signal({'object': event})
 
-    async def wait(self, timeout=float('inf')):
+    async def wait(self, timeout: TimeType = float('inf')) -> EventType:
         try:
             retval = await self.sim.wait(timeout, cond=lambda e: True)
-            if retval is not None:
-                retval = retval['object']
+            if isinstance(retval, ProcessObject):
+                retval = retval.value
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
 
-    def gwait(self, timeout=float('inf')):
+    def gwait(self, timeout: TimeType = float('inf')) -> Generator[EventType, EventType, EventType]:
         try:
             retval = yield from self.sim.gwait(timeout, cond=lambda e: True)
-            if retval is not None:
-                retval = retval['object']
+            if isinstance(retval, ProcessObject):
+                retval = retval.value
         except DSAbortException as exc:
             self.scheduled_process.abort()
-        return retval
-
-    async def enter(self, queue, timeout=float('inf')):
-        try:
-            retval = await queue.put(timeout, self)
-            if retval is not None:
-                retval = retval['object']
-        except DSAbortException as exc:
-            self.scheduled_process.abort()
-        return retval
-
-    def genter(self, queue, timeout=float('inf')):
-        try:
-            retval = yield from queue.gput(timeout, self)
-            if retval is not None:
-                retval = retval['object']
-        except DSAbortException as exc:
-            self.scheduled_process.abort()
-        return retval
-
-    def enter_nowait(self, queue):
-        retval = queue.put_nowait(self)
-        return retval
-
-    def leave(self, queue,timeout=float('inf')):
-        queue.remove(self)
-
-    async def pop(self, queue, timeout=float('inf')):
-        try:
-            retval = await queue.get(timeout)
-            assert len(retval) == 1
-            if retval is not None:
-                retval = retval[0]
-        except DSAbortException as exc:
-            self.scheduled_process.abort()
-        return retval
-
-    def gpop(self, queue, timeout=float('inf')):
-        try:
-            retval = yield from queue.gget(timeout)
-            assert len(retval) == 1
-            if retval is not None:
-                retval = retval[0]
-        except DSAbortException as exc:
-            self.scheduled_process.abort()
-        return retval
-
-    def pop_nowait(self, queue):
-        retval = queue.get_nowait()
-        if retval is not None:
-            retval = retval[0]['object']
-        return retval
-
-    async def get(self, resource, amount=1, timeout=float('inf')):
-        retval = await resource.get(timeout, amount)
-        return retval
-            
-    def gget(self, resource, amount=1, timeout=float('inf')):
-        retval = yield from resource.gget(timeout, amount)
-        return retval
-            
-    async def put(self, resource, *amount, timeout=float('inf')):
-        retval = await resource.put(timeout, *amount)
-        return retval
-
-    def gput(self, resource, *amount, timeout=float('inf')):
-        retval = yield from resource.gput(timeout, *amount)
         return retval

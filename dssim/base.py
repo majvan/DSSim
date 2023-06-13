@@ -14,58 +14,64 @@
 '''
 The base classes / intefaces / mixin for dssim framework.
 '''
-
-class DSTrackableEvent:
-    def __init__(self, value):
-        self.value = value
-        self.producers = []
-
-    def track(self, producer):
-        self.producers.append(producer)
-
-    def __repr__(self):
-        return f'DSTrackableEvent({self.value})'
-
-
-def TrackEvent(fcn):
-    def api(self, event, *args, **kwargs):
-        if isinstance(event, DSTrackableEvent):
-            event.producers.append(self)
-        return fcn(self, event, *args, **kwargs)
-    return api
-
-class DSAbortException(Exception):
-    ''' Exception used to abort waiting process '''
-
-    def __init__(self, producer=None, **info):
-        super().__init__()
-        self.producer = producer
-        self.info = info
+from __future__ import annotations
+from abc import abstractmethod
+from typing import Any, Dict, Tuple, List, Callable, Union, Optional, TYPE_CHECKING
 
 
 class DSAbsTime:
-    def __init__(self, value):
-        self.value = value
+    ''' A class representing absolute time in the simulation '''
+    def __init__(self, value: float) -> None:
+        self.value: float = value
+
+TimeType = Union[DSAbsTime, float]
+
+
+class DSEvent:
+    ''' A base for events static typing. '''
+    pass
+
+
+EventType = Union[None, dict, Exception, DSEvent, Any,]
+EventRetType = Optional[bool]
 
 
 class ICondition:
-    def check(self): pass
+    ''' An interface for a condition checkable classes '''
+    @abstractmethod
+    def check(self, event: EventType) -> Tuple[bool, Any]:
+        raise NotImplementedError("The ICondition is an interface. Use derived class.")
+    
+    def __call__(self, event: EventType) -> Tuple[bool, Any]:
+        return self.check(event)
+
+CondType = Union[Callable, Any,]
 
 
 class StackedCond(ICondition):
-    def __init__(self):
-        self.conds = []
+    ''' A condition which can stack several simple conditions '''
+
+    def __init__(self) -> None:
+        self.conds: list[Any] = []
         self.value = None
 
-    def push(self, cond):
+    def push(self, cond: Any) -> "StackedCond":
+        ''' Adds new condition to the stack '''
+
         self.conds.append(cond)
         return self
 
-    def pop(self):
+    def pop(self) -> Any:
+        ''' Removes last condition from the stack '''
+
         return self.conds.pop()
 
-    def check_one(self, cond, event):
-        ''' Returns pair of info ("event passing", "value of event") '''
+    def check_one(self, cond: CondType, event: EventType) -> Tuple[bool, Any]:
+        ''' Checks one condition on the stack.
+        
+        :returns: a tuple (event_passed, value_of_event)
+        '''
+
         # Check the event first
         # Instead of the following generic rule, it is better to add it as a stacked condition
         # for "None" value, it will be caught later by cond == event rule.
@@ -83,8 +89,15 @@ class StackedCond(ICondition):
         else:  # the event does not match our condition and hence will be ignored
             return False, None
     
-    def check(self, event):
-        signaled, retval = None, event
+    def check(self, event: EventType) -> Tuple[bool, EventType]:
+        ''' Checks the stack.
+        The event is passed to all the conditions on the stack till it finds the first one
+        which passes.
+        
+        :returns: a result of pass check- a tuple (event_passed, value_of_event)
+        '''
+
+        signaled, retval = False, event
         for cond in self.conds:
             signaled, event = self.check_one(cond, retval)
             if signaled:
@@ -96,12 +109,33 @@ class StackedCond(ICondition):
                 break
         return signaled, retval
 
-    def cond_value(self):
+    def cond_value(self) -> Any:
+        ''' Gets a representation of last passed event
+        
+        :returns: a value of the last event which passed the check
+        '''
         return self.value
 
 
+class DSAbortException(Exception):
+    ''' Exception used to abort waiting process '''
+
+    def __init__(self, producer: Any = None, **info) -> None:
+        super().__init__()
+        self.producer = producer
+        self.info = info
+
+
 class DSTransferableCondition(ICondition):
-    def __init__(self, cond, transfer=lambda e:e):
+    ''' A condition which can modify the event value '''
+
+    def __init__(self, cond: CondType, transfer: Callable[[EventType], EventType] = lambda e:e) -> None:
+        '''
+        :param cond: The condition which is required to pass
+        :param transfer: The callable which will be called when the check passes.
+            The arg to the callable is the event. The return is the new value.
+        '''
+       
         self.cond = StackedCond().push(cond)
         self.transfer = transfer
         self.value = None
@@ -113,26 +147,13 @@ class DSTransferableCondition(ICondition):
         return signaled, retval
 
 
-class SignalMixin:
-    def signal(self, event):
-        ''' Signal event. '''
-        return self.sim.signal(self, event)
-
-    def signal_kw(self, **event):
-        ''' Signal key-value event type as kwargs. '''
-        return self.sim.signal(self, event)
-
-    def schedule_event(self, time, event):
-        ''' Signal event later. '''
-        return self.sim.schedule_event(time, event, self)
-
-    def schedule_kw_event(self, time, **event):
-        ''' Signal event later. '''
-        return self.sim.schedule_event(time, event, self)
+if TYPE_CHECKING:
+    from dssim.simulation import DSSimulation  # to satisfy static analyzer
 
 
 class DSComponentSingleton:
-    sim_singleton = None
+    ''' An extension for simulator to setup the first instance of the DSSimulation '''
+    sim_singleton: Optional[DSSimulation] = None
 
 
 class DSComponent:
@@ -146,14 +167,14 @@ class DSComponent:
     If the name is not specified, it is created from the simulation instance
     and class name.
     '''
-    def __init__(self, *args, name=None, sim=None, **kwargs):
-        # It is recommended that core components specify the sim argument, i.e. sim should not be None
-        self.sim = sim or DSComponentSingleton.sim_singleton
-        if not isinstance(getattr(self.sim, 'names', None), dict):
-            self.sim.names = {}
+
+    def __init__(self, *args, name: Optional[str] = None, sim: Optional[DSSimulation] = None, **kwargs) -> None:
         temp_name = name or f'{self.__class__}'
-        if self.sim is None:
+        # It is recommended that core components specify the sim argument, i.e. sim should not be None
+        sim_candidate = sim or DSComponentSingleton.sim_singleton
+        if sim_candidate is None:
             raise ValueError(f'Interface {temp_name} does not have sim parameter set and no DSSimulation was created yet.')
+        self.sim = sim_candidate
         if name is None:
             name = temp_name
             counter = self.sim.names.get(name, 0)
@@ -165,6 +186,26 @@ class DSComponent:
             self.sim.names[name] = 0
         self.name = name
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.name
 
+
+# In the following, self is in fact of type DSConsumer, but PyLance makes troubles with variable types
+class SignalMixin:
+    ''' Pairs of methods for extending a functionality of a consumer '''
+
+    def signal(self: Any, event: EventType) -> EventType:
+        ''' Signal event. '''
+        return self.sim.signal(self, event)
+
+    def signal_kw(self: Any, **event) -> EventType:
+        ''' Signal key-value event type as kwargs. '''
+        return self.sim.signal(self, event)
+
+    def schedule_event(self: Any, time: TimeType, event: EventType) -> EventType:
+        ''' Signal event later. '''
+        return self.sim.schedule_event(time, event, self)
+
+    def schedule_kw_event(self: Any, time: TimeType, **event) -> EventType:
+        ''' Signal event later. '''
+        return self.sim.schedule_event(time, event, self)

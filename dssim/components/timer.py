@@ -14,64 +14,72 @@
 '''
 Periodic timer with on/off control
 '''
-from dssim import DSComponent, DSProcess
+from typing import Any, Optional
+from enum import Enum
+from dssim.base import EventType, DSComponent
 from dssim.pubsub import DSProducer
+from dssim.process import DSProcess
 
 
 class Timer(DSComponent):
+    class Status(Enum):
+        STOPPED = 0
+        RUNNING = 1
+        PAUSED = 2
+
     ''' The class exports 'source' Producer which ticks with a period provided at init. '''
-    def __init__(self, period=1, repeats=None, **kwargs):
+    def __init__(self, period: float = 1, repeats: Optional[int] = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.period = period
-        self.counter = repeats
-        self.status = 'STOPPED'
+        self.counter: float = repeats or float('inf')
+        self.status: Timer.Status = Timer.Status.STOPPED
         self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
         self.proc = DSProcess(self.process(), name=self.name+'.process', sim=self.sim).schedule(0)
 
-    async def process(self):
+    async def process(self) -> EventType:
         ''' Methods schedules new event depending on the counter '''
         remaining = self.period
         tick_nr = 0
         while True:
-            if self.status == 'RUNNING':
+            if self.status == Timer.Status.RUNNING:
                 last = self.sim.time
                 interrupt = await self.sim.wait(remaining, cond=lambda e:True)  # wait with timeout
                 remaining = max(last + self.period - self.sim.time, 0)
                 if interrupt is None:  # timed out
                     tick_nr = tick_nr + 1
-                    self.counter -= 1
+                    self.counter -= 1 
                     self.tx.signal_kw(tick=tick_nr)
                     if self.counter <= 0:
-                        self.status = 'STOPPED'
+                        self.status = Timer.Status.STOPPED
                     remaining = self.period
-            elif self.status == 'PAUSED':
+            elif self.status == Timer.Status.PAUSED:
                 interrupt = await self.sim.wait(cond=lambda e:True)  # wait for any state change
-            else:  # self.status == 'STOPPED':
+            else:  # self.status == Timer.Status.STOPPED:
                 interrupt = await self.sim.wait(cond=lambda e:True)  # wait for any state change
                 remaining = self.period
 
-    def start(self, period=None, repeats=None):
+    def start(self, period : Optional[float] = None, repeats: Optional[int] = None) -> "Timer":
         ''' Start the timer. '''
         self.period = period or self.period  # Redefine period
         self.counter = repeats or float('inf')
-        self.status = 'RUNNING'
-        self.proc.signal_kw(status='RUNNING')
+        self.status = Timer.Status.RUNNING
+        self.proc.signal_kw(status=Timer.Status.RUNNING)
         return self
 
-    def stop(self, time):
+    def stop(self, time) -> "Timer":
         ''' Stop the timer. '''
-        self.status = 'STOPPED'
-        self.proc.signal_kw(status='STOPPED')
+        self.status = Timer.Status.STOPPED
+        self.proc.signal_kw(status=Timer.Status.STOPPED)
         return self
 
-    def pause(self):
+    def pause(self) -> "Timer":
         ''' Pause the timer. '''
-        self.status = 'PAUSED'
-        self.proc.signal_kw(status='PAUSED')
+        self.status = Timer.Status.PAUSED
+        self.proc.signal_kw(status=Timer.Status.PAUSED)
         return self
 
-    def resume(self):
+    def resume(self) -> "Timer":
         ''' Resume the timer. '''
-        self.status = 'RUNNING'
-        self.proc.signal_kw(status='RUNNING')
+        self.status = Timer.Status.RUNNING
+        self.proc.signal_kw(status=self.Status.RUNNING)
         return self

@@ -684,7 +684,6 @@ class TestSim(unittest.TestCase):
 
     def test0_init_reset(self):
         sim = DSSimulation()
-        self.assertEqual(sim.parent_process, None)
         self.assertEqual(len(sim.time_queue), 0)
         self.assertEqual(sim.time, 0)
         sim.schedule(0.5, self.__my_wait_process())
@@ -694,7 +693,6 @@ class TestSim(unittest.TestCase):
         self.assertEqual(sim.time, 1)
         self.assertEqual(len(sim.time_queue), 1)
         sim.restart(0.9)
-        self.assertEqual(sim.parent_process, None)
         self.assertEqual(len(sim.time_queue), 0)
         self.assertEqual(sim.time, 0.9)
 

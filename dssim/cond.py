@@ -16,11 +16,22 @@
 This file implements advanced logic - with overloading operators
 to be able create advanced expressions for conditions.
 '''
+from typing import List, Set, Any, Dict, Union, Optional, Callable, Iterable, TYPE_CHECKING
 import inspect
 import copy
+from enum import Enum
+from dssim.base import CondType, EventType
 from dssim.pubsub import ConsumerMetadata
 from dssim.future import DSFuture
 from dssim.process import DSProcess
+
+if TYPE_CHECKING:
+    from dssim.pubsub import DSProducer
+
+
+FilterExpression = Callable[[Iterable[object]], bool]
+SignalType = Union["DSFilter", "DSCircuit"]
+SignalList = List[SignalType]
 
 class DSFilter(DSFuture):
     ''' A future which can be used in the circuit. It can be used as a signal to a
@@ -37,20 +48,20 @@ class DSFilter(DSFuture):
     and coroutines).
     '''
 
-    class SignalType:
+    class SignalType(Enum):
         DEFAULT = 0  # Monostable. If once signaled, always signaled
         REEVALUATE = 1  # Reevaluated after every event, i.e. the value changes after every event
         PULSED = 2  # Returns "signaled" only when __call__(event) matches, but never stays in the state
 
-    ONE_LINER = 'one liner'
+    ONE_LINER = None
 
-    def __init__(self, cond=None, sigtype=SignalType.DEFAULT, signal_timeout=False, forward_events=None, *args, **kwargs):
+    def __init__(self, cond: CondType = None, sigtype: SignalType = SignalType.DEFAULT, signal_timeout: bool = False, forward_events: Optional[bool] = None, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
-        self.expression = self.ONE_LINER
-        self.signals = [self]
+        self.expression: Optional[FilterExpression] = self.ONE_LINER
+        self.signals: SignalList = [self,]
         self.positive = True  # positive sign
         self.signaled = False
-        self.value = None
+        self.value: EventType = None
         self.cond = cond
         # Reevaluation means that after every event we receive we have to re-evaluate
         # the condition
@@ -70,19 +81,19 @@ class DSFilter(DSFuture):
         else:
             self.forward_events = (forward_events == True)  # True => True, None => False, False => False
 
-    def create_metadata(self, **kwargs):
+    def create_metadata(self, **kwargs: Any) -> ConsumerMetadata:
         self.meta = ConsumerMetadata()
         # A condition accepts any event 
         self.meta.cond.push(lambda e:True)
         return self.meta
 
-    def __or__(self, other):
+    def __or__(self, other: "DSFilter") -> "DSCircuit":
         return DSCircuit.build(self, other, any)
 
-    def __and__(self, other):
+    def __and__(self, other: "DSFilter") -> "DSCircuit":
         return DSCircuit.build(self, other, all)
    
-    def __neg__(self):
+    def __neg__(self) -> "DSFilter":
         if not self.positive:
             raise ValueError('You can negate a DSFilter only once')
         f = copy.copy(self)
@@ -90,16 +101,16 @@ class DSFilter(DSFuture):
         f.positive = False
         return f
 
-    def __str__(self):
+    def __str__(self) -> str:
         retval = f'DSFilter({self.cond})'
         if not self.positive:
             retval = '-' + retval
         return retval
 
-    def finished(self):
+    def finished(self) -> bool:
         return self.signaled
     
-    def __call__(self, event):
+    def __call__(self, event: EventType) -> bool:
         ''' Tries to evaluate the event. '''
         if self.signaled and not self.reevaluate:
             return True
@@ -131,16 +142,16 @@ class DSFilter(DSFuture):
             self._finish(value, async_future=False)
         return signaled
 
-    def get_future_eps(self):
+    def get_future_eps(self) -> Set["DSProducer"]:
         retval = {self._finish_tx,}
         if isinstance(self.cond, DSFuture):
             retval |= self.cond.get_future_eps()
         return retval
 
-    def finish(self, value):
+    def finish(self, value: EventType) -> None:
         self._finish(value, async_future=True)
 
-    def _finish(self, value, async_future):
+    def _finish(self, value: EventType, async_future: bool) -> None:
         self.value = value
         if not self.pulse:
             self.signaled = True
@@ -149,10 +160,10 @@ class DSFilter(DSFuture):
             # We have to re-evaluate only when finish() was called asynchronously.
             self._finish_tx.signal(self)
 
-    def cond_value(self):
+    def cond_value(self) -> EventType:
         return self.value
 
-    def get_process(self):
+    def get_process(self) -> Optional[DSProcess]:
         return self.cond if isinstance(self.cond, DSProcess) else None        
 
 
@@ -164,7 +175,7 @@ class DSCircuit(DSFuture):
     all the events.
     '''
 
-    def __init__(self, expression, signals, *args, **kwargs):
+    def __init__(self, expression: FilterExpression, signals: SignalList, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.expression = expression
         self.signals = signals
@@ -175,25 +186,27 @@ class DSCircuit(DSFuture):
         self.sim = self.signals[0].sim  # get the sim from the first signal
 
     @staticmethod
-    def build(first, second, expr):
+    def build(first: SignalType, second: SignalType, expr: FilterExpression) -> "DSCircuit":
         if (first.expression == expr) and (second.expression == expr):
-            return DSCircuit(expr, [first.signals] + [second.signals])
+            return DSCircuit(expr, first.signals + second.signals)
         if (second.expression == expr) and (first.expression == DSFilter.ONE_LINER):
             first, second = second, first
         if (first.expression == expr) and (second.expression == DSFilter.ONE_LINER):
             if first.positive == second.positive:
+                assert type(first) == DSCircuit
                 first.signals.append(second)
                 first.set_signals()
                 return first
             # A reset circuit is mergeable only if it is one_liner. The reason
             # is that a reset circuit when signaled resets all his setters.
             if not second.positive:
+                assert type(first) == DSCircuit
                 first.signals.append(second)
                 first.set_signals()
                 return first
         return DSCircuit(expr, [first, second])
 
-    def set_signals(self):
+    def set_signals(self) -> None:
         self.setters, self.resetters = [], []
         for s in self.signals:
             if s.positive:
@@ -201,18 +214,18 @@ class DSCircuit(DSFuture):
             else:
                 self.resetters.append(s)
 
-    def __or__(self, other):
+    def __or__(self, other: "DSCircuit") -> "DSCircuit":
         return DSCircuit.build(self, other, any)
 
-    def __and__(self, other):
+    def __and__(self, other: "DSCircuit") -> "DSCircuit":
         return DSCircuit.build(self, other, all)
 
-    def __neg__(self):
+    def __neg__(self) -> "DSCircuit":
         self.positive = False
         return self
 
-    def cond_value(self):
-        retval = {}
+    def cond_value(self) -> Dict[Union[DSFilter, "DSCircuit"], EventType]:
+        retval: Dict[Union[DSFilter, "DSCircuit"], EventType] = {}
         for el in self.setters:
             if not el.finished():
                 continue
@@ -225,17 +238,17 @@ class DSCircuit(DSFuture):
                 retval[el] = el.value
         return retval
     
-    def __str__(self):
+    def __str__(self) -> str:
         expression = ' | ' if self.expression == any else ' & '
         strings = [str(v) for v in self.setters + self.resetters]
         retval = expression.join(strings)
         sign = '' if self.positive else '-'
         return f'{sign}({retval})'
 
-    def finished(self):
+    def finished(self) -> bool:
         return self.signaled
     
-    def _gather_results(self, event, futures):
+    def _gather_results(self, event: EventType, futures: SignalList) -> List[bool]:
         retval = []
         for fut in futures:
             if isinstance(fut, DSFilter) or isinstance(fut, DSCircuit):
@@ -244,7 +257,7 @@ class DSCircuit(DSFuture):
                 retval.append(fut.finished())
         return retval
 
-    def get_future_eps(self):
+    def get_future_eps(self) -> Set["DSProducer"]:
         retval = set()
         # Including self._finish_tx would create loop dependency when waiting on self (i.e. await self):
         # 1. When this is finished, it would signal _finish_tx
@@ -254,7 +267,7 @@ class DSCircuit(DSFuture):
             retval |= s.get_future_eps()
         return retval
 
-    def __call__(self, event):
+    def __call__(self, event: EventType) -> bool:
         ''' Handles logic for the event. Pushes the event to the inputs and then evaluates the circuit. '''
         signaled = False
         # In the following, we have to send the event to the whole circuit. The reason is that

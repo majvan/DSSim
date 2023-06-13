@@ -18,11 +18,13 @@ import unittest
 from unittest.mock import Mock, call
 from dssim import DSProcess, DSCallback, DSKWCallback, DSSimulation
 from dssim import DSProducer, NotifierDict, NotifierRoundRobin, NotifierPriority
+from dssim.pubsub import NotifierRoundRobinItem
 
 class SimMock:
     pass
 
 class SomeObj:
+    names = {}
     pass
 
 class SomeIterableObj:
@@ -121,6 +123,7 @@ class TestProducer(unittest.TestCase):
         self.sim.send = Mock(return_value=True) # always returns true
         self.sim.schedule = Mock(return_value=1000) # new process id retval
         self.sim.schedule_event = Mock()
+        self.sim.names = {}
 
     def test0_producer_add(self):
         p = DSProducer(sim=self.sim)
@@ -464,13 +467,13 @@ class TestNotifierRoundRobin(unittest.TestCase):
         n = NotifierRoundRobin()
         self.assertTrue(n.queue == [])
         n.inc('a'), n.inc('a')
-        self.assertEqual(n.queue, [['a', 2]])
+        self.assertEqual(n.queue, [('a', 2)])
         n.inc('b'), n.inc('a')
-        self.assertEqual(n.queue, [['a', 3], ['b', 1]])
+        self.assertEqual(n.queue, [('a', 3), ('b', 1)])
         n.dec('a'), n.inc('b')
-        self.assertEqual(n.queue, [['a', 2], ['b', 2]])
+        self.assertEqual(n.queue, [('a', 2), ('b', 2)])
         n.dec('a'), n.dec('a')
-        self.assertEqual(n.queue, [['a', 0], ['b', 2]])
+        self.assertEqual(n.queue, [('a', 0), ('b', 2)])
 
     def test1_iter_change(self):
         n = NotifierRoundRobin()
@@ -487,47 +490,47 @@ class TestNotifierRoundRobin(unittest.TestCase):
         self.assertEqual(n.queue, [])
         n.cleanup()
         self.assertEqual(n.queue, [])
-        n.queue = [['a', 2], ['b', 3]]
+        n.queue = [NotifierRoundRobinItem('a', 2), NotifierRoundRobinItem('b', 3)]
         n.cleanup()
-        self.assertEqual(n.queue, [['a', 2], ['b', 3]])
+        self.assertEqual(n.queue, [('a', 2), ('b', 3)])
         n.dec('a'), n.dec('a')
-        self.assertEqual(n.queue, [['a', 0], ['b', 3]])
+        self.assertEqual(n.queue, [('a', 0), ('b', 3)])
         n.cleanup()
-        self.assertEqual(n.queue, [['b', 3]])
+        self.assertEqual(n.queue, [('b', 3)])
         n.dec('b'), n.dec('b'), n.dec('b')
-        self.assertEqual(n.queue, [['b', 0]])
+        self.assertEqual(n.queue, [('b', 0)])
         n.cleanup()
         self.assertEqual(n.queue, [])
 
     def test3_iter(self):
         n = NotifierRoundRobin()
-        n.queue = [['c', 1], ['a', 2], ['b', 4]]
+        n.queue = [NotifierRoundRobinItem('c', 1), NotifierRoundRobinItem('a', 2), NotifierRoundRobinItem('b', 4)]
         it = iter(n)
         el = next(it)
-        self.assertTrue(el == ['c', 1])
+        self.assertTrue(el == ('c', 1))
         el = next(it)
-        self.assertTrue(el == ['a', 2])
+        self.assertTrue(el == ('a', 2))
         el = next(it)
-        self.assertTrue(el == ['b', 4])
+        self.assertTrue(el == ('b', 4))
         with self.assertRaises(StopIteration):
             el = next(it)
 
     def test3_rewind(self):
         n = NotifierRoundRobin()
-        n.queue = [['c', 1], ['a', 2], ['b', 4],]
+        n.queue = [NotifierRoundRobinItem('c', 1), NotifierRoundRobinItem('a', 2), NotifierRoundRobinItem('b', 4),]
         it = iter(n)
         next(it), next(it)
         n.rewind()
-        self.assertEqual(n.queue, [['b', 4], ['c', 1], ['a', 2],])
+        self.assertEqual(n.queue, [('b', 4), ('c', 1), ('a', 2),])
 
         it = iter(n)
         next(it), next(it), next(it)
         n.rewind()
-        self.assertEqual(n.queue, [['b', 4], ['c', 1], ['a', 2],])
+        self.assertEqual(n.queue, [('b', 4), ('c', 1), ('a', 2),])
 
         it = iter(n)
         n.rewind()
-        self.assertEqual(n.queue, [['b', 4], ['c', 1], ['a', 2],])
+        self.assertEqual(n.queue, [('b', 4), ('c', 1), ('a', 2),])
 
 class TestNotifierPriority(unittest.TestCase):
 

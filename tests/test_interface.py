@@ -26,6 +26,7 @@ class TestInterface(unittest.TestCase):
 
     def test0_simple_interface(self):
         sim = Mock()
+        sim.names = {}
         i0 = MyComponent(sim=sim)
         name = list(sim.names.keys())[0]
         with self.assertRaises(ValueError):
