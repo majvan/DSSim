@@ -37,7 +37,9 @@ class Customer(sim.Component):
 env = sim.Environment() 
 CustomerGenerator()
 clerks = sim.Resource(amount=3, name="clerks")
-env.run(50000)
+time, events = env.run(50000)
 
 # clerks.print_statistics()
 # clerks.print_info()
+assert 49950 < time <= 50000, f"Time {time} is out of expected range."
+assert 50000 / 30 * 3 * 6 - 30 < events < 50000 / 30 * 3 * 6 + 30, f"Number of events {events} is out of expected range."

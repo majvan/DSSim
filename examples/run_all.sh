@@ -29,8 +29,6 @@ echo "Running gas station"
 python $SCRIPT_DIR/gasstation.py
 echo "Running interruptible context"
 python $SCRIPT_DIR/interruptible_context.py
-#   echo "I2C loopback"
-#   python $SCRIPT_DIR/i2c_master_slave.py
 echo "Processcomponent"
 python $SCRIPT_DIR/processcomponent.py
 echo "Queue"
@@ -67,3 +65,22 @@ echo "Asyncio gather"
 python $SCRIPT_DIR/asyncio/test_gather.py
 echo "Asyncio timeout"
 python $SCRIPT_DIR/asyncio/test_timeout.py
+
+echo "Bank, 1 clerk"
+python $SCRIPT_DIR/parity/Bank,\ 1\ clerk.py
+echo "Bank, 3 clerks"
+python $SCRIPT_DIR/parity/Bank,\ 3\ clerks.py
+echo "Bank, 3 clerks (resources)"
+python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(resources\).py
+echo "Bank, 3 clerks (state)"
+python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(state\).py
+echo "Bank, 3 clerks (signal)"
+python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(signal\).py
+echo "Demo wait"
+python $SCRIPT_DIR/parity/Demo\ wait.py
+echo "Demo wait (mutex)"
+python $SCRIPT_DIR/parity/Demo\ wait\ \(mutex\).py
+echo "Demo wait (signal)"
+python $SCRIPT_DIR/parity/Demo\ wait\ \(signal\).py
+echo "Elevator"
+python $SCRIPT_DIR/parity/Elevator.py

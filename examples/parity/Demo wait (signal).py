@@ -70,3 +70,6 @@ sim.run(5000)
 print("king                     from       to duration")
 for king in kings:
     print("{:20}{:9d}{:9d}{:9d}".format(*king))
+assert 220 < Prince._dscomponent_instances < 280, f"Num of kings {Prince._dscomponent_instances} is out of expected range."
+no_king_periods = sum(int(k[3] == 0) for k in kings)
+assert no_king_periods <= 8, f"Num of period without kings {no_king_periods} is out of expected range."
