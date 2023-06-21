@@ -17,7 +17,7 @@ Link layer components can (but not necessarily has to) use physical layer
 '''
 import random as _rand
 from dssim import DSSchedulable, DSComponent, DSKWCallback, DSProcess, DSProducer
-from dssim.utils import ParityComputer, ByteAssembler
+from dssim.components.hw.utils import ParityComputer, ByteAssembler
 
 
 def get_bits_per_byte(bits, stopbit, startbit, parity):

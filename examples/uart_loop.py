@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dssim import DSComponent, DSKWCallback, DSSimulation
-from dssim.components.uart import UARTLink, UARTPhys
+from dssim.components.hw.uart import UARTLink, UARTPhys
 
 
 class MCU(DSComponent):
