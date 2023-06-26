@@ -14,9 +14,13 @@
 '''
 A queue of events with runtime flexibility of put / get events.
 '''
-from typing import Any, List, Optional, Generator
-from dssim.base import TimeType, EventType, CondType, SignalMixin, DSAbortException, DSComponent
+from typing import Any, List, Optional, Generator, TYPE_CHECKING
+from dssim.base import TimeType, EventType, CondType, SignalMixin, DSAbortException
 from dssim.pubsub import DSConsumer, DSProducer
+
+
+if TYPE_CHECKING:
+    from dssim.simulation import DSSimulation
 
 
 class Queue(DSConsumer, SignalMixin):
@@ -28,7 +32,7 @@ class Queue(DSConsumer, SignalMixin):
     def __init__(self, capacity: float = float('inf'), *args: Any, **kwargs: Any) -> None:
         ''' Init Queue component. No special arguments here. '''
         super().__init__(*args, **kwargs)
-        self.tx_changed = DSProducer(name=self.name+'.tx', sim=self.sim)
+        self.tx_changed = self.sim.producer(name=self.name+'.tx')
         self.capacity = capacity
         self.queue: List[EventType] = []
 
@@ -186,3 +190,12 @@ class QueueMixin:
             assert len(elements) == 1
             retval = elements[0]
         return retval
+
+
+# In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
+class SimQueueMixin:
+    def queue(self: Any, *args: Any, **kwargs: Any) -> Queue:
+        sim: DSSimulation = kwargs.pop('sim', self)
+        if sim is not self:
+            raise ValueError('The parameter sim in queue() method should be set to the same simulation instance.')
+        return Queue(*args, **kwargs, sim=sim)

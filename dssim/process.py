@@ -42,7 +42,6 @@ class DSProcess(DSFuture, SignalMixin):
 
     def __init__(self, generator: Union[Generator, Coroutine], *args: Any, **kwargs: Any) -> None:
         ''' Initializes DSProcess. The input has to be a generator function. '''
-        # self.generator = generator
         self.generator = generator
         self._scheduled = False
         if self.started():  # check if the generator / coro has already been started...
@@ -124,6 +123,12 @@ class DSProcess(DSFuture, SignalMixin):
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
 class SimProcessMixin:
+    def process(self: Any, *args: Any, **kwargs: Any) -> DSProcess:
+        sim: DSSimulation = kwargs.pop('sim', self)
+        if sim is not self:
+            raise ValueError('The parameter sim in process() method should be set to the same simulation instance.')
+        return DSProcess(*args, **kwargs, sim=sim)
+
     def observe_pre(self: Any, *components: Union[DSFuture, DSProducer], **kwargs: Any) -> DSSubscriberContextManager:
         return DSSubscriberContextManager(self.parent_process, 'pre', components, **kwargs)
 
@@ -191,6 +196,7 @@ def DSSchedulable(api_func):
 
 class DSTimeoutContextError(Exception):
     pass
+
 
 class DSInterruptibleContextError(Exception):
     def __init__(self, value: EventType, *args: Any, **kwargs: Any) -> None:

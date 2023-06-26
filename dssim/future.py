@@ -14,11 +14,15 @@
 '''
 This file implements future class (see the paradigm in async programming).
 '''
-from typing import Any, Set, Optional, Generator
+from typing import Any, Set, Optional, Generator, TYPE_CHECKING
 from contextlib import contextmanager
 from dssim.base import TimeType, EventType
 from dssim.base import SignalMixin, DSAbortException
 from dssim.pubsub import ConsumerMetadata, DSConsumer, DSProducer, TrackEvent
+
+
+if TYPE_CHECKING:
+    from dssim.simulation import DSSimulation
 
 
 class DSFuture(DSConsumer, SignalMixin):
@@ -92,3 +96,12 @@ class DSFuture(DSConsumer, SignalMixin):
     def send(self, event: EventType) -> EventType:
         self.finish(event)
         return event
+
+
+# In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
+class SimFutureMixin:
+    def future(self: Any, *args: Any, **kwargs: Any) -> DSFuture:
+        sim: DSSimulation = kwargs.pop('sim', self)
+        if sim is not self:
+            raise ValueError('The parameter sim in process() method should be set to the same simulation instance.')
+        return DSFuture(*args, **kwargs, sim=sim)

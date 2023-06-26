@@ -20,8 +20,12 @@ Consumer: an object which takes signal from producer and then stops
   further spread.
 '''
 from abc import abstractmethod
-from typing import List, Dict, Any, Type, Generator, Callable, Tuple, Iterator
+from typing import List, Dict, Any, Type, Generator, Callable, Tuple, Iterator, TYPE_CHECKING
 from dssim.base import TimeType, CondType, StackedCond, DSComponent, DSEvent, EventType, EventRetType, SignalMixin
+
+
+if TYPE_CHECKING:
+    from dssim.simulation import DSSimulation
 
 
 class ConsumerMetadata:
@@ -342,3 +346,24 @@ class DSTransformation(DSProducer):
     def send(self, event: EventType) -> None:
         event = self.transformation(event)
         super().send(event)
+
+
+# In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
+class SimPubsubMixin:
+    def producer(self: Any, *args: Any, **kwargs: Any) -> DSProducer:
+        sim: DSSimulation = kwargs.pop('sim', self)
+        if sim is not self:
+            raise ValueError('The parameter sim in producer() method should be set to the same simulation instance.')
+        return DSProducer(*args, **kwargs, sim=sim)
+
+    def callback(self: Any, *args: Any, **kwargs: Any) -> DSCallback:
+        sim: DSSimulation = kwargs.pop('sim', self)
+        if sim is not self:
+            raise ValueError('The parameter sim in callback() method should be set to the same simulation instance.')
+        return DSCallback(*args, **kwargs, sim=sim)
+
+    def kw_callback(self: Any, *args: Any, **kwargs: Any) -> DSKWCallback:
+        sim: DSSimulation = kwargs.pop('sim', self)
+        if sim is not self:
+            raise ValueError('The parameter sim in kw_callback() method should be set to the same simulation instance.')
+        return DSKWCallback(*args, **kwargs, sim=sim)

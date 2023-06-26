@@ -17,15 +17,22 @@ The file provides basic logic to run the simulation and supported methods.
 '''
 import sys
 import inspect
-from typing import List, Union, Tuple, Callable, Generator, Coroutine, Optional, overload, TYPE_CHECKING
+import types
+from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Optional, overload, TYPE_CHECKING
 from dssim.timequeue import TimeQueue
 from dssim.base import TimeType, DSAbsTime, EventType, EventRetType, CondType, StackedCond, DSComponentSingleton
-from dssim.pubsub import DSConsumer, DSCallback, void_consumer
-from dssim.future import DSFuture
+from dssim.pubsub import DSConsumer, DSCallback, void_consumer, SimPubsubMixin
+from dssim.future import DSFuture, SimFutureMixin
 from dssim.process import DSProcess, SimProcessMixin
+from dssim.components.queue import SimQueueMixin
+from dssim.components.resource import SimResourceMixin
+from dssim.components.state import SimStateMixin
+from dssim.cond import SimFilterMixin
+
 
 if TYPE_CHECKING:
     from dssim.base import DSComponent
+
 
 class _Awaitable:
     def __init__(self, val: EventType = None) -> None:
@@ -39,7 +46,14 @@ class _Awaitable:
 SchedulableType = Union[DSFuture, Generator, Coroutine, Callable, DSCallback]
 
 
-class DSSimulation(SimProcessMixin, DSComponentSingleton):
+class DSSimulation(DSComponentSingleton,
+                   SimPubsubMixin,
+                   SimFutureMixin,
+                   SimProcessMixin,
+                   SimFilterMixin,
+                   SimQueueMixin,
+                   SimResourceMixin,
+                   SimStateMixin):
     ''' The simulation is a which schedules the nearest (in time) events. '''
 
     class _TestObject:

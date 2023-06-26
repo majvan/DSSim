@@ -25,8 +25,10 @@ from dssim.pubsub import ConsumerMetadata
 from dssim.future import DSFuture
 from dssim.process import DSProcess
 
+
 if TYPE_CHECKING:
     from dssim.pubsub import DSProducer
+    from dssim.simulation import DSSimulation
 
 
 FilterExpression = Callable[[Iterable[object]], bool]
@@ -74,7 +76,7 @@ class DSFilter(DSFuture):
         self.signal_timeout = signal_timeout
         if inspect.isgenerator(self.cond) or inspect.iscoroutine(self.cond):
             # We create a new process from generator
-            self.cond = DSProcess(self.cond, sim=self.sim).schedule(0)  # convert to DSProcess so we could get return value
+            self.cond = self.sim.process(self.cond).schedule(0)  # convert to DSProcess so we could get return value
             # It is assumed that the coro / generator runs in the same 'context' as the current process.
             # The coro / generator gets events which were planned for the current running process by default.
             self.forward_events = (forward_events != False)  # True => True, None => True, False => False
@@ -304,3 +306,17 @@ class DSCircuit(DSFuture):
                 self.finish(self.cond_value())
         return signaled
     
+
+# In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
+class SimFilterMixin:
+    def filter(self: Any, *args: Any, **kwargs: Any) -> DSFilter:
+        sim: DSSimulation = kwargs.pop('sim', self)
+        if sim is not self:
+            raise ValueError('The parameter sim in filter() method should be set to the same simulation instance.')
+        return DSFilter(*args, **kwargs, sim=sim)
+
+    def circuit(self: Any, *args: Any, **kwargs: Any) -> DSCircuit:
+        sim: DSSimulation = kwargs.pop('sim', self)
+        if sim is not self:
+            raise ValueError('The parameter sim in circuit() method should be set to the same simulation instance.')
+        return DSCircuit(*args, **kwargs, sim=sim)

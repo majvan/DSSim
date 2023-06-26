@@ -16,9 +16,13 @@ A resource is an object representing a pool of abstract resources with amount fi
 Compared to queue, resource works with non-integer amounts but it does not contain object
 in the pool, just an abstract pool level information (e.g. amount of water in a tank).
 '''
-from typing import Any, Generator
+from typing import Any, Generator, TYPE_CHECKING
 from dssim.base import TimeType, EventType, DSComponent
 from dssim.pubsub import DSProducer
+
+
+if TYPE_CHECKING:
+    from dssim.simulation import DSSimulation
 
 
 class Resource(DSComponent):
@@ -35,7 +39,7 @@ class Resource(DSComponent):
         super().__init__(*args, **kwargs)
         if amount > capacity:
             raise ValueError('Initial amount of the resource is greater than capacity.')
-        self.tx_changed = DSProducer(name=self.name+'.tx', sim=self.sim)
+        self.tx_changed = self.sim.producer(name=self.name+'.tx')
         self.amount = amount
         self.capacity = capacity
 
@@ -169,3 +173,12 @@ class ResourceMixin:
     def gput(self: Any, resource: Resource, amount: float = 1, timeout: TimeType = float('inf')) -> Generator[EventType, None, float]:
         retval = yield from resource.gput(timeout, amount)
         return retval
+
+
+# In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
+class SimResourceMixin:
+    def resource(self: Any, *args: Any, **kwargs: Any) -> Resource:
+        sim: DSSimulation = kwargs.pop('sim', self)
+        if sim is not self:
+            raise ValueError('The parameter sim in resource() method should be set to the same simulation instance.')
+        return Resource(*args, **kwargs, sim=sim)
