@@ -21,7 +21,7 @@ from dssim.future import DSFuture
 from dssim.process import DSProcess, DSSchedulable
 from dssim.process import DSInterruptibleContextError, DSTransferableCondition, DSTimeoutContextError
 from dssim.cond import DSFilter
-from dssim.processcomponent import DSProcessComponent
+from dssim.processcomponent import DSProcessComponent, PCGenerator
 from dssim.simulation import DSSimulation
 
 from dssim.components import Queue, Resource, Mutex, State

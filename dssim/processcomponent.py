@@ -17,7 +17,7 @@ The file provides process-centric API to easy the design of process-oriented
 application.
 '''
 from abc import abstractmethod
-from typing import Any, Optional, Generator
+from typing import Any, Optional, Generator, Type, Callable
 import inspect
 from dssim.base import EventType, TimeType, DSComponent, DSAbortException
 from dssim.process import DSProcess
@@ -42,7 +42,7 @@ class DSProcessComponent(DSComponent, QueueMixin, ResourceMixin):
     def __init__(self, *args: Any, name: Optional[str] = None, **kwargs: Any) -> None:
         if name is None:
             name = type(self).__name__ + '.' + str(self._dscomponent_instances)
-        super().__init__(self, name=name, *args, **kwargs)
+        super().__init__(name=name, *args, **kwargs)
         kwargs.pop('name', None), kwargs.pop('sim', None)  # remove the two arguments
         process: DSProcess
         if inspect.isgeneratorfunction(self.process) or inspect.iscoroutinefunction(self.process):
@@ -78,3 +78,17 @@ class DSProcessComponent(DSComponent, QueueMixin, ResourceMixin):
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
+
+class PCGenerator(DSProcessComponent):
+    def __init__(self, cls: Type[DSComponent], wait_method: Callable[[DSComponent], float] = lambda last: 1, *args: Any, name: Optional[str] = None, **kwargs: Any) -> None:
+        self.cls = cls
+        self.wait_method = wait_method
+        if name is None:
+            name = f'PCGenerator({cls.__name__ }).' + str(self._dscomponent_instances)
+        super().__init__(*args, name=name, **kwargs)
+
+    async def process(self) -> None:
+        while True:
+            obj = self.cls()  # create new instance of the class
+            await self.sim.wait(self.wait_method(obj))
+      
