@@ -53,7 +53,7 @@ async def demo_filtering0():
     time = sim.time
     fut = DSFuture()
     DSProcess(signal_future_after(2, fut), sim=sim).schedule(0)
-    with sim.observe_post(fut):
+    with sim.observe_pre(fut):
         ret = await sim.wait(cond=fut)
     assert ret == fut
     assert fut.value == 'Signal!'
@@ -62,7 +62,7 @@ async def demo_filtering0():
     time = sim.time
     fut = DSFuture()
     DSProcess(signal_future_after(2, fut), sim=sim).schedule(0)
-    with sim.observe_post(fut):
+    with sim.observe_pre(fut):
         ret = await sim.wait(1, cond=fut)
     assert ret == None
     assert sim.time == time + 1

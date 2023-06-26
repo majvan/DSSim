@@ -256,13 +256,14 @@ class NotifierPriority(NotifierPolicy):
 
 
 class DSProducer(DSConsumer, SignalMixin):
-    ''' Full feature producer which consume signal events and resends it to the attached consumers. '''
+    ''' Full feature producer which consumes signal events and resends it to the attached consumers. '''
     def __init__(self, notifier: Type[NotifierPolicy] = NotifierDict, **kwargs) -> None:
         super().__init__(**kwargs)
         self.subs = {
             'pre': notifier(),
             'act': notifier(),
-            'post': notifier(),
+            'post+': notifier(),
+            'post-': notifier(),
         }
         # A producer takes any event - no conditional
         self.meta.cond.push(lambda e: True)
@@ -281,18 +282,26 @@ class DSProducer(DSConsumer, SignalMixin):
 
         # Emit the signal to all pre-observers
         for subscriber, refs in self.subs['pre']:
-            self.sim.try_send(subscriber, event) if refs else None
+            if refs:
+                self.sim.try_send(subscriber, event)
 
         # Emit the signal to all consumers and stop with the first one
         # which accepted the signal
-        for subscriber, refs in self.subs['act']:
-            if refs and self.sim.try_send(subscriber, event):
+        for consumer, refs in self.subs['act']:
+            if refs and self.sim.try_send(consumer, event):
+                # The event was consumed.
                 self.subs['act'].rewind()  # this will rewind for round robin
+                # Notify all the post-observers about consumed event.
+                for subscriber, prefs in self.subs['post+']:
+                    # The post-observers will receive a dict with two objects
+                    if prefs:
+                        self.sim.try_send(subscriber, {'consumer': consumer, 'event': event})
                 break
         else:
-            # Emit the signal to all post-observers
-            for subscriber, refs in self.subs['post']:
-                self.sim.try_send(subscriber, event) if refs else None
+            # Emit the missed signal to all post-observers
+            for subscriber, refs in self.subs['post-']:
+                if refs:
+                    self.sim.try_send(subscriber, event)
 
         # cleanup- remove items with zero references
         # We do not cleanup in remove_subscriber, because remove_subscriber could

@@ -130,9 +130,12 @@ class SimProcessMixin:
     def consume(self: Any, *components: Union[DSFuture, DSProducer], **kwargs: Any) -> DSSubscriberContextManager:
         return DSSubscriberContextManager(self.parent_process, 'act', components, **kwargs)
 
-    def observe_post(self: Any, *components: Union[DSFuture, DSProducer], **kwargs: Any) -> DSSubscriberContextManager:
-        return DSSubscriberContextManager(self.parent_process, 'post', components, **kwargs)
-    
+    def observe_consumed(self: Any, *components: Union[DSFuture, DSProducer], **kwargs: Any) -> DSSubscriberContextManager:
+        return DSSubscriberContextManager(self.parent_process, 'post+', components, **kwargs)
+
+    def observe_unconsumed(self: Any, *components: Union[DSFuture, DSProducer], **kwargs: Any) -> DSSubscriberContextManager:
+        return DSSubscriberContextManager(self.parent_process, 'post-', components, **kwargs)
+
     @contextmanager
     def extend_cond(self: Any, cond: CondType) -> Iterator:
         conds = self.parent_process.meta.cond
@@ -206,7 +209,8 @@ class DSSubscriberContextManager:
                 eps.add(c)
         self.pre = eps if queue_id == 'pre' else set()
         self.act = eps if queue_id == 'act' else set()
-        self.post = eps if queue_id == 'post' else set()
+        self.postp = eps if queue_id == 'post+' else set()
+        self.postn = eps if queue_id == 'post-' else set()
         self.kwargs = kwargs
 
     def __enter__(self) -> "DSSubscriberContextManager":
@@ -215,8 +219,10 @@ class DSSubscriberContextManager:
             producer.add_subscriber(self.process, 'pre', **self.kwargs)
         for producer in self.act:
             producer.add_subscriber(self.process, 'act', **self.kwargs)
-        for producer in self.post:
-            producer.add_subscriber(self.process, 'post', **self.kwargs)
+        for producer in self.postp:
+            producer.add_subscriber(self.process, 'post+', **self.kwargs)
+        for producer in self.postn:
+            producer.add_subscriber(self.process, 'post-', **self.kwargs)
         return self
 
     def __exit__(self, exc_type: Optional[type[Exception]], exc_value: Exception, tb: TracebackType) -> None:
@@ -224,13 +230,16 @@ class DSSubscriberContextManager:
             producer.remove_subscriber(self.process, 'pre', **self.kwargs)
         for producer in self.act:
             producer.remove_subscriber(self.process, 'act', **self.kwargs)
-        for producer in self.post:
-            producer.remove_subscriber(self.process, 'post', **self.kwargs)
+        for producer in self.postp:
+            producer.remove_subscriber(self.process, 'post+', **self.kwargs)
+        for producer in self.postn:
+            producer.remove_subscriber(self.process, 'post-', **self.kwargs)
 
     def __add__(self, other: "DSSubscriberContextManager") -> "DSSubscriberContextManager":
         self.pre = self.pre | other.pre
         self.act = self.act | other.act
-        self.post = self.post | other.post
+        self.postp = self.postp | other.postp
+        self.postn = self.postn | other.postn
         return self
 
 
