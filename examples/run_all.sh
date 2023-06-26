@@ -37,6 +37,8 @@ echo "School"
 python $SCRIPT_DIR/school.py
 echo "Studio"
 python $SCRIPT_DIR/studio.py
+echo "Trajectory"
+python $SCRIPT_DIR/trajectory.py
 echo "UART physical"
 python $SCRIPT_DIR/uart_physical.py
 echo "VISA check"
