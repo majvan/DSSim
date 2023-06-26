@@ -66,11 +66,11 @@ class DSAsyncSimulation(DSSimulation):
         return False
     
     def call_later(self, delay, callback, *args, context=None):
-        cb = DSSchedulable(DSCallback(callback(*args)))
+        cb = DSSchedulable(DSCallback(callback(*args), sim=self))
         self.schedule(delay, cb)
     
     def call_at(self, time, callback, *args, context=None):
-        cb = DSSchedulable(DSCallback(callback(*args)))
+        cb = DSSchedulable(DSCallback(callback(*args), sim=self))
         self.schedule(DSAbsTime(time), cb)
 
     def create_task(self, coro):
@@ -100,13 +100,13 @@ class FutureAsyncMixin:
         if isinstance(callback, DSCallback):
             self._finish_tx.add_subscriber(callback, phase='pre')
         elif callable(callback):
-            self._finish_tx.add_subscriber(DSCallback(callback), phase='pre')
+            self._finish_tx.add_subscriber(DSCallback(callback, sim=self.sim), phase='pre')
         else:
             raise ValueError(f'Callback {callback} shall be a DSCallback or a callable')
 
     def remove_done_callback(self, callback):
         if isinstance(callback, function):
-            callback = DSCallback(callback)
+            callback = DSCallback(callback, sim=self)
         self._finish_tx.remove_subscriber(callback)
 
     def cancel(self, msg=None):
