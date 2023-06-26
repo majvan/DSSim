@@ -19,9 +19,9 @@ class Switch(DSComponent):
         super().__init__(*args, **kwargs)
         self.counter = 0
         for i in range(3):
-            DSProcess(self.process(i), name=f"{self.name}.take{i}", sim=self.sim).schedule(0)
-        self.producer = DSProducer(name=f"{self.name}.feed", sim=self.sim)
-        DSProcess(self.feeder(), name=f"{self.name}.feedprocess", sim=self.sim).schedule(0)
+            self.sim.process(self.process(i), name=f"{self.name}.take{i}").schedule(0)
+        self.producer = self.sim.producer(name=f"{self.name}.feed")
+        self.sim.process(self.feeder(), name=f"{self.name}.feedprocess").schedule(0)
 
     def feeder(self):
         yield from self.sim.gwait(3)

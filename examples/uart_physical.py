@@ -20,7 +20,7 @@ class MCU(DSComponent):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.baudrate = 115200
-        self.gpio0 = DSProducer(name=self.name + '.gpio', sim=self.sim)
+        self.gpio0 = self.sim.producer(name=self.name + '.gpio')
         self.uart0 = UARTPhys(baudrate=self.baudrate, parity='E', name=self.name + '.uart0', sim=self.sim)
         self.gpio0.add_subscriber(self.uart0.rx)  # connect gpio output to UART RX peripheral
         self.stat = {'last_byte': 0}
@@ -29,7 +29,7 @@ class MCU(DSComponent):
         ''' This function has to be called after producers are registered '''
         # Register ISR routine. The routine is on link layer because physical layer does not
         # export any IRQ (there is not much value to register that a bit was received).
-        self.uart0.rx_link.add_subscriber(DSKWCallback(self.rx_isr, name=self.name + '.rx_isr', sim=self.sim))
+        self.uart0.rx_link.add_subscriber(self.sim.kw_callback(self.rx_isr, name=self.name + '.rx_isr'))
 
         #  Bit banging with GPIO to send 0x55 = 85
         self.gpio0.schedule_kw_event(0 / self.baudrate, line=0)  # start

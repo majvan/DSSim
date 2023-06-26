@@ -17,8 +17,8 @@ from random import randint
 class School(DSComponent):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.tx = DSProducer(name=self.name+'.bell_tx', sim=self.sim)
-        DSProcess(self.school_bell(), name=self.name+'.bell_process', sim=self.sim).schedule(0)
+        self.tx = self.sim.producer(name=self.name+'.bell_tx')
+        self.sim.process(self.school_bell(), name=self.name+'.bell_process').schedule(0)
         self.days = 0
 
     def school_bell(self):
@@ -68,7 +68,7 @@ class School(DSComponent):
 class Pupil(DSComponent):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.tx = DSProducer(name=self.name+'.brain_activity_tx', sim=self.sim)
+        self.tx = self.sim.producer(name=self.name+'.brain_activity_tx')
         # self.brain_activity = 'none'
         self.total_classes = 0
 
@@ -104,7 +104,7 @@ class Family(DSProcessComponent):
             yield from self.sim.gwait(24 * 60 - now)  # wait till midnight
             yield from self.sim.gwait(7 * 60 + 45)  # wait till 7:45
             for pupil in pupils:
-                school_process = DSProcess(pupil.go_to_school(school, randint(6, 8)), sim=self.sim).schedule(0)
+                self.sim.process(pupil.go_to_school(school, randint(6, 8))).schedule(0)
 
 if __name__ == '__main__':
     sim = DSSimulation()

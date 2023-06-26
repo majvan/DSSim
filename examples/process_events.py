@@ -34,10 +34,10 @@ class MyComponent(DSComponent):
     def __init__(self, name, **kwargs):
         super().__init__(**kwargs)
         self.stat = {'errors': 0, 'success': 0, 'tries': 0}
-        self.sm = DSProcess(self.locker_state_machine(), name=self.name+'.rx_sm', sim=self.sim).schedule(0)
+        self.sm = self.sim.process(self.locker_state_machine(), name=self.name+'.rx_sm').schedule(0)
 
     def boot(self):
-        DSProcess(obj0.attacker1(), name=self.name+'.attacker', sim=self.sim).schedule(0)
+        self.sim.process(obj0.attacker1(), name=self.name+'.attacker').schedule(0)
 
     def attacker1(self):
         ''' Attacker provides random numbers to try to break the locker machine '''

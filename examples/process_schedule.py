@@ -18,9 +18,9 @@ import inspect
 class MyComponent(DSComponent):
     def __init__(self, dummy_selection, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.taskA = DSProcess(self.do_somethingA(), name=self.name+'.taskA', sim=self.sim)
-        self.taskB = DSProcess(self.do_somethingB(), name=self.name+'.taskB', sim=self.sim)
-        self.taskC = DSProcess(self.do_somethingC(), name=self.name+'.taskC', sim=self.sim)
+        self.taskA = self.sim.process(self.do_somethingA(), name=self.name+'.taskA')
+        self.taskB = self.sim.process(self.do_somethingB(), name=self.name+'.taskB')
+        self.taskC = self.sim.process(self.do_somethingC(), name=self.name+'.taskC')
         if dummy_selection == 'gjoin':
             self.taskDummy = self.dummy_gjoin(dummy_selection)
         elif dummy_selection == 'join':

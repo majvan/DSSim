@@ -32,17 +32,15 @@ class IntegralLimiter(DSComponent):
         self.report_period = 1 / report_frequency
         self.accumulated_rate: float = 0
         self.accumulated_report = accumulated_report
-        self.pusher = DSProcess(
+        self.pusher = self.sim.process(
             self._push(),
             name=self.name + '.rx_push',
-            sim=self.sim,
         ).schedule(0)
-        self.rx = DSCallback(
+        self.rx = self.sim.callback(
             self._on_event,
             name=self.name + '.rx',
-            sim=self.sim,
         )
-        self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
+        self.tx = self.sim.producer(name=self.name + '.tx')
 
     def _on_event(self, event: EventType) -> None:
         ''' Feed consumer handler '''
@@ -75,13 +73,12 @@ class Limiter(DSComponent):
         self.buffer: List[EventType] = []
         self.report_period = self._compute_period(throughput)
         self._update_period = self.report_period
-        self.pusher = DSProcess(
+        self.pusher = self.sim.process(
             self._push(),
             name=self.name + '.rx_push',
-            sim=self.sim,
         ).schedule(0)
-        self.rx = DSCallback(self._on_event, name=self.name + '.rx', sim=self.sim)
-        self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
+        self.rx = self.sim.callback(self._on_event, name=self.name + '.rx')
+        self.tx = self.sim.producer(name=self.name + '.tx')
 
     def _compute_period(self, throughput: float) -> float:
         ''' Compute when is the next time to report '''

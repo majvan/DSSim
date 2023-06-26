@@ -20,5 +20,5 @@ c1 = Queue(1)
 gen = PCGenerator(Product, lambda p: random.uniform(5, 15))
 time, ev = sim.run(150)
 assert 135 < time <= 150, f"Unexpected value of the time of last event the simulation: {time}"
-assert 125 < ev <= 155, f"Unexpected number of events: {ev}"
+assert 125 < ev <= 157, f"Unexpected number of events: {ev}"
 

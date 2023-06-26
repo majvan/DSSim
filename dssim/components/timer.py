@@ -33,8 +33,8 @@ class Timer(DSComponent):
         self.period = period
         self.counter: float = repeats or float('inf')
         self.status: Timer.Status = Timer.Status.STOPPED
-        self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
-        self.proc = DSProcess(self.process(), name=self.name+'.process', sim=self.sim).schedule(0)
+        self.tx = self.sim.producer(name=self.name + '.tx')
+        self.proc = self.sim.process(self.process(), name=self.name+'.process').schedule(0)
 
     async def process(self) -> EventType:
         ''' Methods schedules new event depending on the counter '''

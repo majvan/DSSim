@@ -25,8 +25,8 @@ class Delay(DSComponent):
     def __init__(self, delay: float, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.set_delay(delay)
-        self.rx = DSCallback(self._on_event, name=self.name + '.rx', sim=self.sim)
-        self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
+        self.rx = self.sim.callback(self._on_event, name=self.name + '.rx')
+        self.tx = self.sim.producer(name=self.name + '.tx')
 
     def set_delay(self, delay: float) -> None:
         ''' Set the delay '''

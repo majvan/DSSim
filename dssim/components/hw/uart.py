@@ -41,12 +41,11 @@ class UARTNoisyLine(DSComponent):
         self.probability_level = int(bit_error_probability * self.resolution)
         # The random module is required when using this component
         self._rand = _rand
-        self.rx = DSKWCallback(
+        self.rx = self.sim.kw_callback(
             self._on_rx_event,
             name=self.name + '.rx',
-            sim=self.sim,
         )
-        self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
+        self.tx = self.sim.producer(name=self.name + '.tx')
 
         self.stat = {}
         self.stat['bit_counter'] = 0  # counter of bits received
@@ -128,13 +127,13 @@ class UARTPhysBase(DSComponent):
         self.rx_buffer_size = rx_buffer_size
 
     def _add_tx_pubsub(self):
-        self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
-        # self.tx_irq = DSProducer(name=self.name + '.tx_irq')  # Not supported yet, low value
-        self.tx_link = DSProducer(name=self.name + '.tx bridge to linklayer', sim=self.sim)
+        self.tx = self.sim.producer(name=self.name + '.tx')
+        # self.tx_irq = self.sim.producer(name=self.name + '.tx_irq')  # Not supported yet, low value
+        self.tx_link = self.sim.producer(name=self.name + '.tx bridge to linklayer')
 
     def _add_rx_pubsub(self):
-        # self.rx_irq = DSProducer(name=self.name + '.rx_irq')  # Not supported now, low value
-        self.rx_link = DSProducer(name=self.name + '.rx bridge to linklayer', sim=self.sim)
+        # self.rx_irq = self.sim.producer(name=self.name + '.rx_irq')  # Not supported now, low value
+        self.rx_link = self.sim.producer(name=self.name + '.rx bridge to linklayer')
 
     def send(self, byte, parity):
         ''' Send a byte over UART with and a parity bit '''
@@ -215,15 +214,13 @@ class UARTPhys(UARTPhysBase):
 
     def __add_rx_pubsub(self):
         # Create new interface for RX
-        self.rx = DSKWCallback(
+        self.rx = self.sim.kw_callback(
             self._on_rx_line_state,
             name=self.name + '.rx',
-            sim=self.sim,
         )
-        self._rx_sampler = DSProcess(
+        self._rx_sampler = self.sim.process(
             self._scan_bits(),
             name=self.name + '.rx_sampler',
-            sim=self.sim,
         )
         self._rx_sampler.schedule(0)
 
@@ -353,17 +350,15 @@ class UARTPhysBasic(UARTPhysBase):
         self.stat['err_overrun'] = 0  # RX overruns counter (app to slow to recv)
 
     def __add_tx_pubsub(self):
-        consumer = DSKWCallback(self._on_tx_byte_event,
+        consumer = self.sim.kw_callback(self._on_tx_byte_event,
                               name=self.name + '.(internal) tx fb',
-                              sim=self.sim
                               )
         self.tx.add_subscriber(consumer)
 
     def __add_rx_pubsub(self):
         # Create new interface for RX
-        self.rx = DSKWCallback(self._on_rx_byte_event,
+        self.rx = self.sim.kw_callback(self._on_rx_byte_event,
                              name=self.name + '.rx',
-                             sim=self.sim
                              )
 
     def _send_now(self, byte, parity, *other):
@@ -453,11 +448,10 @@ class UARTLink(DSComponent):
         self.stat['err_other'] = 0  # RX other error counter
 
     def __add_tx_pubsub(self):
-        self.tx = DSProducer(name=self.name + '.tx', sim=self.sim)
-        self.tx_irq = DSProducer(name=self.name + '.tx_irq', sim=self.sim)
-        consumer = DSKWCallback(self._on_tx_event,
+        self.tx = self.sim.producer(name=self.name + '.tx')
+        self.tx_irq = self.sim.producer(name=self.name + '.tx_irq')
+        consumer = self.sim.kw_callback(self._on_tx_event,
                               name=self.name + '.(internal) tx_fb',
-                              sim=self.sim
                               )
         if self.phys:
             self.phys.tx_link.add_subscriber(consumer)
@@ -465,8 +459,8 @@ class UARTLink(DSComponent):
             self.tx.add_subscriber(consumer)
 
     def __add_rx_pubsub(self):
-        self.rx = DSKWCallback(self._on_rx_event, name=self.name + '.rx', sim=self.sim)
-        self.rx_irq = DSProducer(name=self.name + '.rx_irq', sim=self.sim)
+        self.rx = self.sim.kw_callback(self._on_rx_event, name=self.name + '.rx')
+        self.rx_irq = self.sim.producer(name=self.name + '.rx_irq')
         if self.phys:
             self.phys.rx_link.add_subscriber(self.rx)
 

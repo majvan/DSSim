@@ -18,16 +18,16 @@ class MCU(DSComponent):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.limiter = Limiter(0, name=self.name + '.(internal) limiter0', sim=self.sim)
-        self._producer = DSProducer(name=self.name + '.(internal) event producer', sim=self.sim)
+        self._producer = self.sim.producer(name=self.name + '.(internal) event producer')
         self._producer.add_subscriber(self.limiter.rx)
-        consumer = DSCallback(self._on_output, name=self.name + '.(internal) output', sim=self.sim)
+        consumer = self.sim.callback(self._on_output, name=self.name + '.(internal) output')
         self.limiter.tx.add_subscriber(consumer)
         self.stat = {'generated': 0, 'received': 0}
 
     def boot(self):
         ''' This function has to be called after producers are registered '''
-        DSProcess(self.generator(20), name=self.name + '.(internal) generator process', sim=self.sim).schedule(0)
-        DSProcess(self.limit_controller(), name=self.name + '.(internal) control process', sim=self.sim).schedule(0)
+        self.sim.process(self.generator(20), name=self.name + '.(internal) generator process').schedule(0)
+        self.sim.process(self.limit_controller(), name=self.name + '.(internal) control process').schedule(0)
 
     def limit_controller(self):
         self.limiter.set_throughput(10)  # 0 sec

@@ -27,7 +27,7 @@ class MCU(DSComponent):
 
     def boot(self):
         # Register ISRs
-        self.uart0.rx_irq.add_subscriber(DSKWCallback(self.rx_isr, name=self.name + '.isr', sim=self.sim))
+        self.uart0.rx_irq.add_subscriber(self.sim.kw_callback(self.rx_isr, name=self.name + '.isr'))
 
     def rx_isr(self, flag, **other):
         if flag == 'byte':

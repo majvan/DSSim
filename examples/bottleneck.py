@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSComponent, DSProcess, DSCallback, DSSimulation, DSProducer, Limiter
+from dssim import DSComponent, DSCallback, DSSimulation, DSProducer, Limiter
 from random import uniform
 
 
@@ -20,15 +20,15 @@ class MCU(DSComponent):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         limiter = Limiter(1, name=self.name + '.(internal) limiter0', sim=self.sim)
-        self._producer = DSProducer(name=self.name + '.(internal) event producer', sim=self.sim)
+        self._producer = self.sim.producer(name=self.name + '.(internal) event producer')
         self._producer.add_subscriber(limiter.rx)
-        consumer = DSCallback(self._on_output, name=self.name+'.(internal) output', sim=self.sim)
+        consumer = self.sim.callback(self._on_output, name=self.name+'.(internal) output')
         limiter.tx.add_subscriber(consumer)
         self.stat = {'generated': 0, 'received': 0}
 
     def boot(self):
         ''' This function has to be called after producers are registered '''
-        DSProcess(self.generator(average_rate=1.2), name=self.name+'.(internal) generator process', sim=self.sim).schedule(0)
+        self.sim.process(self.generator(average_rate=1.2), name=self.name+'.(internal) generator process').schedule(0)
 
     async def generator(self, average_rate):
         n = 0

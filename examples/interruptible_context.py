@@ -20,7 +20,7 @@ from dssim import DSProducer, DSTransformation, DSProcess
 class MyComponent(DSComponent):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.ep = DSProducer(name=self.name + '.ep', sim=self.sim)
+        self.ep = self.sim.producer(name=self.name + '.ep')
 
     async def process0(self):
         ''' The process listens on the self.ep producer in a way that all the events

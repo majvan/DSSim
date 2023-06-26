@@ -17,10 +17,10 @@ from dssim import NotifierDict, NotifierRoundRobin, NotifierPriority, DSProducer
 class SingleProducerMultipleConsumers(DSComponent):
     def __init__(self, notifier_method, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.p = DSProducer(name=f'{self.name}.generator', notifier=notifier_method, sim=self.sim)
+        self.p = self.sim.producer(name=f'{self.name}.generator', notifier=notifier_method)
         self.sim.schedule(1, self.producer())
         for order in range(6):
-            DSProcess(self.consumer(order), name=self.name+f'.consumer{order}', sim=self.sim).schedule(0)
+            self.sim.process(self.consumer(order), name=self.name+f'.consumer{order}').schedule(0)
         self.log = []
 
     def producer(self):

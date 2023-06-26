@@ -11,8 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSSimulation, DSFilter as f
-
+from dssim import DSSimulation
+global f  # this is used to shortify sim.filter(...) method to f(...) method;
+# Another option is to use: from dssim import DSFilter as f
 
 def return_apologize_after_10():
     yield from sim.gwait(10)
@@ -144,6 +145,7 @@ async def demo_filtering():
 
 if __name__ == '__main__':
     sim = DSSimulation()
+    f = sim.filter
     proc = sim.schedule(0, demo_filtering())
     retval = sim.run()
     assert retval == (79, 69)
