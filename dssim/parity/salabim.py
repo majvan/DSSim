@@ -18,6 +18,7 @@ from dssim import DSSimulation, DSComponent as component
 from dssim import DSSchedulable, DSProcess, DSCallback, DSAbsTime, DSAbortException
 from dssim import DSProducer, DSFilter
 from dssim.processcomponent import DSProcessComponent as Component
+from dssim.processcomponent import PCGenerator as ComponentGenerator
 
 from dssim.components.queue import Queue
 from dssim.components.resource import Resource
