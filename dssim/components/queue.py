@@ -52,7 +52,7 @@ class Queue(DSConsumer, SignalMixin):
     async def put(self, timeout: TimeType = float('inf'), *obj: EventType) -> EventType:
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         with self.sim.consume(self.tx_changed):
-            retval = await self.sim.check_and_wait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)  # wait while first element does not match the cond
+            retval = await self.sim.check_and_wait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)
         if retval is not None:
             self.queue += list(obj)
             self.tx_changed.schedule_event(0, 'queue changed')
@@ -61,7 +61,7 @@ class Queue(DSConsumer, SignalMixin):
     def gput(self, timeout: TimeType = float('inf'), *obj: EventType) -> Generator[EventType, EventType, EventType]:
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         with self.sim.consume(self.tx_changed):
-            retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)  # wait while first element does not match the cond
+            retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)
         if retval is not None:
             self.queue += list(obj)
             self.tx_changed.schedule_event(0, 'queue changed')
