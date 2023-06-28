@@ -21,10 +21,14 @@ from typing import Any, Dict, Tuple, List, Callable, Union, Optional, TYPE_CHECK
 
 class DSAbsTime:
     ''' A class representing absolute time in the simulation '''
-    def __init__(self, value: float) -> None:
-        self.value: float = value
+    def __init__(self, value: Union[float, int]) -> None:
+        self.value = value
 
-TimeType = Union[DSAbsTime, float]
+    def to_number(self) -> Union[float, int]:
+        return self.value
+
+
+TimeType = Union[DSAbsTime, float, int]
 
 
 class DSEvent:

@@ -74,7 +74,7 @@ class DSSimulation(DSComponentSingleton,
                   'This case is supported, but it is not a typical case and you may'
                   'want not intentionally to do so. To suppress this warning, call'
                   'DSSimulation(single_instance=False)')
-        self._simtime: float = 0
+        self._simtime: Union[float, int] = 0
         self._restart()
 
     def __repr__(self) -> str:
@@ -88,7 +88,7 @@ class DSSimulation(DSComponentSingleton,
         self._restart()
 
     @property
-    def time(self) -> float: return self._simtime
+    def time(self) -> Union[float, int]: return self._simtime
 
     def _restart(self) -> None:
         self.time_queue = TimeQueue()
@@ -96,10 +96,10 @@ class DSSimulation(DSComponentSingleton,
         # By default, we use fake consumer. It will be rewritten on the first 
         self.parent_process: DSConsumer = void_consumer
 
-    def _compute_time(self, time: TimeType) -> float:
+    def _compute_time(self, time: TimeType) -> Union[float, int]:
         ''' Recomputes a rel/abs time to absolute time value '''
         if isinstance(time, DSAbsTime):
-            ftime: float = time.value
+            ftime: Union[float, int] = time.to_number()
             if ftime < self.time:
                 raise ValueError('The time is absolute and cannot be lower than now')
         elif time < 0:
@@ -111,6 +111,11 @@ class DSSimulation(DSComponentSingleton,
     def delete(self, cond: Callable) -> None:
         ''' An interface method to delete events on the queue '''
         self.time_queue.delete(cond)
+
+    def to_abs_time(self, time: TimeType) -> DSAbsTime:
+        if isinstance(time, DSAbsTime):
+            return time
+        return DSAbsTime(self._simtime + time)
 
     @overload        
     def schedule(self, time: TimeType, schedulable: Union[Generator, Coroutine]) -> DSProcess: ...
@@ -359,7 +364,7 @@ class DSSimulation(DSComponentSingleton,
         ''' This is the simulation machine. In a loop it takes first event and process it.
         The loop ends when the queue is empty or when the simulation time is over.
         '''
-        ftime: float = up_to.value if isinstance(up_to, DSAbsTime) else up_to
+        ftime = up_to.to_number() if isinstance(up_to, DSAbsTime) else up_to
         while len(self.time_queue) > 0:
             # Get the first event on the queue
             tevent, (consumer, event_obj) = self.time_queue.get0()

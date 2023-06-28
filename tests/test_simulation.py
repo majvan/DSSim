@@ -17,7 +17,7 @@ Tests for simulation module
 '''
 import unittest
 from unittest.mock import Mock, MagicMock, call
-from dssim import DSSimulation, DSAbortException
+from dssim import DSAbsTime, DSSimulation, DSAbortException
 from dssim import DSFuture, DSSchedulable, DSProcess
 from dssim.process import DSSubscriberContextManager, DSTimeoutContext, DSTimeoutContextError
 from dssim import DSProducer
@@ -712,7 +712,21 @@ class TestSim(unittest.TestCase):
         self.assertEqual(len(sim.time_queue), 0)
         self.assertEqual(sim.time, 0.9)
 
-    def test1_scheduling_events(self):
+    def test1_time_conversion(self):
+        sim = DSSimulation()
+        sim._simtime = 5
+        t = sim.to_abs_time(10)
+        self.assertEqual(t.value, 15)
+        self.assertEqual(t.to_number(), 15)
+        self.assertTrue(isinstance(t.to_number(), int))
+        sim._simtime = 5.0
+        t = sim.to_abs_time(10)
+        self.assertEqual(t.value, 15)
+        self.assertEqual(t.to_number(), 15)
+        self.assertTrue(isinstance(t.to_number(), float))
+
+
+    def test2_scheduling_events(self):
         ''' Assert working with time queue when pushing events '''
         sim = DSSimulation()
         sim.time_queue.add_element = Mock()
@@ -727,7 +741,7 @@ class TestSim(unittest.TestCase):
         with self.assertRaises(ValueError):
             sim.schedule_event(-0.5, event_obj)
 
-    def test2_deleting_events(self):
+    def test3_deleting_events(self):
         ''' Assert deleting from time queue when deleting events '''
         sim = DSSimulation()
         sim.time_queue.delete = Mock()
@@ -736,7 +750,7 @@ class TestSim(unittest.TestCase):
         sim.time_queue.delete.assert_called_once_with(condition)
         sim.time_queue.delete.reset_mock()
 
-    def test3_scheduling(self):
+    def test4_scheduling(self):
         ''' Assert the delay of scheduled process '''
         self.sim = DSSimulation()
         my_process = self.__my_time_process()
@@ -747,7 +761,7 @@ class TestSim(unittest.TestCase):
         parent_process = self.sim.schedule(2, my_process)
         self.assertEqual(len(self.sim.time_queue), 1)
 
-    def test4_scheduling(self):
+    def test5_scheduling(self):
         self.sim = DSSimulation()
         producer = SomeObj()
         producer.send = Mock()
@@ -755,7 +769,7 @@ class TestSim(unittest.TestCase):
         retval = self.sim.send_object(producer, event_obj)
         producer.send.assert_called_once_with(event_obj)
 
-    def test5_scheduling(self):
+    def test6_scheduling(self):
         ''' Assert working with time queue when pushing events '''
         self.sim = DSSimulation()
         my_process = self.__my_time_process()
