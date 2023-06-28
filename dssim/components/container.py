@@ -121,7 +121,7 @@ class Container(DSConsumer, SignalMixin):
                     break
         return retval
 
-    def gget(self, timeout: TimeType = float('inf'), *obj: EventType, all_or_nothing: bool = True) -> Optional[List[EventType]]:
+    def gget(self, timeout: TimeType = float('inf'), *obj: EventType, all_or_nothing: bool = True) -> Generator[EventType, Optional[List[EventType]], Optional[List[EventType]]]:
         ''' Get requested objects from container.
         @param: all_or_nothing if True, it blocks till all the objects will be in the container and returns them (or timeout)
                                if False, it continuosly grabs the requested objects when available until all collected; it returns collected items
