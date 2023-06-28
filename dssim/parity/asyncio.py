@@ -209,7 +209,7 @@ async def wait_for(aw, timeout):
 ALL_COMPLETED = 1
 async def wait(aws, *, timeout=None, return_when=ALL_COMPLETED):
     loop = get_running_loop()
-    filters = [DSFilter(c, sim=loop) for c in aws if inspect.iscoroutine]
+    filters = [DSFilter(c, sim=loop) for c in aws if inspect.iscoroutine(c)]
     if return_when == ALL_COMPLETED:
         f = DSCircuit(all, filters)
     else:
