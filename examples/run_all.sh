@@ -78,6 +78,8 @@ echo "Bank, 3 clerks (state)"
 python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(state\).py
 echo "Bank, 3 clerks (signal)"
 python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(signal\).py
+echo "Bank, 3 clerks (state)"
+python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(state\).py
 echo "Bank, 3 clerks (with ComponentGenerator)"
 python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(with\ ComponentGenerator\).py
 echo "Demo wait"
