@@ -173,6 +173,11 @@ class ResourceMixin:
     def gput(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf')) -> Generator[EventType, None, NumericType]:
         retval = yield from resource.gput(timeout, amount)
         return retval
+    
+    def put_nowait(self: Any, resource: Resource, amount: NumericType = 1) -> NumericType:
+        retval = resource.put_nowait(amount)
+        return retval
+
 
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
