@@ -14,9 +14,10 @@
 '''
 A queue of events with runtime flexibility of put / get events.
 '''
-from typing import Any, List, Optional, Generator, TYPE_CHECKING
+from typing import Any, List, Union, Optional, Generator, TYPE_CHECKING
 from dssim.base import TimeType, EventType, CondType, SignalMixin, DSAbortException
 from dssim.pubsub import DSConsumer, DSProducer
+from dssim.components.container import Container
 
 
 if TYPE_CHECKING:
@@ -137,28 +138,28 @@ class Queue(DSConsumer, SignalMixin):
 
 # In the following, self is in fact of type DSProcessComponent, but PyLance makes troubles with variable types
 class QueueMixin:
-    async def enter(self: Any, queue: Queue, timeout: TimeType = float('inf')) -> EventType:
+    async def enter(self: Any, queue: Union[Queue, Container], timeout: TimeType = float('inf')) -> EventType:
         try:
             retval = await queue.put(timeout, self)
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
 
-    def genter(self: Any, queue: Queue, timeout: TimeType = float('inf')) -> Generator[EventType, EventType, EventType]:
+    def genter(self: Any, queue: Union[Queue, Container], timeout: TimeType = float('inf')) -> Generator[EventType, EventType, EventType]:
         try:
             retval = yield from queue.gput(timeout, self)
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
 
-    def enter_nowait(self: Any, queue: Queue) -> EventType:
+    def enter_nowait(self: Any, queue: Union[Queue, Container]) -> EventType:
         retval = queue.put_nowait(self)
         return retval
 
-    def leave(self: Any, queue: Queue) -> None:
+    def leave(self: Any, queue: Union[Queue, Container]) -> None:
         queue.remove(self)
 
-    async def pop(self: Any, queue: Queue, timeout: TimeType = float('inf')) -> Optional[EventType]:
+    async def pop(self: Any, queue: Union[Queue, Container], timeout: TimeType = float('inf')) -> Optional[EventType]:
         try:
             elements = await queue.get(timeout)
             if elements is None:
@@ -170,7 +171,7 @@ class QueueMixin:
             self.scheduled_process.abort()
         return retval
 
-    def gpop(self: Any, queue: Queue, timeout: TimeType = float('inf')) -> Generator[EventType, EventType, EventType]:
+    def gpop(self: Any, queue: Union[Queue, Container], timeout: TimeType = float('inf')) -> Generator[EventType, EventType, EventType]:
         try:
             elements = yield from queue.gget(timeout)
             if elements is None:
@@ -182,7 +183,7 @@ class QueueMixin:
             self.scheduled_process.abort()
         return retval
 
-    def pop_nowait(self: Any, queue: Queue) -> EventType:
+    def pop_nowait(self: Any, queue: Union[Queue, Container]) -> EventType:
         elements = queue.get_nowait()
         if elements is None:
             retval = None
