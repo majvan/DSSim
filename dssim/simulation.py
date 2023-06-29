@@ -24,7 +24,7 @@ from dssim.base import TimeType, DSAbsTime, EventType, EventRetType, CondType, S
 from dssim.pubsub import DSConsumer, DSCallback, void_consumer, SimPubsubMixin
 from dssim.future import DSFuture, SimFutureMixin
 from dssim.process import DSProcess, SimProcessMixin
-from dssim.components.queue import SimQueueMixin
+from dssim.components.container import SimContainerMixin, SimQueueMixin
 from dssim.components.resource import SimResourceMixin
 from dssim.components.state import SimStateMixin
 from dssim.cond import SimFilterMixin
@@ -51,6 +51,7 @@ class DSSimulation(DSComponentSingleton,
                    SimFutureMixin,
                    SimProcessMixin,
                    SimFilterMixin,
+                   SimContainerMixin,
                    SimQueueMixin,
                    SimResourceMixin,
                    SimStateMixin):

@@ -20,10 +20,9 @@ from dssim import DSProducer, DSFilter
 from dssim.processcomponent import DSProcessComponent as Component
 from dssim.processcomponent import PCGenerator as ComponentGenerator
 
-from dssim.components.queue import Queue
+from dssim.components.container import Container as Store, Queue
 from dssim.components.resource import Resource
 from dssim.components.state import State
-from dssim.components.container import Container as Store
 
 class Environment(DSSimulation):
     def now(self):

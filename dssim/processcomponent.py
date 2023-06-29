@@ -22,11 +22,11 @@ import inspect
 from dssim.base import EventType, TimeType, DSComponent, DSAbortException
 from dssim.process import DSProcess
 from dssim.process import DSSchedulable
-from dssim.components.queue import QueueMixin
+from dssim.components.container import ContainerMixin
 from dssim.components.resource import ResourceMixin
 
 
-class DSProcessComponent(DSComponent, QueueMixin, ResourceMixin):
+class DSProcessComponent(DSComponent, ContainerMixin, ResourceMixin):
     _dscomponent_instances: int = 0
 
     def __init__(self, *args: Any, name: Optional[str] = None, **kwargs: Any) -> None:
