@@ -14,8 +14,8 @@
 '''
 A queue of events with runtime flexibility of put / get events.
 '''
-from typing import Any, List, Dict, Union, Optional, Generator, TYPE_CHECKING
-from dssim.base import TimeType, EventType, CondType, SignalMixin, DSAbortException
+from typing import Any, List, Dict, Iterator, Union, Optional, Generator, TYPE_CHECKING
+from dssim.base import NumericType, TimeType, EventType, CondType, SignalMixin, DSAbortException
 from dssim.pubsub import DSConsumer, DSProducer
 
 
@@ -191,7 +191,7 @@ class Queue(DSConsumer, SignalMixin):
     a queued event.
     Queue does not use any routing of signals.
     '''
-    def __init__(self, capacity: float = float('inf'), *args: Any, **kwargs: Any) -> None:
+    def __init__(self, capacity: NumericType = float('inf'), *args: Any, **kwargs: Any) -> None:
         ''' Init Queue component. No special arguments here. '''
         super().__init__(*args, **kwargs)
         self.tx_changed = self.sim.producer(name=self.name+'.tx')
@@ -289,14 +289,13 @@ class Queue(DSConsumer, SignalMixin):
     def __getitem__(self, index: int) -> EventType:
         return self.queue[index]
 
-    def __setitem__(self, index, data):
+    def __setitem__(self, index: int, data: EventType) -> None:
         self.queue[index] = data
         self.tx_changed.schedule_event(0, 'queue changed')
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[EventType]:
         return iter(self.queue)
-
-
+    
 # In the following, self is in fact of type DSProcessComponent, but PyLance makes troubles with variable types
 class ContainerMixin:
     async def enter(self: Any, container: Union[Queue, Container], timeout: TimeType = float('inf')) -> EventType:

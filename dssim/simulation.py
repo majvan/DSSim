@@ -20,7 +20,7 @@ import inspect
 import types
 from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Optional, overload, TYPE_CHECKING
 from dssim.timequeue import TimeQueue
-from dssim.base import TimeType, DSAbsTime, EventType, EventRetType, CondType, StackedCond, DSComponentSingleton
+from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, CondType, StackedCond, DSComponentSingleton
 from dssim.pubsub import DSConsumer, DSCallback, void_consumer, SimPubsubMixin
 from dssim.future import DSFuture, SimFutureMixin
 from dssim.process import DSProcess, SimProcessMixin
@@ -75,7 +75,7 @@ class DSSimulation(DSComponentSingleton,
                   'This case is supported, but it is not a typical case and you may'
                   'want not intentionally to do so. To suppress this warning, call'
                   'DSSimulation(single_instance=False)')
-        self._simtime: Union[float, int] = 0
+        self._simtime: NumericType = 0
         self._restart()
 
     def __repr__(self) -> str:
@@ -89,7 +89,7 @@ class DSSimulation(DSComponentSingleton,
         self._restart()
 
     @property
-    def time(self) -> Union[float, int]: return self._simtime
+    def time(self) -> NumericType: return self._simtime
 
     def _restart(self) -> None:
         self.time_queue = TimeQueue()
@@ -97,10 +97,10 @@ class DSSimulation(DSComponentSingleton,
         # By default, we use fake consumer. It will be rewritten on the first 
         self.parent_process: DSConsumer = void_consumer
 
-    def _compute_time(self, time: TimeType) -> Union[float, int]:
+    def _compute_time(self, time: TimeType) -> NumericType:
         ''' Recomputes a rel/abs time to absolute time value '''
         if isinstance(time, DSAbsTime):
-            ftime: Union[float, int] = time.to_number()
+            ftime = time.to_number()
             if ftime < self.time:
                 raise ValueError('The time is absolute and cannot be lower than now')
         elif time < 0:

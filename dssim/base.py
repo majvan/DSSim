@@ -19,12 +19,14 @@ from abc import abstractmethod
 from typing import Any, Dict, Tuple, List, Callable, Union, Optional, TYPE_CHECKING
 
 
+NumericType = Union[float, int]
+
 class DSAbsTime:
     ''' A class representing absolute time in the simulation '''
-    def __init__(self, value: Union[float, int]) -> None:
+    def __init__(self, value: NumericType) -> None:
         self.value = value
 
-    def to_number(self) -> Union[float, int]:
+    def to_number(self) -> NumericType:
         return self.value
 
 
