@@ -79,17 +79,29 @@ class Container(DSConsumer, SignalMixin):
             self.size += num_items
             self.tx_changed.schedule_event(0, 'queue changed')
         return retval
+    
+    def _pop_element(self, element: EventType) -> EventType:
+        el_count = self.container.get(element, 0)
+        if el_count > 1:
+            self.container[element] = el_count - 1
+        elif el_count == 1:
+            self.container.pop(element)
+        else:
+            return None
+        return element
 
     def get_nowait(self, *obj: EventType) -> List[EventType]:
         ''' Get requested object from the container - as many as possible. '''
         retval = []
-        for el in obj:
-            el_count = self.container.get(el, 0)
-            if el_count > 1:
-                self.container[el] = el_count - 1
-                retval.append(el)
-            elif el_count == 1:
-                self.container.pop(el)
+        if len(obj) > 0:
+            for el in obj:
+                el = self._pop_element(el)
+                if el is not None:
+                    retval.append(el)
+        else:
+            el = next(iter(self.container.keys()))
+            el = self._pop_element(el)
+            if el is not None:
                 retval.append(el)
         num_items = len(retval)
         if num_items > 0:
@@ -103,22 +115,29 @@ class Container(DSConsumer, SignalMixin):
                                if False, it continuosly grabs the requested objects when available until all collected; it returns collected items
         '''
         if all_or_nothing:
+            retval = None
             with self.sim.consume(self.tx_changed):
-                element = await self.sim.check_and_wait(timeout, cond=lambda e: all(el in self.container.keys() for el in obj))  # wait while first element does not match the cond
-            if element is None:
-                retval = None
-            else:
-                retval = self.get_nowait(obj)
-        else:
+                if len(obj) > 0:
+                    element = await self.sim.check_and_wait(timeout, cond=lambda e: all(el in self.container.keys() for el in obj))  # wait while first element does not match the cond
+                    if element is not None:
+                        retval = self.get_nowait(*obj)
+                else:
+                    # get any object first
+                    element = await self.sim.check_and_wait(timeout, cond=lambda e: len(self) > 0)  # wait while first element does not match the cond                    
+                    if element is not None:
+                        retval = self.get_nowait()
+        elif len(obj) > 0:
             retval = []
             abs_timeout = self.sim.to_abs_time(timeout)
             while self.sim.time < float(abs_timeout):
                 element = await self.sim.check_and_wait(timeout, cond=lambda e: any(el in self.container.keys() for el in obj))
                 if element is None:
                     break
-                retval += self.get_nowait(obj)
+                retval += self.get_nowait(*obj)
                 if len(retval) == len(obj):
                     break
+        else:
+            retval = []
         return retval
 
     def gget(self, timeout: TimeType = float('inf'), *obj: EventType, all_or_nothing: bool = True) -> Generator[EventType, Optional[List[EventType]], Optional[List[EventType]]]:
@@ -127,22 +146,29 @@ class Container(DSConsumer, SignalMixin):
                                if False, it continuosly grabs the requested objects when available until all collected; it returns collected items
         '''
         if all_or_nothing:
+            retval = None
             with self.sim.consume(self.tx_changed):
-                element = yield from self.sim.check_and_gwait(timeout, cond=lambda e: all(el in self.container.keys() for el in obj))  # wait while first element does not match the cond
-            if element is None:
-                retval = None
-            else:
-                retval = self.get_nowait(obj)
-        else:
+                if len(obj) > 0:
+                    element = yield from self.sim.check_and_gwait(timeout, cond=lambda e: all(el in self.container.keys() for el in obj))  # wait while first element does not match the cond
+                    if element is not None:
+                        retval = self.get_nowait(*obj)
+                else:
+                    # get any object first
+                    element = yield from self.sim.check_and_gwait(timeout, cond=lambda e: len(self) > 0)  # wait while first element does not match the cond                    
+                    if element is not None:
+                        retval = self.get_nowait()
+        elif len(obj) > 0:
             retval = []
             abs_timeout = self.sim.to_abs_time(timeout)
             while self.sim.time < float(abs_timeout):
                 element = yield from self.sim.check_and_gwait(timeout, cond=lambda e: any(el in self.container.keys() for el in obj))
                 if element is None:
                     break
-                retval += self.get_nowait(obj)
+                retval += self.get_nowait(*obj)
                 if len(retval) == len(obj):
                     break
+        else:
+            retval = []
         return retval
 
     def __len__(self):
