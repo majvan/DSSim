@@ -87,11 +87,13 @@ class Container(DSConsumer, SignalMixin):
         elif el_count == 1:
             self.container.pop(element)
         else:
-            return None
+            retval = None
         return element
     
     def remove(self, element: EventType) -> None:
-        self._pop_element(element)
+        retval = self._pop_element(element)
+        if retval is not None:
+            self.size -= 1
 
     def get_nowait(self, *obj: EventType) -> List[EventType]:
         ''' Get requested object from the container - as many as possible. '''
@@ -174,10 +176,10 @@ class Container(DSConsumer, SignalMixin):
             retval = []
         return retval
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.size
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[EventType]:
         ''' Iterator to iterate through all elements which are in the container in a particular time. '''
         elements = []
         for item, count in self.container.items():
@@ -312,7 +314,7 @@ class ContainerMixin:
             self.scheduled_process.abort()
         return retval
 
-    def enter_nowait(self: Any, container: Union[Queue, Container]) -> EventType:
+    def enter_nowait(self: Any, container: Union[Queue, Container]) -> Optional[EventType]:
         retval = container.put_nowait(self)
         return retval
 
