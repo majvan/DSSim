@@ -75,13 +75,21 @@ python $SCRIPT_DIR/parity/Bank,\ 3\ clerks.py
 echo "Bank, 3 clerks (resources)"
 python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(resources\).py
 echo "Bank, 3 clerks (state)"
-python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(state\).py
-echo "Bank, 3 clerks (signal)"
 python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(signal\).py
 echo "Bank, 3 clerks (state)"
 python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(state\).py
+echo "Bank, 3 clerks (store)"
+python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(store\).py
 echo "Bank, 3 clerks (with ComponentGenerator)"
 python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(with\ ComponentGenerator\).py
+echo "Bank, 3 clerks reneging"
+python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ reneging.py
+echo "Bank, 3 clerks reneging (resources)"
+python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ reneging\ \(resources\).py
+echo "Bank, 3 clerks reneging (state)"
+python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ reneging\ \(state\).py
+echo "Bank, 3 clerks reneging (store)"
+python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ reneging\ \(store\).py
 echo "Demo wait"
 python $SCRIPT_DIR/parity/Demo\ wait.py
 echo "Demo wait (mutex)"
