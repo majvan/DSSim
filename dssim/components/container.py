@@ -89,6 +89,9 @@ class Container(DSConsumer, SignalMixin):
         else:
             return None
         return element
+    
+    def remove(self, element: EventType) -> None:
+        self._pop_element(element)
 
     def get_nowait(self, *obj: EventType) -> List[EventType]:
         ''' Get requested object from the container - as many as possible. '''
@@ -129,7 +132,7 @@ class Container(DSConsumer, SignalMixin):
         elif len(obj) > 0:
             retval = []
             abs_timeout = self.sim.to_abs_time(timeout)
-            while self.sim.time < float(abs_timeout):
+            while self.sim.time < abs_timeout.to_number():
                 element = await self.sim.check_and_wait(timeout, cond=lambda e: any(el in self.container.keys() for el in obj))
                 if element is None:
                     break
@@ -160,7 +163,7 @@ class Container(DSConsumer, SignalMixin):
         elif len(obj) > 0:
             retval = []
             abs_timeout = self.sim.to_abs_time(timeout)
-            while self.sim.time < float(abs_timeout):
+            while self.sim.time < abs_timeout.to_number():
                 element = yield from self.sim.check_and_gwait(timeout, cond=lambda e: any(el in self.container.keys() for el in obj))
                 if element is None:
                     break
