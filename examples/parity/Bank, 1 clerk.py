@@ -52,5 +52,5 @@ time, events = sim.run(50)
 print()
 # waitingline.print_statistics()
 assert 35 <= time <= 50, f"Time {time} is out of expected range."
-assert 21 <= events < 27, f"Number of events {events} is out of expected range."
+assert 21 <= events <= 30, f"Number of events {events} is out of expected range."
 

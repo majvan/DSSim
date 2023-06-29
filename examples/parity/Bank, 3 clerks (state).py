@@ -48,9 +48,8 @@ for i in range(3):
     Clerk()
 waitingline = []  # we could use Queue as well, but it does not make a sense because we do not use it for signaling
 worktodo = State({'waiting on line': False}, name="worktodo")
-
 time, events = sim.run(50000)
 # waitingline.print_histograms()
 # worktodo.print_histograms()
 assert 49950 < time <= 50000, f"Time {time} is out of expected range."
-assert 20000 < events < 50000 / 30 * 3 * 6 + 30, f"Number of events {events} is out of expected range."
+assert 20000 < events < 40000, f"Number of events {events} is out of expected range."

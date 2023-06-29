@@ -45,9 +45,7 @@ sim = DSSimulation()
 CustomerGenerator()
 clerks = [Clerk() for _ in range(3)]
 waitingline = Queue(name="waitingline")
-
-time, events = sim.run(50)
-print()
-# waitingline.print_statistics()
-assert 35 <= time <= 50, f"Time {time} is out of expected range."
-assert 25 <= events < 40, f"Number of events {events} is out of expected range."
+time, events = sim.run(50000)
+# waitingline.print_histograms()
+assert 49950 < time <= 50000, f"Time {time} is out of expected range."
+assert 20000 < events < 40000, f"Number of events {events} is out of expected range."
