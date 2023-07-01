@@ -130,20 +130,20 @@ class SimProcessMixin:
         return DSProcess(*args, **kwargs, sim=sim)
 
     def observe_pre(self: Any, *components: Union[DSFuture, DSProducer], **kwargs: Any) -> DSSubscriberContextManager:
-        return DSSubscriberContextManager(self.parent_process, 'pre', components, **kwargs)
+        return DSSubscriberContextManager(self.pid, 'pre', components, **kwargs)
 
     def consume(self: Any, *components: Union[DSFuture, DSProducer], **kwargs: Any) -> DSSubscriberContextManager:
-        return DSSubscriberContextManager(self.parent_process, 'act', components, **kwargs)
+        return DSSubscriberContextManager(self.pid, 'act', components, **kwargs)
 
     def observe_consumed(self: Any, *components: Union[DSFuture, DSProducer], **kwargs: Any) -> DSSubscriberContextManager:
-        return DSSubscriberContextManager(self.parent_process, 'post+', components, **kwargs)
+        return DSSubscriberContextManager(self.pid, 'post+', components, **kwargs)
 
     def observe_unconsumed(self: Any, *components: Union[DSFuture, DSProducer], **kwargs: Any) -> DSSubscriberContextManager:
-        return DSSubscriberContextManager(self.parent_process, 'post-', components, **kwargs)
+        return DSSubscriberContextManager(self.pid, 'post-', components, **kwargs)
 
     @contextmanager
     def extend_cond(self: Any, cond: CondType) -> Iterator:
-        conds = self.parent_process.meta.cond
+        conds = self.pid.meta.cond
         conds.push(cond)
         try:
             yield
@@ -265,7 +265,7 @@ class DSTimeoutContext:
 
     def cleanup(self) -> None:
         if self.time is not None:
-            # We may compare also self.parent_process, but
+            # We may compare also consumer, but
             # the context manager relies on the assumption that the
             # the exception object is allocated only once in the
             # timequeue.

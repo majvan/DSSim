@@ -118,7 +118,7 @@ class Mutex(Resource):
         retval = await self.get(timeout)
         if retval is not None:
             # store the info that the mutext is owned by us
-            self.last_owner = self.sim.parent_process
+            self.last_owner = self.sim.pid
         return retval
     
     def open(self, timeout=float('inf')):
@@ -145,12 +145,12 @@ class Mutex(Resource):
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         # release the mutex only if we own the acquired mutex
-        if self.last_owner == self.sim.parent_process:
+        if self.last_owner == self.sim.pid:
             self.release()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         # release the mutex only if we own the acquired mutex
-        if self.last_owner == self.sim.parent_process:
+        if self.last_owner == self.sim.pid:
             self.release()
 
 

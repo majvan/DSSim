@@ -158,7 +158,7 @@ class TestDSSchedulable(unittest.TestCase):
         sim = DSSimulation()
         process = DSProcess(my_wait(sim), sim=sim)
         process.get_cond().push(lambda e:True)
-        sim.parent_process = process  # needed because after kick the process will gwait
+        sim._parent_process = process  # needed because after kick the process will gwait
         retval = process.send(None)
         retval = process.send('from_test0')
         self.assertEqual(retval, 2)
@@ -185,7 +185,7 @@ class TestDSSchedulable(unittest.TestCase):
         retval = next(process)
         self.assertEqual(retval, 'First return')
         self.assertEqual(process.value, 'First return')
-        sim.parent_process = process_waiting
+        sim._parent_process = process_waiting
         retval = next(process_waiting)
         self.assertEqual(process.value, 'First return')  # process not changed
         self.assertEqual(process_waiting.value, 'Wait called')
@@ -268,7 +268,7 @@ class TestConditionChecking(unittest.TestCase):
 
         sim = DSSimulation()
         waitable = DSProcess(sim.gwait(cond='condition'), sim=sim).schedule(0)
-        sim.parent_process = waitable
+        sim._parent_process = waitable
         meta = waitable.meta = Mock()
         cond = meta.cond = Mock()
         cond.push, cond.pop = Mock(), Mock()
@@ -515,7 +515,7 @@ class TestSubscriberContext(unittest.TestCase):
 
     def test3_sim_functions_producer(self):
         sim = DSSimulation()
-        sim.parent_process = DSProcess(self.__process(), sim=sim)
+        sim._parent_process = DSProcess(self.__process(), sim=sim)
         a, b, c, d = (DSProducer(), DSProducer(), DSProducer(), DSProducer(),)
         cm = sim.observe_pre(a, b, c)
         self.assertTrue(type(cm) == DSSubscriberContextManager)
@@ -542,7 +542,7 @@ class TestSubscriberContext(unittest.TestCase):
 
     def test4_sim_functions_future(self):
         sim = DSSimulation()
-        sim.parent_process = DSProcess(self.__process(), sim=sim)
+        sim._parent_process = DSProcess(self.__process(), sim=sim)
         a, b, c, d = (DSFuture(), DSFuture(), DSFuture(), DSFuture(),)
         cm = sim.observe_pre(a, b, c)
         self.assertTrue(type(cm) == DSSubscriberContextManager)
@@ -592,7 +592,7 @@ class TestTimeoutContext(unittest.TestCase):
 
     def test1_reschedule(self):
         sim = DSSimulation()
-        sim.parent_process = 'process'
+        sim._parent_process = 'process'
         cm = DSTimeoutContext(None, 'hello', sim=sim)
         self.assertTrue(len(sim.time_queue) == 0)
         cm.reschedule(2)
@@ -603,7 +603,7 @@ class TestTimeoutContext(unittest.TestCase):
         self.assertTrue(sim.time_queue.get0() == (1, ('process', 'hello')))
 
         sim = DSSimulation()
-        sim.parent_process = 'process'
+        sim._parent_process = 'process'
         cm = DSTimeoutContext(0, 'hi', sim=sim)
         self.assertTrue(len(sim.time_queue) == 1)
         self.assertTrue(sim.time_queue.get0() == (0, ('process', 'hi')))
@@ -628,7 +628,7 @@ class TestTimeoutContext(unittest.TestCase):
 
     def test2_sim_timeout_positive(self):
         sim = DSSimulation()
-        sim.parent_process = 'process'
+        sim._parent_process = 'process'
         with sim.timeout(0) as cm:
             self.assertTrue(len(sim.time_queue) == 1)
             queued = sim.time_queue.get0()
@@ -730,7 +730,7 @@ class TestSim(unittest.TestCase):
         ''' Assert working with time queue when pushing events '''
         sim = DSSimulation()
         sim.time_queue.add_element = Mock()
-        sim.parent_process = 123456
+        sim._parent_process = 123456
         event_obj = {'producer': None, 'data': 1}
         sim.schedule_event(10, event_obj)
         sim.time_queue.add_element.assert_called_once_with(10, (123456, event_obj))
@@ -757,8 +757,8 @@ class TestSim(unittest.TestCase):
         # schedule a process
         with self.assertRaises(ValueError):
             # scheduling with negative time delta
-            parent_process = self.sim.schedule(-0.5, my_process)
-        parent_process = self.sim.schedule(2, my_process)
+            _parent_process = self.sim.schedule(-0.5, my_process)
+        _parent_process = self.sim.schedule(2, my_process)
         self.assertEqual(len(self.sim.time_queue), 1)
 
     def test5_scheduling(self):
@@ -778,8 +778,8 @@ class TestSim(unittest.TestCase):
             # negative time
             self.sim.schedule(-0.5, my_process)
 
-        parent_process = self.sim.schedule(0, my_process)
-        self.assertNotEqual(parent_process, my_process)
+        _parent_process = self.sim.schedule(0, my_process)
+        self.assertNotEqual(_parent_process, my_process)
         self.__time_process_event.assert_not_called()
         self.sim.run(0.5)
         self.__time_process_event.assert_called_once_with('kick-on')
@@ -787,10 +787,10 @@ class TestSim(unittest.TestCase):
         # schedule an event
         with self.assertRaises(ValueError):
             # negative time
-            self.sim.schedule_event(-0.5, {'producer': parent_process, 'data': 1})
+            self.sim.schedule_event(-0.5, {'producer': _parent_process, 'data': 1})
 
         self.assertEqual(self.sim.time, 0.5)
-        event_obj = {'producer': parent_process, 'data': 1}
+        event_obj = {'producer': _parent_process, 'data': 1}
         self.sim.schedule_event(2, event_obj, my_process)
         time, (process, event) = self.sim.time_queue.pop()
         self.assertEqual((time, process), (2.5, my_process))
@@ -799,32 +799,32 @@ class TestSim(unittest.TestCase):
 
         process = SomeObj()
         process.send = Mock()
-        retval = parent_process.abort(DSAbortException(testing=-1))
+        retval = _parent_process.abort(DSAbortException(testing=-1))
         self.__time_process_event.assert_called_once_with(2.5, {'abort': True, 'info': {'testing': -1}})
         self.__time_process_event.reset_mock()
 
     def test7_run_process(self):
         ''' Assert event loop behavior for process '''
         self.sim = DSSimulation()
-        self.sim.parent_process = Mock()
+        self.sim._parent_process = Mock()
         my_process = self.__my_time_process()
-        parent_process = self.sim.schedule(0, my_process)
-        # Problem: the parent_process is already kicked on and waiting for a condition
+        _parent_process = self.sim.schedule(0, my_process)
+        # Problem: the _parent_process is already kicked on and waiting for a condition
         # which is expected to be the latest one
         # After the wait is fulfilled, the last condition will be removed - our condition
         # That's why we have to insert before. The position 0 is for None event condition
-        parent_process.get_cond().push(lambda e:True)  # Accept any event
+        _parent_process.get_cond().push(lambda e:True)  # Accept any event
 
         self.sim.run(0.5) # kick on the process
-        self.sim.schedule_event(1, 3, parent_process)
-        self.sim.schedule_event(2, 2, parent_process)
-        self.sim.schedule_event(3, 1, parent_process)
+        self.sim.schedule_event(1, 3, _parent_process)
+        self.sim.schedule_event(2, 2, _parent_process)
+        self.sim.schedule_event(3, 1, _parent_process)
         retval = self.sim.run(0.5)
         self.__time_process_event.assert_called_once_with('kick-on')
         self.assertEqual(retval, (0.5, 1))
         self.__time_process_event.reset_mock()
 
-        parent_process.get_cond().push(lambda e:True)  # Accept any event
+        _parent_process.get_cond().push(lambda e:True)  # Accept any event
         self.sim.num_events = 0
         retval = self.sim.run()
         self.assertEqual(retval, (3.5, 3))
@@ -835,9 +835,9 @@ class TestSim(unittest.TestCase):
         self.__time_process_event.reset_mock()
 
         self.sim.restart()
-        self.sim.schedule_event(1, 3, parent_process)
-        self.sim.schedule_event(2, 2, parent_process)
-        self.sim.schedule_event(3, 1, parent_process)
+        self.sim.schedule_event(1, 3, _parent_process)
+        self.sim.schedule_event(2, 2, _parent_process)
+        self.sim.schedule_event(3, 1, _parent_process)
         retval = self.sim.run(2.5)
         self.assertEqual(retval, (2, 2))
         calls = [call(1, 3), call(2, 2),]

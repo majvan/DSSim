@@ -91,11 +91,14 @@ class DSSimulation(DSComponentSingleton,
     @property
     def time(self) -> NumericType: return self._simtime
 
+    @property
+    def pid(self) -> DSProcess: return self._parent_process
+
     def _restart(self) -> None:
         self.time_queue = TimeQueue()
         self.num_events: int = 0
         # By default, we use fake consumer. It will be rewritten on the first 
-        self.parent_process: DSConsumer = void_consumer
+        self._parent_process: DSConsumer = void_consumer
 
     def _compute_time(self, time: TimeType) -> NumericType:
         ''' Recomputes a rel/abs time to absolute time value '''
@@ -155,17 +158,17 @@ class DSSimulation(DSComponentSingleton,
         # We want to kick from this process to another process (see below). However, after
         # returning back to this process, we want to renew our process ID back to be used.
         # We do that by remembering the pid here and restoring at the end.
-        pid = self.parent_process
+        pid = self._parent_process
 
         try:
             # We want to kick from this process another 'consumer' process. So we will change
-            # the process ID (we call it self.parent_process). This is needed because if the new
+            # the process ID (we call it self._parent_process). This is needed because if the new
             # created process would schedule a wait cycle for his own, he would like to know his own
             # process ID (see the wait method). That's why we have to set him his PID now.
             # In other words, the consumer.send() can invoke a context switch
             # without a handler- so this is the context switch handler, currently only
             # changing process ID.
-            self.parent_process = consumer
+            self._parent_process = consumer
             retval = consumer.send(event)
         except StopIteration as exc:
             if isinstance(consumer, DSFuture):
@@ -182,7 +185,7 @@ class DSSimulation(DSComponentSingleton,
                 print_cyclic_signal_exception(exc)
             raise
         finally:
-            self.parent_process = pid
+            self._parent_process = pid
         return retval
 
     def try_send(self, consumer: DSConsumer, event: EventType) -> EventType:
@@ -201,14 +204,14 @@ class DSSimulation(DSComponentSingleton,
     def signal(self, process: DSConsumer, event: EventType, time: TimeType = 0) -> EventType:
         ''' Schedules an event object into timequeue. Finally the target process will be signalled. '''
         time = self._compute_time(time)
-        consumer = process if process is not None else self.parent_process  # schedule to a process or to itself
+        consumer = process if process is not None else self._parent_process  # schedule to a process or to itself
         self.time_queue.add_element(time, (consumer, event))
         return event
 
     def schedule_event(self, time: TimeType, event: EventType, consumer: Optional[DSConsumer] = None) -> EventType:
         ''' Schedules an event object into timequeue. Finally the target process will be signalled. '''
         time = self._compute_time(time)
-        consumer = consumer or self.parent_process  # schedule to a process or to itself
+        consumer = consumer or self._parent_process  # schedule to a process or to itself
         self.time_queue.add_element(time, (consumer, event))
         return event
 
@@ -217,7 +220,7 @@ class DSSimulation(DSComponentSingleton,
         time = self._compute_time(timeout)
         # Schedule the timeout to the time queue. The condition is only for higher performance
         if time != float('inf'):
-            self.time_queue.add_element(time, (self.parent_process, None))
+            self.time_queue.add_element(time, (self._parent_process, None))
         event: EventType = True
         try:
             # Pass value to the feeder and wait for next event
@@ -235,7 +238,7 @@ class DSSimulation(DSComponentSingleton,
         finally:
             if event is not None and time != float('inf'):
                 # If we terminated before timeout and the timeout event is on time queue- remove it
-                self.delete(lambda e: e == (self.parent_process, None))
+                self.delete(lambda e: e == (self._parent_process, None))
         return event
 
     def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
@@ -252,7 +255,7 @@ class DSSimulation(DSComponentSingleton,
         # _wait_for_event method, the return from the subprocess would not defer here, but rather
         # just ended and disappeared in scheduler. But we need that the scheduler is said to plan
         # another timeout for this process.
-        conds = self.parent_process.meta.cond
+        conds = self._parent_process.meta.cond
         # Set the condition object (lambda / object / ...) in the process metadata
         conds.push(cond)
         try:
@@ -268,7 +271,7 @@ class DSSimulation(DSComponentSingleton,
         # invariant to the passed event, for instance to check for a state of an object
         # so if the state matches, it returns immediately
         # Otherwise it jumps to the waiting process.
-        conds = self.parent_process.meta.cond
+        conds = self._parent_process.meta.cond
         # Set the condition object (lambda / object / ...) in the process metadata
         conds.push(cond)
         try:
@@ -286,7 +289,7 @@ class DSSimulation(DSComponentSingleton,
         time = self._compute_time(timeout)
         # Schedule the timeout to the time queue. The condition is only for higher performance
         if time != float('inf'):
-            self.time_queue.add_element(time, (self.parent_process, None))
+            self.time_queue.add_element(time, (self._parent_process, None))
         event: EventType = True
         try:
             # Pass value to the feeder and wait for next event
@@ -304,7 +307,7 @@ class DSSimulation(DSComponentSingleton,
         finally:
             if event is not None and time != float('inf'):
                 # If we terminated before timeout and the timeout event is on time queue- remove it
-                self.delete(lambda e: e == (self.parent_process, None))
+                self.delete(lambda e: e == (self._parent_process, None))
         return event
 
     async def wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> EventType:
@@ -321,7 +324,7 @@ class DSSimulation(DSComponentSingleton,
         # _wait_for_event method, the return from the subprocess would not defer here, but rather
         # just ended and disappeared in scheduler. But we need that the scheduler is said to plan
         # another timeout for this process.
-        conds = self.parent_process.meta.cond
+        conds = self._parent_process.meta.cond
         # Set the condition object (lambda / object / ...) in the process metadata
         conds.push(cond)
         try:
@@ -337,7 +340,7 @@ class DSSimulation(DSComponentSingleton,
         # invariant to the passed event, for instance to check for a state of an object
         # so if the state matches, it returns immediately
         # Otherwise it jumps to the waiting process.
-        conds = self.parent_process.meta.cond
+        conds = self._parent_process.meta.cond
         # Set the condition object (lambda / object / ...) in the process metadata
         conds.push(cond)
         try:

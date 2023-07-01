@@ -249,7 +249,7 @@ def create_task(coro):
 
 def current_task():
     loop = get_running_loop()
-    return loop.parent_process
+    return loop.pid
 
 def isfuture(obj):
     return isinstance(obj, DSFuture)
