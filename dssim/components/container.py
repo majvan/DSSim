@@ -15,7 +15,7 @@
 A queue of events with runtime flexibility of put / get events.
 '''
 from typing import Any, List, Dict, Iterator, Union, Optional, Generator, TYPE_CHECKING
-from dssim.base import NumericType, TimeType, EventType, CondType, SignalMixin, DSAbortException
+from dssim.base import NumericType, TimeType, EventType, CondType, SignalMixin, DSAbortException, DSStatefulComponent
 from dssim.pubsub import DSConsumer, DSProducer
 
 
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
-class Container(DSConsumer, SignalMixin):
+class Container(DSStatefulComponent, SignalMixin):
     ''' The (FIFO) queue of events is a SW component which can dynamically
     be used to put an event in and get (or wait for- if the queue is empty)
     a queued event.
@@ -32,7 +32,6 @@ class Container(DSConsumer, SignalMixin):
     def __init__(self, capacity: Optional[int] = None, *args: Any, **kwargs: Any) -> None:
         ''' Init Queue component. No special arguments here. '''
         super().__init__(*args, **kwargs)
-        self.tx_changed = self.sim.producer(name=self.name+'.tx')
         self.capacity = capacity
         self.container: Dict[EventType, int] = {}  # object: count; the dict is used for quick search
         self.size = 0
@@ -187,7 +186,7 @@ class Container(DSConsumer, SignalMixin):
         return iter(elements)
 
 
-class Queue(DSConsumer, SignalMixin):
+class Queue(DSStatefulComponent, SignalMixin):
     ''' The (FIFO) queue of events is a SW component which can dynamically
     be used to put an event in and get (or wait for- if the queue is empty)
     a queued event.
@@ -196,7 +195,6 @@ class Queue(DSConsumer, SignalMixin):
     def __init__(self, capacity: NumericType = float('inf'), *args: Any, **kwargs: Any) -> None:
         ''' Init Queue component. No special arguments here. '''
         super().__init__(*args, **kwargs)
-        self.tx_changed = self.sim.producer(name=self.name+'.tx')
         self.capacity = capacity
         self.queue: List[EventType] = []
 

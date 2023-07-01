@@ -17,15 +17,14 @@ Compared to queue, resource works with non-integer amounts but it does not conta
 in the pool, just an abstract pool level information (e.g. amount of water in a tank).
 '''
 from typing import Any, Generator, TYPE_CHECKING
-from dssim.base import NumericType, TimeType, EventType, DSComponent
-from dssim.pubsub import DSProducer
+from dssim.base import NumericType, TimeType, EventType, DSStatefulComponent
 
 
 if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
-class Resource(DSComponent):
+class Resource(DSStatefulComponent):
     ''' The Resource models a container of virtual resource(s).
     By virtual, it means that the components holds only the amount of the resources,
     not individual objects. The amount can be divisable to any extent, it is represented
@@ -39,7 +38,6 @@ class Resource(DSComponent):
         super().__init__(*args, **kwargs)
         if amount > capacity:
             raise ValueError('Initial amount of the resource is greater than capacity.')
-        self.tx_changed = self.sim.producer(name=self.name+'.tx')
         self.amount = amount
         self.capacity = capacity
 

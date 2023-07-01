@@ -17,21 +17,19 @@ Compared to queue, resource works with non-integer amounts but it does not conta
 in the pool, just an abstract pool level information (e.g. amount of water in a tank).
 '''
 from typing import Dict, Any, TYPE_CHECKING
-from dssim.base import TimeType, EventType, CondType, DSComponent
-from dssim.pubsub import DSProducer
+from dssim.base import TimeType, EventType, CondType, DSStatefulComponent
 
 
 if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
-class State(DSComponent):
+class State(DSStatefulComponent):
     ''' The State components holds a dictionary of state variables and their values.
     '''
     def __init__(self, state: Dict = {}, *args: Any, **kwargs: Any) -> None:
         ''' Init Queue component. No special arguments here. '''
         super().__init__(*args, **kwargs)
-        self.tx_changed = self.sim.producer(name=self.name+'.tx')
         self.state = state
 
     def __setitem__(self, key: Any, value: Any) -> bool:
@@ -46,24 +44,6 @@ class State(DSComponent):
 
     def get(self, key: Any, default: Any = None) -> Any:
         return self.state.get(key, default)
-
-    def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True) -> EventType:
-        ''' Wait for change in the state and returns when the condition is met '''
-        with self.sim.consume(self.tx_changed):
-            retval = yield from self.sim.check_and_gwait(timeout, cond=cond)
-        return retval
-
-    async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True) -> EventType:
-        ''' Wait for change in the state and returns when the condition is met '''
-        with self.sim.consume(self.tx_changed):
-            retval = await self.sim.check_and_wait(timeout, cond=cond)
-        return retval
-
-    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True) -> EventType:
-        ''' Wait for change in the state and returns when the condition is met '''
-        with self.sim.consume(self.tx_changed):
-            retval = await self.sim.wait(timeout, cond=cond)
-        return retval
 
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
