@@ -26,16 +26,6 @@ from dssim.components.queue import QueueMixin
 from dssim.components.resource import ResourceMixin
 
 
-class ProcessObject:
-    ''' Encapsulates events to a special object '''
-    def __init__(self, value: EventType) -> None:
-        self._value = value
-    
-    @property
-    def value(self) -> EventType:
-        return self._value
-
-
 class DSProcessComponent(DSComponent, QueueMixin, ResourceMixin):
     _dscomponent_instances: int = 0
 
@@ -64,8 +54,6 @@ class DSProcessComponent(DSComponent, QueueMixin, ResourceMixin):
     async def wait(self, timeout: TimeType = float('inf')) -> EventType:
         try:
             retval = await self.sim.wait(timeout, cond=lambda e: True)
-            if isinstance(retval, ProcessObject):
-                retval = retval.value
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
@@ -73,11 +61,10 @@ class DSProcessComponent(DSComponent, QueueMixin, ResourceMixin):
     def gwait(self, timeout: TimeType = float('inf')) -> Generator[EventType, EventType, EventType]:
         try:
             retval = yield from self.sim.gwait(timeout, cond=lambda e: True)
-            if isinstance(retval, ProcessObject):
-                retval = retval.value
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
+
 
 class PCGenerator(DSProcessComponent):
     def __init__(self, cls: Type[DSComponent], wait_method: Callable[[DSComponent], float] = lambda last: 1, *args: Any, name: Optional[str] = None, **kwargs: Any) -> None:
