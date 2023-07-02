@@ -49,7 +49,7 @@ class DSProcessComponent(DSComponent, ContainerMixin, ResourceMixin):
         pass
 
     def signal(self, event: EventType) -> None:
-        self._scheduled_process.signal({'object': event})
+        self._scheduled_process.signal(event)
 
     async def wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: True) -> EventType:
         try:
