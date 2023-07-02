@@ -23,30 +23,30 @@ class DSStatefulComponent(DSComponent):
     ''' The base class which adds tx_changed endpoint which sends event
     upon a change of the component.
     '''
-    def __init__(self, producer: Optional[DSProducer] = None, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, change_ep: Optional[DSProducer] = None, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.tx_changed = producer if producer is not None else self.sim.producer(name=self.name+'.tx')
+        self.tx_changed = change_ep if change_ep is not None else self.sim.producer(name=self.name+'.tx')
     
-    def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True) -> EventType:
+    def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> EventType:
         ''' Wait for change in the state and returns when the condition is met '''
-        with self.sim.consume(self.tx_changed):
+        with self.sim.consume(self.tx_changed, **policy_params):
             retval = yield from self.sim.check_and_gwait(timeout, cond=cond)
         return retval
 
-    async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True) -> EventType:
+    async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> EventType:
         ''' Wait for change in the state and returns when the condition is met '''
-        with self.sim.consume(self.tx_changed):
+        with self.sim.consume(self.tx_changed, **policy_params):
             retval = await self.sim.check_and_wait(timeout, cond=cond)
         return retval
 
-    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True) -> Generator[EventType, EventType, EventType]:
+    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         ''' Wait for change in the state and returns when the condition is met '''
-        with self.sim.consume(self.tx_changed):
+        with self.sim.consume(self.tx_changed, **policy_params):
             retval = yield from self.sim.gwait(timeout, cond=cond)
         return retval
 
-    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True) -> EventType:
+    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> EventType:
         ''' Wait for change in the state and returns when the condition is met '''
-        with self.sim.consume(self.tx_changed):
+        with self.sim.consume(self.tx_changed, **policy_params):
             retval = await self.sim.wait(timeout, cond=cond)
         return retval

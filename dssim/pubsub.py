@@ -137,10 +137,10 @@ class NotifierPolicy:
     def rewind(self) -> None: ...
 
     @abstractmethod
-    def inc(self, key: DSConsumer, **kwargs: Any) -> None: ...
+    def inc(self, key: DSConsumer, **policy_params: Any) -> None: ...
 
     @abstractmethod
-    def dec(self, key: DSConsumer, **kwargs: Any) -> None: ...
+    def dec(self, key: DSConsumer, **policy_params: Any) -> None: ...
 
     @abstractmethod
     def cleanup(self) -> None: ...
@@ -319,13 +319,13 @@ class DSProducer(DSConsumer, SignalMixin):
         for queue in self.subs.values():
             queue.cleanup()
 
-    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
-        with self.sim.consume(self):
+    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
+        with self.sim.consume(self, **policy_params):
             retval = yield from self.sim.gwait(timeout, cond, val)
         return retval
 
-    async def wait(self, timeout: TimeType = float('inf'), cond: CondType =lambda e: False, val: EventRetType = True) -> EventType:
-        with self.sim.consume(self):
+    async def wait(self, timeout: TimeType = float('inf'), cond: CondType =lambda e: False, val: EventRetType = True, **policy_params: Any) -> EventType:
+        with self.sim.consume(self, **policy_params):
             retval = await self.sim.wait(timeout, cond, val)
         return retval
 

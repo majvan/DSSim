@@ -55,10 +55,10 @@ class Container(DSStatefulComponent, SignalMixin):
             retval = None
         return retval
 
-    async def put(self, timeout: TimeType = float('inf'), *obj: EventType) -> EventType:
+    async def put(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> EventType:
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         num_items = len(obj)
-        with self.sim.consume(self.tx_changed):
+        with self.sim.consume(self.tx_changed, **policy_params):
             retval = await self.sim.check_and_wait(timeout, cond=lambda e: self._available(num_items))
         if retval is not None:
             for item in obj:
@@ -67,10 +67,10 @@ class Container(DSStatefulComponent, SignalMixin):
             self.tx_changed.schedule_event(0, {'event': 'container changed', 'process': self.sim.pid})
         return retval
 
-    def gput(self, timeout: TimeType = float('inf'), *obj: EventType) -> Generator[EventType, EventType, EventType]:
+    def gput(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         num_items = len(obj)
-        with self.sim.consume(self.tx_changed):
+        with self.sim.consume(self.tx_changed, **policy_params):
             retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e: self._available(num_items))
         if retval is not None:
             for item in obj:
@@ -113,14 +113,14 @@ class Container(DSStatefulComponent, SignalMixin):
             self.tx_changed.schedule_event(0, {'event': 'container changed', 'process': self.sim.pid})
         return retval
     
-    async def get(self, timeout: TimeType = float('inf'), *obj: EventType, all_or_nothing: bool = True) -> Optional[List[EventType]]:
+    async def get(self, timeout: TimeType = float('inf'), *obj: EventType, all_or_nothing: bool = True, **policy_params: Any) -> Optional[List[EventType]]:
         ''' Get requested objects from container.
         @param: all_or_nothing if True, it blocks till all the objects will be in the container and returns them (or timeout)
                                if False, it continuosly grabs the requested objects when available until all collected; it returns collected items
         '''
         if all_or_nothing:
             retval = None
-            with self.sim.consume(self.tx_changed):
+            with self.sim.consume(self.tx_changed, **policy_params):
                 if len(obj) > 0:
                     element = await self.sim.check_and_wait(timeout, cond=lambda e: all(el in self.container.keys() for el in obj))  # wait while first element does not match the cond
                     if element is not None:
@@ -144,14 +144,14 @@ class Container(DSStatefulComponent, SignalMixin):
             retval = []
         return retval
 
-    def gget(self, timeout: TimeType = float('inf'), *obj: EventType, all_or_nothing: bool = True) -> Generator[EventType, Optional[List[EventType]], Optional[List[EventType]]]:
+    def gget(self, timeout: TimeType = float('inf'), *obj: EventType, all_or_nothing: bool = True, **policy_params: Any) -> Generator[EventType, Optional[List[EventType]], Optional[List[EventType]]]:
         ''' Get requested objects from container.
         @param: all_or_nothing if True, it blocks till all the objects will be in the container and returns them (or timeout)
                                if False, it continuosly grabs the requested objects when available until all collected; it returns collected items
         '''
         if all_or_nothing:
             retval = None
-            with self.sim.consume(self.tx_changed):
+            with self.sim.consume(self.tx_changed, **policy_params):
                 if len(obj) > 0:
                     element = yield from self.sim.check_and_gwait(timeout, cond=lambda e: all(el in self.container.keys() for el in obj))  # wait while first element does not match the cond
                     if element is not None:
@@ -192,9 +192,9 @@ class Queue(DSStatefulComponent, SignalMixin):
     a queued event.
     Queue does not use any routing of signals.
     '''
-    def __init__(self, capacity: NumericType = float('inf'), *args: Any, **kwargs: Any) -> None:
+    def __init__(self, capacity: NumericType = float('inf'), *args: Any, **policy_params: Any) -> None:
         ''' Init Queue component. No special arguments here. '''
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, **policy_params)
         self.capacity = capacity
         self.queue: List[EventType] = []
 
@@ -211,18 +211,18 @@ class Queue(DSStatefulComponent, SignalMixin):
             retval = None
         return retval
 
-    async def put(self, timeout: TimeType = float('inf'), *obj: EventType) -> EventType:
+    async def put(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> EventType:
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
-        with self.sim.consume(self.tx_changed):
+        with self.sim.consume(self.tx_changed, **policy_params):
             retval = await self.sim.check_and_wait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)
         if retval is not None:
             self.queue += list(obj)
             self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
         return retval
 
-    def gput(self, timeout: TimeType = float('inf'), *obj: EventType) -> Generator[EventType, EventType, EventType]:
+    def gput(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
-        with self.sim.consume(self.tx_changed):
+        with self.sim.consume(self.tx_changed, **policy_params):
             retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)
         if retval is not None:
             self.queue += list(obj)
@@ -238,9 +238,9 @@ class Queue(DSStatefulComponent, SignalMixin):
             retval = None
         return retval
 
-    async def get(self, timeout: TimeType = float('inf'), amount: int =1, cond: CondType = lambda e: True) -> Optional[List[EventType]]:
+    async def get(self, timeout: TimeType = float('inf'), amount: int =1, cond: CondType = lambda e: True, **policy_params: Any) -> Optional[List[EventType]]:
         ''' Get an event from queue. If the queue is empty, wait for the closest event. '''
-        with self.sim.consume(self.tx_changed):
+        with self.sim.consume(self.tx_changed, **policy_params):
             element = await self.sim.check_and_wait(timeout, cond=lambda e:len(self) >= amount and cond(self.queue[0]))  # wait while first element does not match the cond
         if element is None:
             retval = None
@@ -250,9 +250,9 @@ class Queue(DSStatefulComponent, SignalMixin):
             self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
         return retval
 
-    def gget(self, timeout: TimeType = float('inf'), amount: int = 1, cond: CondType = lambda e: True) -> Generator[EventType, Optional[List[EventType]], Optional[List[EventType]]]:
+    def gget(self, timeout: TimeType = float('inf'), amount: int = 1, cond: CondType = lambda e: True, **policy_params: Any) -> Generator[EventType, Optional[List[EventType]], Optional[List[EventType]]]:
         ''' Get an event from queue. If the queue is empty, wait for the closest event. '''
-        with self.sim.consume(self.tx_changed):
+        with self.sim.consume(self.tx_changed, **policy_params):
             element = yield from self.sim.check_and_gwait(timeout, cond=lambda e:len(self) >= amount and cond(self.queue[0]))  # wait while first element does not match the cond
         if element is None:
             retval = None
@@ -299,16 +299,16 @@ class Queue(DSStatefulComponent, SignalMixin):
 
 # In the following, self is in fact of type DSProcessComponent, but PyLance makes troubles with variable types
 class ContainerMixin:
-    async def enter(self: Any, container: Union[Queue, Container], timeout: TimeType = float('inf')) -> EventType:
+    async def enter(self: Any, container: Union[Queue, Container], timeout: TimeType = float('inf'), **kwargs: Any) -> EventType:
         try:
-            retval = await container.put(timeout, self)
+            retval = await container.put(timeout, self, **kwargs)
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
 
-    def genter(self: Any, container: Union[Queue, Container], timeout: TimeType = float('inf')) -> Generator[EventType, EventType, EventType]:
+    def genter(self: Any, container: Union[Queue, Container], timeout: TimeType = float('inf'), **kwargs) -> Generator[EventType, EventType, EventType]:
         try:
-            retval = yield from container.gput(timeout, self)
+            retval = yield from container.gput(timeout, self, **kwargs)
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
@@ -320,9 +320,9 @@ class ContainerMixin:
     def leave(self: Any, container: Union[Queue, Container]) -> None:
         container.remove(self)
 
-    async def pop(self: Any, container: Union[Queue, Container], timeout: TimeType = float('inf')) -> Optional[EventType]:
+    async def pop(self: Any, container: Union[Queue, Container], timeout: TimeType = float('inf'), **policy_params: Any) -> Optional[EventType]:
         try:
-            elements = await container.get(timeout)
+            elements = await container.get(timeout, **policy_params)
             if elements is None:
                 retval = None
             else:
@@ -332,9 +332,9 @@ class ContainerMixin:
             self.scheduled_process.abort()
         return retval
 
-    def gpop(self: Any, container: Union[Queue, Container], timeout: TimeType = float('inf')) -> Generator[EventType, EventType, EventType]:
+    def gpop(self: Any, container: Union[Queue, Container], timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         try:
-            elements = yield from container.gget(timeout)
+            elements = yield from container.gget(timeout, **policy_params)
             if elements is None:
                 retval = None
             else:

@@ -52,9 +52,9 @@ class Resource(DSStatefulComponent):
             retval = amount
         return retval
 
-    async def put(self, timeout: TimeType = float('inf'), amount: NumericType = 1) -> NumericType:
+    async def put(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
         ''' Put amount into the resource pool.  '''
-        with self.sim.consume(self.tx_changed):
+        with self.sim.consume(self.tx_changed, **policy_params):
             obj = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
         if obj is None:
             retval: NumericType = 0
@@ -64,9 +64,9 @@ class Resource(DSStatefulComponent):
             retval = amount
         return retval
 
-    def gput(self, timeout: TimeType = float('inf'), amount: NumericType = 1) -> Generator[EventType, None, NumericType]:
+    def gput(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
         ''' Put amount into the resource pool.  '''
-        with self.sim.consume(self.tx_changed):
+        with self.sim.consume(self.tx_changed, **policy_params):
             obj = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
         if obj is None:
             retval: NumericType = 0
@@ -85,9 +85,9 @@ class Resource(DSStatefulComponent):
             retval = amount
         return retval
 
-    async def get(self, timeout: TimeType = float('inf'), amount: NumericType = 1) -> NumericType:
+    async def get(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
         ''' Get resource. If the resource has not enough amount, wait to have enough requested amount. '''
-        with self.sim.consume(self.tx_changed):
+        with self.sim.consume(self.tx_changed, **policy_params):
             obj = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount >= amount)
         if obj is None:
             retval: NumericType = 0
@@ -97,9 +97,9 @@ class Resource(DSStatefulComponent):
             retval = amount
         return retval
 
-    def gget(self, timeout: TimeType = float('inf'), amount: NumericType = 1) -> Generator[EventType, None, NumericType]:
+    def gget(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
         ''' Get resource. If the resource has not enough amount, wait to have enough requested amount. '''
-        with self.sim.consume(self.tx_changed):
+        with self.sim.consume(self.tx_changed, **policy_params):
             obj = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount >= amount)
         if obj is None:
             retval: NumericType = 0
@@ -112,12 +112,13 @@ class Resource(DSStatefulComponent):
 
 class Mutex(Resource):
     def __init__(self, *args, **kwargs):
-        super().__init__(1, 1, args, **kwargs)
+        super().__init__(1, 1, *args, **kwargs)
         self.last_owner = None
         self.context_manager_timeout = None
+        self.policy_params = kwargs
 
-    async def lock(self, timeout=float('inf')):
-        retval = await self.get(timeout)
+    async def lock(self, timeout=float('inf'), **policy_params: Any):
+        retval = await self.get(timeout, **policy_params)
         if retval is not None:
             # store the info that the mutext is owned by us
             self.last_owner = self.sim.pid
@@ -137,7 +138,7 @@ class Mutex(Resource):
     async def __aenter__(self):
         if self.context_manager_timeout is None:
             raise ValueError(f'You try to use context manager "async with {self}" but you need to use open() function for that.')
-        event = await self.lock(self.context_manager_timeout)
+        event = await self.lock(self.context_manager_timeout, **self.policy_params)
         self.context_manager_timeout = None
         return event
 
@@ -158,20 +159,20 @@ class Mutex(Resource):
 
 # In the following, self is in fact of type DSProcessComponent, but PyLance makes troubles with variable types
 class ResourceMixin:
-    async def get(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf')) -> NumericType:
-        retval = await resource.get(timeout, amount)
+    async def get(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+        retval = await resource.get(timeout, amount, **policy_params)
         return retval
             
-    def gget(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf')) -> Generator[EventType, None, NumericType]:
-        retval = yield from resource.gget(timeout, amount)
+    def gget(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        retval = yield from resource.gget(timeout, amount, **policy_params)
         return retval
             
-    async def put(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf')) -> NumericType:
-        retval = await resource.put(timeout, amount)
+    async def put(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+        retval = await resource.put(timeout, amount, **policy_params)
         return retval
 
-    def gput(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf')) -> Generator[EventType, None, NumericType]:
-        retval = yield from resource.gput(timeout, amount)
+    def gput(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        retval = yield from resource.gput(timeout, amount, **policy_params)
         return retval
     
     def put_nowait(self: Any, resource: Resource, amount: NumericType = 1) -> NumericType:

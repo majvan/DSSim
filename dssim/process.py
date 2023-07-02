@@ -131,17 +131,17 @@ class SimProcessMixin:
             raise ValueError('The parameter sim in process() method should be set to the same simulation instance.')
         return DSProcess(*args, **kwargs, sim=sim)
 
-    def observe_pre(self: Any, *components: Union[DSFuture, DSProducer], **kwargs: Any) -> DSSubscriberContextManager:
-        return DSSubscriberContextManager(self.pid, 'pre', components, **kwargs)
+    def observe_pre(self: Any, *components: Union[DSFuture, DSProducer], **policy_params: Any) -> DSSubscriberContextManager:
+        return DSSubscriberContextManager(self.pid, 'pre', components, **policy_params)
 
-    def consume(self: Any, *components: Union[DSFuture, DSProducer], **kwargs: Any) -> DSSubscriberContextManager:
-        return DSSubscriberContextManager(self.pid, 'act', components, **kwargs)
+    def consume(self: Any, *components: Union[DSFuture, DSProducer], **policy_params: Any) -> DSSubscriberContextManager:
+        return DSSubscriberContextManager(self.pid, 'act', components, **policy_params)
 
-    def observe_consumed(self: Any, *components: Union[DSFuture, DSProducer], **kwargs: Any) -> DSSubscriberContextManager:
-        return DSSubscriberContextManager(self.pid, 'post+', components, **kwargs)
+    def observe_consumed(self: Any, *components: Union[DSFuture, DSProducer], **policy_params: Any) -> DSSubscriberContextManager:
+        return DSSubscriberContextManager(self.pid, 'post+', components, **policy_params)
 
-    def observe_unconsumed(self: Any, *components: Union[DSFuture, DSProducer], **kwargs: Any) -> DSSubscriberContextManager:
-        return DSSubscriberContextManager(self.pid, 'post-', components, **kwargs)
+    def observe_unconsumed(self: Any, *components: Union[DSFuture, DSProducer], **policy_params: Any) -> DSSubscriberContextManager:
+        return DSSubscriberContextManager(self.pid, 'post-', components, **policy_params)
 
     @contextmanager
     def extend_cond(self: Any, cond: CondType) -> Iterator:
