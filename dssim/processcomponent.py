@@ -36,12 +36,12 @@ class DSProcessComponent(DSComponent, ContainerMixin, ResourceMixin):
         kwargs.pop('name', None), kwargs.pop('sim', None)  # remove the two arguments
         process: DSProcess
         if inspect.isgeneratorfunction(self.process) or inspect.iscoroutinefunction(self.process):
-            process = self.sim.process(self.process(*args, **kwargs), name=self.name+'.process')
+            process = _ComponentProcess(self, self.process(*args, **kwargs), name=self.name+'.process')
         elif inspect.ismethod(self.process):
-            process = self.sim.process(DSSchedulable(self.process)(*args, **kwargs), name=self.name+'.process')
+            process = _ComponentProcess(self, DSSchedulable(self.process)(*args, **kwargs), name=self.name+'.process')
         else:
             raise ValueError(f'The attribute {self.__class__}.process is not method, generator, neither coroutine.')
-        self.scheduled_process: DSProcess = process.schedule(0)
+        self._scheduled_process: _ComponentProcess = process.schedule(0)
         self.__class__._dscomponent_instances += 1
     
     @abstractmethod
@@ -49,21 +49,31 @@ class DSProcessComponent(DSComponent, ContainerMixin, ResourceMixin):
         pass
 
     def signal(self, event: EventType) -> None:
-        self.scheduled_process.signal({'object': event})
+        self._scheduled_process.signal({'object': event})
 
     async def wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: True) -> EventType:
         try:
             retval = await self.sim.wait(timeout, cond=cond)
         except DSAbortException as exc:
-            self.scheduled_process.abort()
+            self._scheduled_process.abort()
         return retval
 
     def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: True) -> Generator[EventType, EventType, EventType]:
         try:
             retval = yield from self.sim.gwait(timeout, cond=cond)
         except DSAbortException as exc:
-            self.scheduled_process.abort()
+            self._scheduled_process.abort()
         return retval
+
+
+class _ComponentProcess(DSProcess):
+    def __init__(self, process_component: DSProcessComponent, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._component = process_component
+
+    @property
+    def component(self) -> DSProcessComponent:
+        return self._component
 
 
 class PCGenerator(DSProcessComponent):

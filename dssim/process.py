@@ -17,7 +17,7 @@ This file implements process for simulation + functionality required in
 the applications using processes.
 '''
 from __future__ import annotations
-from typing import Any, Tuple, Union, Optional, Generator, Coroutine, Iterator, TYPE_CHECKING
+from typing import Any, Tuple, Union, Optional, Generator, Coroutine, Iterator, TypeVar, TYPE_CHECKING
 from types import TracebackType
 from contextlib import contextmanager
 from functools import wraps
@@ -31,6 +31,8 @@ from dssim.future import DSFuture
 if TYPE_CHECKING:
     from dssim.pubsub import DSProducer
     from dssim.simulation import DSSimulation, SchedulableType
+
+DSProcessType = TypeVar('DSProcessType', bound='DSProcess')
 
 
 class DSProcess(DSFuture, SignalMixin):
@@ -53,7 +55,7 @@ class DSProcess(DSFuture, SignalMixin):
         return self.meta
 
     # TODO: this feature is not required
-    def __iter__(self) -> "DSProcess":
+    def __iter__(self: DSProcessType) -> DSProcessType:
         ''' Required to use the class to get events from it. '''
         return self
 
@@ -82,7 +84,7 @@ class DSProcess(DSFuture, SignalMixin):
             self.get_cond().push(schedule_event)
             self.sim.schedule_event(time, schedule_event, self)
 
-    def schedule(self, time: TimeType) -> DSProcess:
+    def schedule(self: DSProcessType, time: TimeType) -> DSProcessType:
         ''' This api is to schedule directly task.schedule(...) '''
         return self.sim.schedule(time, self)
     
@@ -119,7 +121,7 @@ class DSProcess(DSFuture, SignalMixin):
         self.sim.cleanup(self)
         self._finish_tx.signal(self)
         return self.exc
-        
+
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
 class SimProcessMixin:

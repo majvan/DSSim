@@ -17,21 +17,16 @@ The file provides basic logic to run the simulation and supported methods.
 '''
 import sys
 import inspect
-import types
 from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Optional, overload, TYPE_CHECKING
 from dssim.timequeue import TimeQueue
 from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, CondType, StackedCond, DSComponentSingleton
 from dssim.pubsub import DSConsumer, DSCallback, void_consumer, SimPubsubMixin
 from dssim.future import DSFuture, SimFutureMixin
-from dssim.process import DSProcess, SimProcessMixin
+from dssim.process import DSProcessType, DSProcess, SimProcessMixin
 from dssim.components.container import SimContainerMixin, SimQueueMixin
 from dssim.components.resource import SimResourceMixin
 from dssim.components.state import SimStateMixin
 from dssim.cond import SimFilterMixin
-
-
-if TYPE_CHECKING:
-    from dssim.base import DSComponent
 
 
 class _Awaitable:
@@ -92,7 +87,7 @@ class DSSimulation(DSComponentSingleton,
     def time(self) -> NumericType: return self._simtime
 
     @property
-    def pid(self) -> DSProcess: return self._parent_process
+    def pid(self) -> DSConsumer: return self._parent_process
 
     def _restart(self) -> None:
         self.time_queue = TimeQueue()
@@ -125,7 +120,7 @@ class DSSimulation(DSComponentSingleton,
     def schedule(self, time: TimeType, schedulable: Union[Generator, Coroutine]) -> DSProcess: ...
 
     @overload        
-    def schedule(self, time: TimeType, schedulable: DSProcess) -> DSProcess: ...
+    def schedule(self, time: TimeType, schedulable: DSProcessType) -> DSProcessType: ...
 
     @overload        
     def schedule(self, time: TimeType, schedulable: Callable) -> DSCallback: ...
