@@ -35,7 +35,7 @@ class State(DSStatefulComponent):
     def __setitem__(self, key: Any, value: Any) -> bool:
         if (key not in self.state) or self.state[key] != value:
             self.state[key] = value
-            self.tx_changed.schedule_event(0, 'resource changed')
+            self.tx_changed.schedule_event(0, {'event': 'state changed', 'process': self.sim.pid})
             return True
         return False
 

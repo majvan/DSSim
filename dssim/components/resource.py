@@ -46,7 +46,7 @@ class Resource(DSStatefulComponent):
             retval: NumericType = 0
         else:
             self.amount += amount
-            self.tx_changed.schedule_event(0, 'resource changed')
+            self.tx_changed.schedule_event(0, {'event': 'resource changed', 'process': self.sim.pid})
             retval = amount
         return retval
 
@@ -58,7 +58,7 @@ class Resource(DSStatefulComponent):
             retval: NumericType = 0
         else:
             self.amount += amount
-            self.tx_changed.schedule_event(0, 'resource changed')
+            self.tx_changed.schedule_event(0, {'event': 'resource changed', 'process': self.sim.pid})
             retval = amount
         return retval
 
@@ -70,7 +70,7 @@ class Resource(DSStatefulComponent):
             retval: NumericType = 0
         else:
             self.amount += amount
-            self.tx_changed.schedule_event(0, 'resource changed')
+            self.tx_changed.schedule_event(0, {'event': 'resource changed', 'process': self.sim.pid})
             retval = amount
         return retval
 
@@ -79,7 +79,7 @@ class Resource(DSStatefulComponent):
             retval: NumericType = 0
         else:
             self.amount -= amount
-            self.tx_changed.schedule_event(0, 'resource changed')
+            self.tx_changed.schedule_event(0, {'event': 'resource changed', 'process': self.sim.pid})
             retval = amount
         return retval
 
@@ -91,7 +91,7 @@ class Resource(DSStatefulComponent):
             retval: NumericType = 0
         else:
             self.amount -= amount
-            self.tx_changed.schedule_event(0, 'resource changed')
+            self.tx_changed.schedule_event(0, {'event': 'resource changed', 'process': self.sim.pid})
             retval = amount
         return retval
 
@@ -103,7 +103,7 @@ class Resource(DSStatefulComponent):
             retval: NumericType = 0
         else:
             self.amount -= amount
-            self.tx_changed.schedule_event(0, 'resource changed')
+            self.tx_changed.schedule_event(0, {'event': 'resource changed', 'process': self.sim.pid})
             retval = amount
         return retval
 
