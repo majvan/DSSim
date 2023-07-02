@@ -74,7 +74,7 @@ echo "Bank, 3 clerks"
 python $SCRIPT_DIR/parity/Bank,\ 3\ clerks.py
 echo "Bank, 3 clerks (resources)"
 python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(resources\).py
-echo "Bank, 3 clerks (state)"
+echo "Bank, 3 clerks (signal)"
 python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(signal\).py
 echo "Bank, 3 clerks (state)"
 python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(state\).py
@@ -86,6 +86,8 @@ echo "Bank, 3 clerks reneging"
 python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ reneging.py
 echo "Bank, 3 clerks reneging (resources)"
 python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ reneging\ \(resources\).py
+echo "Bank, 3 clerks reneging (signal)"
+python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ reneging\ \(signal\).py
 echo "Bank, 3 clerks reneging (state)"
 python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ reneging\ \(state\).py
 echo "Bank, 3 clerks reneging (store)"

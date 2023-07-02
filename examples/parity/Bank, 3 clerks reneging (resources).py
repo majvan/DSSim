@@ -34,14 +34,14 @@ class Customer(sim.Component):
             # print(env.now(), stat['balked'], self.name)            
             return
         Customer.waiting += 1
-        clerk_amount = yield from self.gget(clerks, timeout=50)
+        clerk_amount = yield from clerks.gget(timeout=50)  # get one clerk from resource pool
         Customer.waiting -= 1
         if clerk_amount == 0:  # did we get the clerk
             stat['reneged'] += 1
             # env.print_trace("", "", "reneged")
         else:
             yield from self.sim.gwait(30)
-            self.put_nowait(clerks)
+            self.put_nowait(clerks)  # put 1 clerk back to the resource pool
 
 
 env = sim.Environment()

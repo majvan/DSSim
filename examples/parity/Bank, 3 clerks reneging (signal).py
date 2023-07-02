@@ -33,9 +33,8 @@ class Customer(sim.Component):
             # env.print_trace("", "", "balked")
             # print(env.now(), stat['balked'], self.name)            
             return
-        worktodo['request'] = True
-        event = yield from waiting_line.gwait(50, cond=lambda e: self not in waiting_line)
-        if event is None:  # did we get the event?
+        clerk = yield from self.gwait(50)  # wait until we get a 'start' signal from a clerk
+        if clerk is None:  # did we get the signal?
             self.leave(waiting_line)
             stat['reneged'] += 1
             # env.print_trace("", "", "reneged")
@@ -44,9 +43,9 @@ class Customer(sim.Component):
 class Clerk(sim.Component):
     def process(self):
         while True:
-            event = yield from worktodo.check_and_gwait(cond=lambda e:worktodo['request'])  # get from the queue if available
-            worktodo['request'] = False
-            customer = waiting_line.pop()
+            customer_list = yield from waiting_line.gget()  # get from the queue if available
+            customer = customer_list[0]
+            customer.signal(self)  # signal the customer that we started processing
             yield from self.gwait(30)
 
 
@@ -55,8 +54,6 @@ CustomerGenerator()
 stat = {'balked': 0, 'reneged': 0}
 clerks = [Clerk() for _ in range(3)]
 waiting_line = sim.Queue(5, name="waiting_line")
-worktodo = sim.State(name="worktodo")
-worktodo['request'] = False
 time, events = env.run(300000)
 # waiting_line.length.print_histogram(30, 0, 1)
 # waiting_line.length_of_stay.print_histogram(30, 0, 10)
@@ -65,4 +62,4 @@ print("number balked", stat['balked'])
 assert stat['reneged'] == 6665, f"Unexpected number of reneged."
 assert stat['balked'] == 23330, f"Unexpected number of balked."
 assert time == 299995, f"Time {time} is out of expected range."
-assert events == 349997, f"Number of events {events} is out of expected range."
+assert events == 319995, f"Number of events {events} is out of expected range."

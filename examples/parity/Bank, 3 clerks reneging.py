@@ -33,8 +33,8 @@ class Customer(sim.Component):
             # env.print_trace("", "", "balked")
             # print(env.now(), stat['balked'], self.name)            
             return
-        clerk = yield from self.gwait(50)  # wait until we get a 'done' signal from a clerk
-        if clerk is None:  # did we get the signal?
+        event = yield from waiting_line.gwait(50, cond=lambda e: self not in waiting_line)
+        if event is None:  # did we get the event?
             self.leave(waiting_line)
             stat['reneged'] += 1
             # env.print_trace("", "", "reneged")
@@ -44,8 +44,7 @@ class Clerk(sim.Component):
     def process(self):
         while True:
             customer_list = yield from waiting_line.gget()  # get from the queue if available
-            customer = customer_list[0]
-            customer.signal(self)  # signal the customer that we started processing
+            # customer = customer_list[0]
             yield from self.gwait(30)
 
 
@@ -62,4 +61,4 @@ print("number balked", stat['balked'])
 assert stat['reneged'] == 6665, f"Unexpected number of reneged."
 assert stat['balked'] == 23330, f"Unexpected number of balked."
 assert time == 299995, f"Time {time} is out of expected range."
-assert events == 319995, f"Number of events {events} is out of expected range."
+assert events == 289995, f"Number of events {events} is out of expected range."
