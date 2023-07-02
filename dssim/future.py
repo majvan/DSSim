@@ -58,19 +58,19 @@ class DSFuture(DSConsumer, SignalMixin):
         except Exception as e:
             self.fail(e)
 
-    def gwait(self, timeout: TimeType = float('inf')) -> Generator[EventType, EventType, EventType]:
+    def gwait(self, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         retval = None
         if not self.finished():
-            with self.sim.observe_pre(self):
+            with self.sim.observe_pre(self, **policy_params):
                 retval = yield from self.sim.gwait(timeout, cond=self)
         if self.exc is not None:
             raise self.exc
         return retval
 
-    async def wait(self, timeout: TimeType = float('inf')) -> EventType:
+    async def wait(self, timeout: TimeType = float('inf'), **policy_params: Any) -> EventType:
         retval = None
         if not self.finished():
-            with self.sim.observe_pre(self):
+            with self.sim.observe_pre(self, **policy_params):
                 retval = await self.sim.wait(timeout, cond=self)
         if self.exc is not None:
             raise self.exc
