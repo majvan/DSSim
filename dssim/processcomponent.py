@@ -19,7 +19,7 @@ application.
 from abc import abstractmethod
 from typing import Any, Optional, Generator, Type, Callable
 import inspect
-from dssim.base import CondType, EventType, TimeType, DSAbortException, DSComponent, DSStatefulComponent
+from dssim.base import CondType, EventType, TimeType, DSAbortException, DSComponent
 from dssim.process import DSProcess
 from dssim.process import DSSchedulable
 from dssim.components.container import ContainerMixin

@@ -196,39 +196,6 @@ class DSComponent:
         return self.name
 
 
-class DSStatefulComponent(DSComponent):
-    ''' The base class which adds tx_changed endpoint which sends event
-    upon a change of the component.
-    '''
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self.tx_changed = self.sim.producer(name=self.name+'.tx')
-    
-    def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True) -> EventType:
-        ''' Wait for change in the state and returns when the condition is met '''
-        with self.sim.consume(self.tx_changed):
-            retval = yield from self.sim.check_and_gwait(timeout, cond=cond)
-        return retval
-
-    async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True) -> EventType:
-        ''' Wait for change in the state and returns when the condition is met '''
-        with self.sim.consume(self.tx_changed):
-            retval = await self.sim.check_and_wait(timeout, cond=cond)
-        return retval
-
-    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True) -> Generator[EventType, EventType, EventType]:
-        ''' Wait for change in the state and returns when the condition is met '''
-        with self.sim.consume(self.tx_changed):
-            retval = yield from self.sim.gwait(timeout, cond=cond)
-        return retval
-
-    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True) -> EventType:
-        ''' Wait for change in the state and returns when the condition is met '''
-        with self.sim.consume(self.tx_changed):
-            retval = await self.sim.wait(timeout, cond=cond)
-        return retval
-
-
 # In the following, self is in fact of type DSConsumer, but PyLance makes troubles with variable types
 class SignalMixin:
     ''' Pairs of methods for extending a functionality of a consumer '''

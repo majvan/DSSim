@@ -1,4 +1,5 @@
-# Copyright 2021 NXP Semiconductors
+# Copyright 2021-2022 NXP Semiconductors
+# Copyright 2021- majvan (majvan@gmail.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +18,8 @@ Compared to queue, resource works with non-integer amounts but it does not conta
 in the pool, just an abstract pool level information (e.g. amount of water in a tank).
 '''
 from typing import Any, Generator, TYPE_CHECKING
-from dssim.base import NumericType, TimeType, EventType, DSStatefulComponent
+from dssim.base import NumericType, TimeType, EventType
+from dssim.components.base import DSStatefulComponent
 
 
 if TYPE_CHECKING:

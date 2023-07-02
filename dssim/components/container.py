@@ -1,4 +1,4 @@
-# Copyright 2021 NXP Semiconductors
+# Copyright 2023- majvan (majvan@gmail.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-A queue of events with runtime flexibility of put / get events.
+The file implements container and queue components.
 '''
 from typing import Any, List, Dict, Iterator, Union, Optional, Generator, TYPE_CHECKING
-from dssim.base import NumericType, TimeType, EventType, CondType, SignalMixin, DSAbortException, DSStatefulComponent
-from dssim.pubsub import DSConsumer, DSProducer
+from dssim.base import NumericType, TimeType, EventType, CondType, SignalMixin, DSAbortException
+from dssim.components.base import DSStatefulComponent
 
 
 if TYPE_CHECKING:
