@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dssim import DSSimulation, Queue, DSProcessComponent, PCGenerator
+from dssim.pubsub import DSProducer, NotifierPriority
 from random import randint
 
 class Customer(DSProcessComponent):
@@ -36,7 +37,8 @@ class Clerk(DSProcessComponent):
     async def process(self):
         self.processed_customers = []
         while True:
-            customer = await self.pop(waiting_line)  # take somebody from waiting line
+            # The priority parameter chooses the clerk who should take from waiting_line first if more clerks are waiting
+            customer = await self.pop(waiting_line, priority = -self.instance_nr % 3)  # take somebody from waiting line
             customer.signal(self)  # notify customer that we are going to process him
             print(f'{sim.time} {self} starting processing {customer}')
             await self.wait(30)  # process with customer 30
@@ -46,7 +48,8 @@ class Clerk(DSProcessComponent):
 
 if __name__ == '__main__':
     sim = DSSimulation()
-    waiting_line = Queue(capacity=5, name='waiting_line')
+    # In the following we force the notifying endpoint with a special policy
+    waiting_line = Queue(capacity=5, nempty_ep=DSProducer(notifier=NotifierPriority), name='waiting_line')
     PCGenerator(Customer, lambda last: 7, name='CustomerGenerator')
     stat = {'balked': 0, 'reneged': 0}
     clerks = [Clerk() for i in range(3)]
@@ -54,3 +57,7 @@ if __name__ == '__main__':
     print("number reneged", stat['reneged'])
     print("number balked", stat['balked'])
     assert stat == {'balked': 48, 'reneged': 13}
+    # Assert that the policy worked and the highest priority had the last clerk
+    assert clerks[0].processed_customers[0].name == 'Customer.2'
+    assert clerks[1].processed_customers[0].name == 'Customer.1'
+    assert clerks[2].processed_customers[0].name == 'Customer.0'
