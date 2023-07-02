@@ -42,7 +42,11 @@ class DSProcessComponent(DSComponent, ContainerMixin, ResourceMixin):
         else:
             raise ValueError(f'The attribute {self.__class__}.process is not method, generator, neither coroutine.')
         self._scheduled_process: _ComponentProcess = process.schedule(0)
-        self.__class__._dscomponent_instances += 1
+        self._instance_nr = self.__class__._dscomponent_instances + 1
+        self.__class__._dscomponent_instances = self.instance_nr
+
+    @property
+    def instance_nr(self) -> int: return self._instance_nr
     
     @abstractmethod
     def process(self, *args: Any, **kwargs: Any) -> Any:
