@@ -16,7 +16,7 @@ The base classes / intefaces / mixin for dssim framework.
 '''
 from __future__ import annotations
 from abc import abstractmethod
-from typing import Any, Dict, Tuple, List, Callable, Union, Optional, TYPE_CHECKING
+from typing import Any, Tuple, Callable, Union, Optional, Generator, TYPE_CHECKING
 
 
 NumericType = Union[float, int]
