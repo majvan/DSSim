@@ -17,12 +17,12 @@ The file provides basic logic to run the simulation and supported methods.
 '''
 import sys
 import inspect
-from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Optional, overload, TYPE_CHECKING
+from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Optional, cast, overload, TYPE_CHECKING
 from dssim.timequeue import TimeQueue
 from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, CondType, StackedCond, DSComponentSingleton
 from dssim.pubsub import DSConsumer, DSCallback, void_consumer, SimPubsubMixin
 from dssim.future import DSFuture, SimFutureMixin
-from dssim.process import DSProcessType, DSProcess, SimProcessMixin
+from dssim.process import DSProcessType, ProcessMetadata, DSProcess, SimProcessMixin
 from dssim.components.container import SimContainerMixin, SimQueueMixin
 from dssim.components.resource import SimResourceMixin
 from dssim.components.state import SimStateMixin
@@ -218,8 +218,12 @@ class DSSimulation(DSComponentSingleton,
             self.time_queue.add_element(time, (self._parent_process, None))
         event: EventType = True
         try:
+            t0 = self._simtime
             # Pass value to the feeder and wait for next event
             event = yield val
+            meta: ProcessMetadata = cast(ProcessMetadata, self._parent_process.meta)
+            meta.last_wait_time = self._simtime - t0  # Store waiting time
+
             # We received an event. In the lazy evaluation case, we would be now calling
             # _check_cond and returning or raising an event only if the condition matches,
             # otherwise we would be waiting in an infinite loop here.
@@ -287,8 +291,12 @@ class DSSimulation(DSComponentSingleton,
             self.time_queue.add_element(time, (self._parent_process, None))
         event: EventType = True
         try:
+            t0 = self._simtime
             # Pass value to the feeder and wait for next event
             event = await _Awaitable(val)
+            meta: ProcessMetadata = cast(ProcessMetadata, self._parent_process.meta)
+            meta.last_wait_time = self._simtime - t0  # Store waiting time
+
             # We received an event. In the lazy evaluation case, we would be now calling
             # _check_cond and returning or raising an event only if the condition matches,
             # otherwise we would be waiting in an infinite loop here.

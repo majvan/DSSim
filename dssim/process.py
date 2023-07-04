@@ -22,7 +22,7 @@ from types import TracebackType
 from contextlib import contextmanager
 from functools import wraps
 import inspect
-from dssim.base import TimeType, EventType, EventRetType, CondType
+from dssim.base import NumericType, TimeType, EventType, EventRetType, CondType
 from dssim.base import DSTransferableCondition, SignalMixin
 from dssim.pubsub import ConsumerMetadata, TrackEvent
 from dssim.future import DSFuture
@@ -33,6 +33,12 @@ if TYPE_CHECKING:
     from dssim.simulation import DSSimulation, SchedulableType
 
 DSProcessType = TypeVar('DSProcessType', bound='DSProcess')
+
+
+class ProcessMetadata(ConsumerMetadata):
+    def __init__(self) -> None:
+        super().__init__()
+        self.last_wait_time: NumericType = 0  # used for statistics
 
 
 class DSProcess(DSFuture, SignalMixin):
@@ -50,8 +56,8 @@ class DSProcess(DSFuture, SignalMixin):
             raise ValueError('The DSProcess can be used only on non-started generators / coroutines')
         super().__init__(*args, **kwargs)
 
-    def create_metadata(self, **kwargs: Any) -> ConsumerMetadata:
-        self.meta = ConsumerMetadata()
+    def create_metadata(self, **kwargs: Any) -> ProcessMetadata:
+        self.meta: ProcessMetadata = ProcessMetadata()
         return self.meta
 
     # TODO: this feature is not required
@@ -121,6 +127,10 @@ class DSProcess(DSFuture, SignalMixin):
         self.sim.cleanup(self)
         self._finish_tx.signal(self)
         return self.exc
+    
+    @property
+    def last_idle_time(self) -> NumericType:
+        return self.meta.last_wait_time
 
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
