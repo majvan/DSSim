@@ -19,14 +19,14 @@ in the pool, just an abstract pool level information (e.g. amount of water in a 
 '''
 from typing import Any, Generator, TYPE_CHECKING
 from dssim.base import NumericType, TimeType, EventType
-from dssim.components.base import DSStatefulComponent
+from dssim.components.base import DSStatefulComponent, DSProbedComponent
 
 
 if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
-class Resource(DSStatefulComponent):
+class Resource(DSStatefulComponent, DSProbedComponent):
     ''' The Resource models a container of virtual resource(s).
     By virtual, it means that the components holds only the amount of the resources,
     not individual objects. The amount can be divisable to any extent, it is represented
@@ -43,6 +43,25 @@ class Resource(DSStatefulComponent):
         self.amount = amount
         self.capacity = capacity
 
+    def _set_loggers(self):
+        super()._set_loggers()
+        self.put_logger = []
+        self.get_logger = []
+
+    def _set_probed_methods(self):
+        super()._set_probed_methods()
+        self.put = self.probed_coroutine(self._put, self.put_logger)
+        self.gput = self.probed_generator(self._gput, self.put_logger)
+        self.get = self.probed_coroutine(self._get, self.get_logger)
+        self.gget = self.probed_generator(self._gget, self.get_logger)
+    
+    def _set_unprobed_methods(self):
+        super()._set_unprobed_methods()
+        self.put = self._put
+        self.gput = self._gput
+        self.get = self._get
+        self.gget = self._gget
+
     def put_nowait(self, amount: NumericType) -> NumericType:
         if self.amount + amount > self.capacity:
             retval: NumericType = 0
@@ -52,7 +71,7 @@ class Resource(DSStatefulComponent):
             retval = amount
         return retval
 
-    async def put(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
+    async def _put(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
         ''' Put amount into the resource pool.  '''
         with self.sim.consume(self.tx_changed, **policy_params):
             obj = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
@@ -64,7 +83,7 @@ class Resource(DSStatefulComponent):
             retval = amount
         return retval
 
-    def gput(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
+    def _gput(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
         ''' Put amount into the resource pool.  '''
         with self.sim.consume(self.tx_changed, **policy_params):
             obj = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
@@ -85,7 +104,7 @@ class Resource(DSStatefulComponent):
             retval = amount
         return retval
 
-    async def get(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
+    async def _get(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
         ''' Get resource. If the resource has not enough amount, wait to have enough requested amount. '''
         with self.sim.consume(self.tx_changed, **policy_params):
             obj = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount >= amount)
@@ -97,7 +116,7 @@ class Resource(DSStatefulComponent):
             retval = amount
         return retval
 
-    def gget(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
+    def _gget(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
         ''' Get resource. If the resource has not enough amount, wait to have enough requested amount. '''
         with self.sim.consume(self.tx_changed, **policy_params):
             obj = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount >= amount)

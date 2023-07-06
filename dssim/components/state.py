@@ -18,15 +18,14 @@ Compared to queue, resource works with non-integer amounts but it does not conta
 in the pool, just an abstract pool level information (e.g. amount of water in a tank).
 '''
 from typing import Dict, Any, TYPE_CHECKING
-from dssim.base import TimeType, EventType, CondType
-from dssim.components.base import DSStatefulComponent
+from dssim.components.base import DSWaitableComponent
 
 
 if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
-class State(DSStatefulComponent):
+class State(DSWaitableComponent):
     ''' The State components holds a dictionary of state variables and their values.
     '''
     def __init__(self, state: Dict = {}, *args: Any, **kwargs: Any) -> None:

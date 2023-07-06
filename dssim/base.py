@@ -16,7 +16,9 @@ The base classes / intefaces / mixin for dssim framework.
 '''
 from __future__ import annotations
 from abc import abstractmethod
-from typing import Any, Tuple, Callable, Union, Optional, Generator, TYPE_CHECKING
+import functools
+import inspect
+from typing import Dict, Any, Tuple, Callable, Union, Optional, Generator, TYPE_CHECKING
 
 
 NumericType = Union[float, int]
@@ -38,7 +40,7 @@ class DSEvent:
     pass
 
 
-EventType = Union[None, dict, Exception, DSEvent, Any,]
+EventType = Union[None, Dict, Exception, DSEvent, Any,]
 EventRetType = Optional[bool]
 
 

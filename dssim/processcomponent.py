@@ -22,11 +22,12 @@ import inspect
 from dssim.base import CondType, EventType, TimeType, DSAbortException, DSComponent
 from dssim.process import DSProcess
 from dssim.process import DSSchedulable
+from dssim.components.base import DSWaitableComponent
 from dssim.components.container import ContainerMixin
 from dssim.components.resource import ResourceMixin
 
 
-class DSProcessComponent(DSComponent, ContainerMixin, ResourceMixin):
+class DSProcessComponent(DSWaitableComponent, ContainerMixin, ResourceMixin):
     _dscomponent_instances: int = 0
 
     def __init__(self, *args: Any, name: Optional[str] = None, **kwargs: Any) -> None:
@@ -55,19 +56,33 @@ class DSProcessComponent(DSComponent, ContainerMixin, ResourceMixin):
     def signal(self, event: EventType) -> None:
         self._scheduled_process.signal(event)
 
-    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: True) -> EventType:
+    async def _wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: True, **policy_params: Any) -> EventType:
         try:
-            retval = await self.sim.wait(timeout, cond=cond)
+            retval = await self.sim.wait(timeout, cond=cond, **policy_params)
         except DSAbortException as exc:
             self._scheduled_process.abort()
         return retval
 
-    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: True) -> Generator[EventType, EventType, EventType]:
+    def _gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: True, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         try:
-            retval = yield from self.sim.gwait(timeout, cond=cond)
+            retval = yield from self.sim.gwait(timeout, cond=cond, **policy_params)
         except DSAbortException as exc:
             self._scheduled_process.abort()
         return retval
+
+    def _set_loggers(self):
+        super()._set_loggers()
+        self.wait_logger = []
+
+    def _set_probed_methods(self):
+        super()._set_probed_methods()
+        self.wait = self.probed_coroutine(self._wait, self.wait_logger)
+        self.gwait = self.probed_generator(self._gwait, self.wait_logger)
+    
+    def _set_unprobed_methods(self):
+        super()._set_unprobed_methods()
+        self.wait = self._wait
+        self.gwait = self._gwait
 
 
 class _ComponentProcess(DSProcess):

@@ -16,21 +16,18 @@ The file implements container and queue components.
 '''
 from typing import Any, List, Dict, Iterator, Union, Optional, Generator, TYPE_CHECKING
 from dssim.base import NumericType, TimeType, EventType, CondType, SignalMixin, DSAbortException
-from dssim.components.base import DSStatefulComponent
-
+from dssim.components.base import DSWaitableComponent
+from dssim.pubsub import DSProducer
 
 if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
-class Container(DSStatefulComponent, SignalMixin):
-    ''' The (FIFO) queue of events is a SW component which can dynamically
-    be used to put an event in and get (or wait for- if the queue is empty)
-    a queued event.
-    Queue does not use any routing of signals.
+class Container(DSWaitableComponent, SignalMixin):
+    ''' The container of objects / events is a SW component which collects objects
+    of any type where the order of the objects is not preserved / maintained.
     '''
     def __init__(self, capacity: Optional[int] = None, *args: Any, **kwargs: Any) -> None:
-        ''' Init Queue component. No special arguments here. '''
         super().__init__(*args, **kwargs)
         self.capacity = capacity
         self.container: Dict[EventType, int] = {}  # object: count; the dict is used for quick search
@@ -38,6 +35,25 @@ class Container(DSStatefulComponent, SignalMixin):
 
     def _available(self, num_items: int) -> bool:
         return self.capacity is None or (len(self) + num_items <= self.capacity)
+    
+    def _set_loggers(self):
+        super()._set_loggers()
+        self.put_logger = []
+        self.get_logger = []
+
+    def _set_probed_methods(self):
+        super()._set_probed_methods()
+        self.put = self.probed_coroutine(self._put, self.put_logger)
+        self.gput = self.probed_generator(self._gput, self.put_logger)
+        self.get = self.probed_coroutine(self._get, self.get_logger)
+        self.gget = self.probed_generator(self._gget, self.get_logger)
+    
+    def _set_unprobed_methods(self):
+        super()._set_unprobed_methods()
+        self.put = self._put
+        self.gput = self._gput
+        self.get = self._get
+        self.gget = self._gget
 
     def send(self, event: EventType) -> EventType:
         return self.put_nowait(event) is not None
@@ -55,7 +71,7 @@ class Container(DSStatefulComponent, SignalMixin):
             retval = None
         return retval
 
-    async def put(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> EventType:
+    async def _put(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> EventType:
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         num_items = len(obj)
         with self.sim.consume(self.tx_changed, **policy_params):
@@ -67,7 +83,7 @@ class Container(DSStatefulComponent, SignalMixin):
             self.tx_changed.schedule_event(0, {'event': 'container changed', 'process': self.sim.pid})
         return retval
 
-    def gput(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
+    def _gput(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         num_items = len(obj)
         with self.sim.consume(self.tx_changed, **policy_params):
@@ -113,7 +129,7 @@ class Container(DSStatefulComponent, SignalMixin):
             self.tx_changed.schedule_event(0, {'event': 'container changed', 'process': self.sim.pid})
         return retval
     
-    async def get(self, timeout: TimeType = float('inf'), *obj: EventType, all_or_nothing: bool = True, **policy_params: Any) -> Optional[List[EventType]]:
+    async def _get(self, timeout: TimeType = float('inf'), *obj: EventType, all_or_nothing: bool = True, **policy_params: Any) -> Optional[List[EventType]]:
         ''' Get requested objects from container.
         @param: all_or_nothing if True, it blocks till all the objects will be in the container and returns them (or timeout)
                                if False, it continuosly grabs the requested objects when available until all collected; it returns collected items
@@ -144,7 +160,7 @@ class Container(DSStatefulComponent, SignalMixin):
             retval = []
         return retval
 
-    def gget(self, timeout: TimeType = float('inf'), *obj: EventType, all_or_nothing: bool = True, **policy_params: Any) -> Generator[EventType, Optional[List[EventType]], Optional[List[EventType]]]:
+    def _gget(self, timeout: TimeType = float('inf'), *obj: EventType, all_or_nothing: bool = True, **policy_params: Any) -> Generator[EventType, Optional[List[EventType]], Optional[List[EventType]]]:
         ''' Get requested objects from container.
         @param: all_or_nothing if True, it blocks till all the objects will be in the container and returns them (or timeout)
                                if False, it continuosly grabs the requested objects when available until all collected; it returns collected items
@@ -185,18 +201,34 @@ class Container(DSStatefulComponent, SignalMixin):
             elements += [item] * count
         return iter(elements)
 
-
-class Queue(DSStatefulComponent, SignalMixin):
+class Queue(DSWaitableComponent, SignalMixin):
     ''' The (FIFO) queue of events is a SW component which can dynamically
     be used to put an event in and get (or wait for- if the queue is empty)
     a queued event.
-    Queue does not use any routing of signals.
     '''
     def __init__(self, capacity: NumericType = float('inf'), *args: Any, **policy_params: Any) -> None:
-        ''' Init Queue component. No special arguments here. '''
         super().__init__(*args, **policy_params)
         self.capacity = capacity
         self.queue: List[EventType] = []
+
+    def _set_loggers(self):
+        super()._set_loggers()
+        self.put_logger = []
+        self.get_logger = []
+
+    def _set_probed_methods(self):
+        super()._set_probed_methods()
+        self.put = self.probed_coroutine(self._put, self.put_logger)
+        self.gput = self.probed_generator(self._gput, self.put_logger)
+        self.get = self.probed_coroutine(self._get, self.get_logger)
+        self.gget = self.probed_generator(self._gget, self.get_logger)
+    
+    def _set_unprobed_methods(self):
+        super()._set_unprobed_methods()
+        self.put = self._put
+        self.gput = self._gput
+        self.get = self._get
+        self.gget = self._gget
 
     def send(self, event: EventType) -> EventType:
         return self.put_nowait(event) is not None
@@ -211,7 +243,7 @@ class Queue(DSStatefulComponent, SignalMixin):
             retval = None
         return retval
 
-    async def put(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> EventType:
+    async def _put(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> EventType:
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         with self.sim.consume(self.tx_changed, **policy_params):
             retval = await self.sim.check_and_wait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)
@@ -220,7 +252,7 @@ class Queue(DSStatefulComponent, SignalMixin):
             self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
         return retval
 
-    def gput(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
+    def _gput(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         with self.sim.consume(self.tx_changed, **policy_params):
             retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)
@@ -238,7 +270,7 @@ class Queue(DSStatefulComponent, SignalMixin):
             retval = None
         return retval
 
-    async def get(self, timeout: TimeType = float('inf'), amount: int =1, cond: CondType = lambda e: True, **policy_params: Any) -> Optional[List[EventType]]:
+    async def _get(self, timeout: TimeType = float('inf'), amount: int =1, cond: CondType = lambda e: True, **policy_params: Any) -> Optional[List[EventType]]:
         ''' Get an event from queue. If the queue is empty, wait for the closest event. '''
         with self.sim.consume(self.tx_changed, **policy_params):
             element = await self.sim.check_and_wait(timeout, cond=lambda e:len(self) >= amount and cond(self.queue[0]))  # wait while first element does not match the cond
@@ -249,8 +281,8 @@ class Queue(DSStatefulComponent, SignalMixin):
             self.queue = self.queue[amount:]
             self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
         return retval
-
-    def gget(self, timeout: TimeType = float('inf'), amount: int = 1, cond: CondType = lambda e: True, **policy_params: Any) -> Generator[EventType, Optional[List[EventType]], Optional[List[EventType]]]:
+    
+    def _gget(self, timeout: TimeType = float('inf'), amount: int = 1, cond: CondType = lambda e: True, **policy_params: Any) -> Generator[EventType, Optional[List[EventType]], Optional[List[EventType]]]:
         ''' Get an event from queue. If the queue is empty, wait for the closest event. '''
         with self.sim.consume(self.tx_changed, **policy_params):
             element = yield from self.sim.check_and_gwait(timeout, cond=lambda e:len(self) >= amount and cond(self.queue[0]))  # wait while first element does not match the cond
