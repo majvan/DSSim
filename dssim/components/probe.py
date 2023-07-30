@@ -15,6 +15,7 @@
 The file implements container and queue components.
 '''
 from typing import Any, List, Dict, Tuple, Optional, Tuple, Callable, TYPE_CHECKING
+from abc import abstractmethod
 from dssim.base import NumericType, TimeType, EventType, CondType, SignalMixin, DSAbortException
 from dssim.pubsub import DSConsumer, DSProducer, DSCallback
 
@@ -23,69 +24,100 @@ if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
-LogEntry = Tuple[NumericType, NumericType]
-NumToBinConverter = Callable[[NumericType], NumericType]
+StateType = Any
+LogEntry = Tuple[NumericType, StateType]
+BinType = NumericType
+StateToBinConverter = Callable[[StateType], BinType]
+EventToStateConverter = Callable[[Optional[EventType]], StateType]
 
-class Probe(DSConsumer):
-    ''' The probe is simply used for monitoring events.
+class ProbeBase(DSConsumer):
+    @abstractmethod
+    def send(self, event: EventType) -> None:
+        raise NotImplementedError('Implement this in a derived class.')
+    
+    @abstractmethod
+    def print_statistics(self,
+                         filter_zero_transitions: bool = True,
+                         bin_converter: StateToBinConverter = lambda state: state,
+                         ) -> None:
+        raise NotImplementedError('Implement this in a derived class.')
+
+
+class DSProbe(ProbeBase):
+    ''' The probe is used for monitoring states.
     '''
-    def __init__(self, logging_fcn: Callable[[Optional[EventType]], NumericType], ep: DSProducer, initial_val: NumericType = 0, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, event_to_state: EventToStateConverter, ep: DSProducer, initial_state: Optional[StateType] = None, *args: Any, **kwargs: Any) -> None:
         ''' Init Queue component. No special arguments here. '''
-        name=kwargs.pop('name', ep.name+'.probe')
-        super().__init__(name=name, *args, **kwargs)
-        self._log: List[LogEntry] = []
+        name = kwargs.pop('name', ep.name+'.probe')
+        super().__init__(name=name, cond=lambda e:True, *args, **kwargs)
+        self._log: List[self.__class__.LogEntry] = []
         self._ep = ep
-        cb = self.sim.callback(self.log_state, name=self.name+'.cb')
-        self._ep.add_subscriber(cb, phase='pre')
+        self._ep.add_subscriber(self, phase='pre')
         # self._ep.add_subscriber(cb, phase='post+')
         # self._ep.add_subscriber(cb, phase='post-')
-        self._logging_fcn = logging_fcn
-        self._log.append((self.sim.time, initial_val)) # self._last_state = initial_val
+        self._event_to_state = event_to_state
+        self._last_state = initial_state
+        if initial_state is not None:
+            self._log.append((self.sim.time, initial_state)) # self._last_state = initial_state
 
-    def log_state(self, event: EventType) -> None:
-        state = self._logging_fcn(event)
-        if True: # self._last_state != state:
+    def send(self, event: EventType) -> None:
+        state = self._event_to_state(event)
+        if self._last_state != state:
             self._last_state = state
             self._log.append((self.sim.time, state))
     
     def print_statistics(self,
                          filter_zero_transitions: bool = True,
-                         bin_converter: NumToBinConverter = lambda state: state,
+                         filter_zero_deltas: bool = True,
+                         duration_stat: bool = True,
+                         bin_converter: StateToBinConverter = lambda state: state,
                         #  caption: Optional[str] = None
                          ) -> None:
         # first, compute time deltas
-        deltas: List[LogEntry] = []
+        deltas: List[self.__class__.LogEntry] = []
 
+        # filter out zero duration transitions
         if filter_zero_transitions:
             input, output = self._log, []
-            last_time, last_state = input[0]
-            for time, state in input[1:]:
-                if last_time != time:  # transitions which led to the same state are omitted
-                    output.append((last_time, last_state))
-                    last_time = time
-                last_state = state
-            output.append((last_time, last_state))
+            if len(input) > 0:
+                last_time, last_state = input[0]
+                for time, state in input[1:]:
+                    if last_time != time:
+                        output.append((last_time, last_state))
+                        last_time = time
+                    last_state = state
+                output.append((last_time, last_state))
         else:
             output = self._log
 
-        input, output = output, []
-        last_time, last_state = input[0]
-        for time, state in input[1:]:
-            if last_state != state:  # transitions which led to the same state are omitted
+        # filter out zero delta states
+        if filter_zero_deltas:
+            input, output = output, []
+            if len(input) > 0:
+                last_time, last_state = input[0]
+                for time, state in input[1:]:
+                    if last_state != state:
+                        output.append((last_time, last_state))
+                        last_time = time
+                    last_state = state
                 output.append((last_time, last_state))
-                last_time = time
-            last_state = state
-        output.append((last_time, last_state))
 
         states = set()
         input, output = output, []
-        last_time, last_state = input[0]
-        for time, state in input[1:]:
-            output.append((time - last_time, last_state))
-            states.add(last_state)
-            last_time, last_state = time, state
-        output.append((self.sim.time - time, state))
-        states.add(state)
+        if len(input) > 0:
+            last_time, last_state = input[0]
+            for time, state in input[1:]:
+                if duration_stat:
+                    output.append((time - last_time, last_state))
+                else:
+                    output.append((1, last_state))
+                states.add(last_state)
+                last_time, last_state = time, state
+            if duration_stat:
+                output.append((self.sim.time - time, state))
+            else:
+                output.append((1, state))
+            states.add(state)
 
         deltas = output
 

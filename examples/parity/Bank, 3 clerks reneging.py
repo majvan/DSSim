@@ -53,8 +53,8 @@ CustomerGenerator()
 stat = {'balked': 0, 'reneged': 0}
 clerks = [Clerk() for _ in range(3)]
 waiting_line = sim.Queue(5, blocking_stat=True, name="waiting_line")
-from dssim.components.probe import Probe
-p = Probe(lambda e:len(waiting_line), waiting_line.tx_changed, sim=env)
+from dssim.components.probe import DSProbe
+p = DSProbe(lambda e:len(waiting_line), waiting_line.tx_changed, sim=env)
 
 time, events = env.run(300000)
 p.print_statistics()
