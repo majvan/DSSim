@@ -38,15 +38,15 @@ class Container(DSWaitableComponent, SignalMixin):
     
     def _set_loggers(self):
         super()._set_loggers()
-        self.put_logger = []
-        self.get_logger = []
+        self.put_ep = DSProducer(name=self.name+'.tx_put')
+        self.get_ep = DSProducer(name=self.name+'.tx_get')
 
     def _set_probed_methods(self):
         super()._set_probed_methods()
-        self.put = self.probed_coroutine(self._put, self.put_logger)
-        self.gput = self.probed_generator(self._gput, self.put_logger)
-        self.get = self.probed_coroutine(self._get, self.get_logger)
-        self.gget = self.probed_generator(self._gget, self.get_logger)
+        self.put = self.probed_coroutine(self._put, self.put_ep)
+        self.gput = self.probed_generator(self._gput, self.put_ep)
+        self.get = self.probed_coroutine(self._get, self.get_ep)
+        self.gget = self.probed_generator(self._gget, self.get_ep)
     
     def _set_unprobed_methods(self):
         super()._set_unprobed_methods()
@@ -213,15 +213,15 @@ class Queue(DSWaitableComponent, SignalMixin):
 
     def _set_loggers(self):
         super()._set_loggers()
-        self.put_logger = []
-        self.get_logger = []
+        self.put_ep = DSProducer(name=self.name+'.tx_put')
+        self.get_ep = DSProducer(name=self.name+'.tx_get')
 
     def _set_probed_methods(self):
         super()._set_probed_methods()
-        self.put = self.probed_coroutine(self._put, self.put_logger)
-        self.gput = self.probed_generator(self._gput, self.put_logger)
-        self.get = self.probed_coroutine(self._get, self.get_logger)
-        self.gget = self.probed_generator(self._gget, self.get_logger)
+        self.put = self.probed_coroutine(self._put, self.put_ep)
+        self.gput = self.probed_generator(self._gput, self.put_ep)
+        self.get = self.probed_coroutine(self._get, self.get_ep)
+        self.gget = self.probed_generator(self._gget, self.get_ep)
     
     def _set_unprobed_methods(self):
         super()._set_unprobed_methods()
