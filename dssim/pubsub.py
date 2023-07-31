@@ -153,9 +153,12 @@ NotifierDictItemsType = Dict[DSConsumer, NotifierDictItemType]
 class NotifierDict(NotifierPolicy):
     def __init__(self) -> None:
         self.d: NotifierDictItemsType = {}
+        self._iterated = False
 
     def __iter__(self) -> Iterator[NotifierTypeIter]:
-        return iter(list(self.d.items()))
+        ordered = list(self.d.items())
+        self._iterated = len(ordered) > 0
+        return iter(ordered)
 
     def rewind(self) -> None:
         return
@@ -167,9 +170,11 @@ class NotifierDict(NotifierPolicy):
         self.d[key] = self.d.get(key, 0) - 1
 
     def cleanup(self) -> None:
-        old_dict = self.d
-        new_dict = {k: v for k, v in old_dict.items() if v > 0}
-        self.d = new_dict
+        if self._iterated:
+            self._iterated = False
+            old_dict = self.d
+            new_dict = {k: v for k, v in old_dict.items() if v > 0}
+            self.d = new_dict
 
 
 class NotifierRoundRobinItem:
@@ -191,8 +196,10 @@ NotifierRRItemsType = List[NotifierRoundRobinItem]
 class NotifierRoundRobin(NotifierPolicy):
     def __init__(self) -> None:
         self.queue: NotifierRRItemsType = []
+        self._iterated = False
 
     def __iter__(self) -> "NotifierRoundRobin":
+        self._iterated = len(self.queue) > 0
         self.current_index: int = 0
         self.max_index: int = len(self.queue)
         return self
@@ -222,11 +229,13 @@ class NotifierRoundRobin(NotifierPolicy):
         raise ValueError('A key was supposed to be in the queue')
 
     def cleanup(self) -> None:
-        new_queue = []
-        for item in self.queue:
-            if item.value > 0:
-                new_queue.append(item)
-        self.queue = new_queue
+        if self._iterated:
+            self._iterated = False
+            new_queue = []
+            for item in self.queue:
+                if item.value > 0:
+                    new_queue.append(item)
+            self.queue = new_queue
 
 
 NotifierPriorityItemType = Tuple[int, Dict[DSConsumer, int]]
@@ -236,9 +245,12 @@ NotifierPriorityItemIter = Tuple[DSConsumer, int]
 class NotifierPriority(NotifierPolicy):
     def __init__(self) -> None:
         self.d: NotifierPriorityItemsType = {}
+        self._iterated = False
 
-    def __iter__(self) -> Any: #Iterator[NotifierPriorityItemType]:
-        return iter(list(self._iterate_by_priority()))
+    def __iter__(self) -> Any:
+        ordered = list(self._iterate_by_priority())
+        self._iterated = len(ordered) > 0
+        return iter(ordered)
 
     def _iterate_by_priority(self) -> Iterator[NotifierPriorityItemIter]:
         for prio in sorted(self.d.keys()):
@@ -257,12 +269,14 @@ class NotifierPriority(NotifierPolicy):
         priority_dict[key] = priority_dict.get(key, 0) - 1
 
     def cleanup(self) -> None:
-        new_prio_dict = {}
-        for key, old_dict in self.d.items():
-            new_dict = {k: v for k, v in old_dict.items() if v > 0}
-            if new_dict:
-                new_prio_dict[key] = new_dict
-        self.d = new_prio_dict
+        if self._iterated:
+            self._iterated = False
+            new_prio_dict = {}
+            for key, old_dict in self.d.items():
+                new_dict = {k: v for k, v in old_dict.items() if v > 0}
+                if new_dict:
+                    new_prio_dict[key] = new_dict
+            self.d = new_prio_dict
 
 
 class DSProducer(DSConsumer, SignalMixin):

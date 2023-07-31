@@ -513,17 +513,21 @@ class TestNotifierDict(unittest.TestCase):
     def test2_cleanup(self):
         n = NotifierDict()
         self.assertEqual(n.d, {})
+        n._iterated = True
         n.cleanup()
         self.assertEqual(n.d, {})
         n.d = {'a': 2, 'b': 3}
+        n._iterated = True
         n.cleanup()
         self.assertEqual(n.d, {'a': 2, 'b': 3})
         n.dec('a'), n.dec('a')
         self.assertEqual(n.d, {'a': 0, 'b': 3})
+        n._iterated = True
         n.cleanup()
         self.assertEqual(n.d, {'b': 3})
         n.dec('b'), n.dec('b'), n.dec('b')
         self.assertEqual(n.d, {'b': 0})
+        n._iterated = True
         n.cleanup()
         self.assertEqual(n.d, {})
 
@@ -584,17 +588,21 @@ class TestNotifierRoundRobin(unittest.TestCase):
     def test2_cleanup(self):
         n = NotifierRoundRobin()
         self.assertEqual(n.queue, [])
+        n._iterated = True
         n.cleanup()
         self.assertEqual(n.queue, [])
         n.queue = [NotifierRoundRobinItem('a', 2), NotifierRoundRobinItem('b', 3)]
+        n._iterated = True
         n.cleanup()
         self.assertEqual(n.queue, [('a', 2), ('b', 3)])
         n.dec('a'), n.dec('a')
         self.assertEqual(n.queue, [('a', 0), ('b', 3)])
+        n._iterated = True
         n.cleanup()
         self.assertEqual(n.queue, [('b', 3)])
         n.dec('b'), n.dec('b'), n.dec('b')
         self.assertEqual(n.queue, [('b', 0)])
+        n._iterated = True
         n.cleanup()
         self.assertEqual(n.queue, [])
 
@@ -657,19 +665,24 @@ class TestNotifierPriority(unittest.TestCase):
     def test2_cleanup(self):
         n = NotifierPriority()
         self.assertEqual(n.d, {})
+        n._iterated = True
         n.cleanup()
         self.assertEqual(n.d, {})
         n.d = {1: {'a': 2, 'b': 3}, 2: {'a': 1}}
+        n._iterated = True
         n.cleanup()
         self.assertEqual(n.d, {1: {'a': 2, 'b': 3}, 2: {'a': 1}})
         n.dec('a', priority=1), n.dec('a', priority=1)
         self.assertEqual(n.d, {1: {'a': 0, 'b': 3}, 2: {'a': 1}})
+        n._iterated = True
         n.cleanup()
         self.assertEqual(n.d, {1: {'b': 3}, 2: {'a': 1}})
         n.dec('a', priority=2)
+        n._iterated = True
         n.cleanup()
         self.assertEqual(n.d, {1: {'b': 3}})
         n.dec('b', priority=1), n.dec('b', priority=1), n.dec('b', priority=1)
+        n._iterated = True
         n.cleanup()
         self.assertEqual(n.d, {})
 
