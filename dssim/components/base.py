@@ -14,9 +14,8 @@
 '''
 The provides basic classes for the components.
 '''
-from typing import Any, Optional, Generator
+from typing import Any, Optional, Callable, Generator
 from abc import abstractmethod
-from enum import Enum
 from dssim.base import TimeType, CondType, EventType, DSComponent
 from dssim.pubsub import DSProducer
 
@@ -49,31 +48,33 @@ class DSProbedComponent(DSComponent):
     @abstractmethod
     def _set_unprobed_methods(self): pass
 
-    def probed_generator(self, fcn, ep: DSProducer):
+    def probed_generator(self, fcn: Callable, ep: DSProducer):
         ''' Wrapper which derives new methods adding probing functionality '''
         def probe_wrapper(*args, **kwargs) -> Any:
             retval = None
             t = self.sim.time
             try:
+                ep.send({'op': 'enter', 'pid': self.sim.pid, 'time': self.sim.time})
                 retval = yield from fcn(*args, **kwargs)
             except Exception as e:
-                ep.send((self.sim.time - t, self.sim.pid, e))
+                ep.send({'op': 'exit', 'pid': self.sim.pid, 'time': self.sim.time, 'event': e})
                 raise
-            ep.send((self.sim.time - t, self.sim.pid, retval))
+            ep.send({'op': 'exit', 'pid': self.sim.pid, 'time': self.sim.time, 'event': retval})
             return retval
         return probe_wrapper
 
-    def probed_coroutine(self, fcn, ep):
+    def probed_coroutine(self, fcn: Callable, ep: DSProducer):
         ''' Wrapper which derives new methods adding probing functionality '''
         async def probe_wrapper(*args, **kwargs) -> Any:
             retval = None
             t = self.sim.time
             try:
+                ep.send({'op': 'enter', 'pid': self.sim.pid, 'time': self.sim.time})
                 retval = await fcn(*args, **kwargs)
             except Exception as e:
-                ep.send((self.sim.time - t, self.sim.pid, e))
+                ep.send({'op': 'exit', 'pid': self.sim.pid, 'time': self.sim.time, 'event': e})
                 raise
-            ep.send((self.sim.time - t, self.sim.pid, retval))
+            ep.send({'op': 'exit', 'pid': self.sim.pid, 'time': self.sim.time, 'event': retval})
             return retval
         return probe_wrapper
 
