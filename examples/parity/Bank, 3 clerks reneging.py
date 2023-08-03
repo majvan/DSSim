@@ -15,6 +15,7 @@
 The example is showing a code parity with example from salabim project
 '''
 from dssim.parity import salabim as sim
+from dssim.components.probe import DSProbe, DSIdleProbe
 import random
 
 
@@ -41,6 +42,7 @@ class Customer(sim.Component):
 
 
 class Clerk(sim.Component):
+
     def process(self):
         while True:
             customer_list = yield from waiting_line.gget()  # get from the queue if available
@@ -53,11 +55,15 @@ CustomerGenerator()
 stat = {'balked': 0, 'reneged': 0}
 clerks = [Clerk() for _ in range(3)]
 waiting_line = sim.Queue(5, blocking_stat=True, name="waiting_line")
-from dssim.components.probe import DSProbe
-p = DSProbe(lambda e:len(waiting_line), waiting_line.tx_changed, sim=env)
+p_queue_len = DSProbe(waiting_line.tx_changed, lambda e:len(waiting_line), sim=env)
+p_queue_get = DSIdleProbe(waiting_line.get_ep, sim=env)
+p_queue_put = DSIdleProbe(waiting_line.put_ep, sim=env)
 
 time, events = env.run(300000)
-p.print_statistics()
+p_queue_len.print_statistics()
+p_queue_get.print_statistics()
+p_queue_put.print_statistics()
+
 print("number reneged", stat['reneged'])
 print("number balked", stat['balked'])
 assert stat['reneged'] == 6665, f"Unexpected number of reneged."
