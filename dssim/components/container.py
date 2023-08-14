@@ -97,7 +97,7 @@ class Container(DSWaitableComponent, SignalMixin):
             self.tx_changed.schedule_event(0, {'event': 'container changed', 'process': self.sim.pid})
         return retval
     
-    def pop_element(self, element: EventType) -> EventType:
+    def _pop_element(self, element: EventType) -> EventType:
         el_count = self.container.get(element, 0)
         if el_count > 1:
             self.container[element] = el_count - 1
