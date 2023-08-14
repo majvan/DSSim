@@ -20,8 +20,8 @@ from abc import abstractmethod
 from typing import Any, Optional, Generator, Type, Callable
 import inspect
 from dssim.base import CondType, EventType, TimeType, DSAbortException, DSComponent
-from dssim.process import DSProcess
-from dssim.process import DSSchedulable
+from dssim.pubsub import DSProducer
+from dssim.process import DSProcess, DSSchedulable
 from dssim.components.base import DSWaitableComponent
 from dssim.components.container import ContainerMixin
 from dssim.components.resource import ResourceMixin
@@ -72,12 +72,12 @@ class DSProcessComponent(DSWaitableComponent, ContainerMixin, ResourceMixin):
 
     def _set_loggers(self):
         super()._set_loggers()
-        self.wait_logger = []
+        self.wait_ep = DSProducer(name=self.name+'.tx_wait')
 
     def _set_probed_methods(self):
         super()._set_probed_methods()
-        self.wait = self.probed_coroutine(self._wait, self.wait_logger)
-        self.gwait = self.probed_generator(self._gwait, self.wait_logger)
+        self.wait = self.probed_coroutine(self._wait, self.wait_ep)
+        self.gwait = self.probed_generator(self._gwait, self.wait_ep)
     
     def _set_unprobed_methods(self):
         super()._set_unprobed_methods()
