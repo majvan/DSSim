@@ -50,7 +50,7 @@ class ProbeBase(DSConsumer):
         print(str(self))
         print("{:10s} {:^28s} | {:^28s}".format(
             "",
-            "States duration",
+            "State duration",
             "Non-zero state duration",
         ))
         print("{:10s} {:>20s} {:>7s} | {:>20s} {:>7s}".format(
