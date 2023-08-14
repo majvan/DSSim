@@ -24,7 +24,7 @@ from functools import wraps
 import inspect
 from dssim.base import NumericType, TimeType, EventType, EventRetType, CondType
 from dssim.base import DSTransferableCondition, SignalMixin
-from dssim.pubsub import ConsumerMetadata, TrackEvent
+from dssim.pubsub import ConsumerMetadata, DSProducer, TrackEvent
 from dssim.future import DSFuture
 
 
@@ -131,6 +131,19 @@ class DSProcess(DSFuture, SignalMixin):
     @property
     def last_idle_time(self) -> NumericType:
         return self.meta.last_wait_time
+
+
+class DSProbedProcess(DSProcess):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.activity_tx = DSProducer(name=self.name+'.activity_tx', sim=self.sim)
+
+    @TrackEvent
+    def send(self, event: EventType) -> EventRetType:
+        ''' Pushes an event to the task and gets new state. '''
+        if self.started():
+            self.activity_tx.send(event)  # send notification about an event being sent to generator
+        return super().send(event)
 
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
