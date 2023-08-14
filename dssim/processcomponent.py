@@ -70,10 +70,6 @@ class DSProcessComponent(DSWaitableComponent, ContainerMixin, ResourceMixin):
             self._scheduled_process.abort()
         return retval
 
-    def _set_loggers(self):
-        super()._set_loggers()
-        self.wait_ep = DSProducer(name=self.name+'.tx_wait')
-
     def _set_probed_methods(self):
         super()._set_probed_methods()
         MethodBinder.bind(self, 'wait', MethodBinder.probed_coroutine(self.wait, self.wait_ep))
