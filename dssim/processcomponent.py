@@ -22,7 +22,7 @@ import inspect
 from dssim.base import CondType, EventType, TimeType, DSAbortException, DSComponent
 from dssim.pubsub import DSProducer
 from dssim.process import DSProcess, DSSchedulable
-from dssim.components.base import DSWaitableComponent, MethodBinder
+from dssim.components.base import DSWaitableComponent, MethBind
 from dssim.components.container import ContainerMixin
 from dssim.components.resource import ResourceMixin
 
@@ -73,14 +73,14 @@ class DSProcessComponent(DSWaitableComponent, ContainerMixin, ResourceMixin):
     def _set_probed_methods(self):
         super()._set_probed_methods()
         cls = self.__class__
-        MethodBinder.bind(self, 'wait', MethodBinder.probed(MethodBinder.method_for(self, cls.wait), self.wait_ep))
-        MethodBinder.bind(self, 'gwait', MethodBinder.probed(MethodBinder.method_for(self, cls.gwait), self.wait_ep))
+        MethBind.bind(self, 'wait', MethBind.probed(MethBind.method_for(self, cls.wait), self.wait_ep))
+        MethBind.bind(self, 'gwait', MethBind.probed(MethBind.method_for(self, cls.gwait), self.wait_ep))
     
     def _set_unprobed_methods(self):
         super()._set_unprobed_methods()
         cls = self.__class__
-        MethodBinder.bind(self, 'wait', MethodBinder.method_for(self, cls.wait))
-        MethodBinder.bind(self, 'gwait', MethodBinder.method_for(self, cls.gwait))
+        MethBind.bind(self, 'wait', MethBind.method_for(self, cls.wait))
+        MethBind.bind(self, 'gwait', MethBind.method_for(self, cls.gwait))
 
 class _ComponentProcess(DSProcess):
     def __init__(self, process_component: DSProcessComponent, *args: Any, **kwargs: Any) -> None:

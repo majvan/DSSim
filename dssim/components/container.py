@@ -16,7 +16,7 @@ The file implements container and queue components.
 '''
 from typing import Any, List, Dict, Iterator, Union, Optional, Generator, TYPE_CHECKING
 from dssim.base import NumericType, TimeType, EventType, CondType, SignalMixin, DSAbortException
-from dssim.components.base import DSWaitableComponent, MethodBinder
+from dssim.components.base import DSWaitableComponent, MethBind
 from dssim.pubsub import DSProducer
 
 if TYPE_CHECKING:
@@ -44,18 +44,18 @@ class Container(DSWaitableComponent, SignalMixin):
     def _set_probed_methods(self):
         super()._set_probed_methods()
         cls = self.__class__
-        MethodBinder.bind(self, 'put', MethodBinder.probed(MethodBinder.method_for(self, cls.put), self.put_ep))
-        MethodBinder.bind(self, 'gput', MethodBinder.probed(MethodBinder.method_for(self, cls.gput), self.put_ep))
-        MethodBinder.bind(self, 'get', MethodBinder.probed(MethodBinder.method_for(self, cls.get), self.get_ep))
-        MethodBinder.bind(self, 'gget', MethodBinder.probed(MethodBinder.method_for(self, cls.gget), self.get_ep))
+        MethBind.bind(self, 'put', MethBind.probed(MethBind.method_for(self, cls.put), self.put_ep))
+        MethBind.bind(self, 'gput', MethBind.probed(MethBind.method_for(self, cls.gput), self.put_ep))
+        MethBind.bind(self, 'get', MethBind.probed(MethBind.method_for(self, cls.get), self.get_ep))
+        MethBind.bind(self, 'gget', MethBind.probed(MethBind.method_for(self, cls.gget), self.get_ep))
     
     def _set_unprobed_methods(self):
         super()._set_unprobed_methods()
         cls = self.__class__
-        MethodBinder.bind(self, 'put', MethodBinder.method_for(self, cls.put))
-        MethodBinder.bind(self, 'gput', MethodBinder.method_for(self, cls.gput))
-        MethodBinder.bind(self, 'get', MethodBinder.method_for(self, cls.get))
-        MethodBinder.bind(self, 'gget', MethodBinder.method_for(self, cls.gget))
+        MethBind.bind(self, 'put', MethBind.method_for(self, cls.put))
+        MethBind.bind(self, 'gput', MethBind.method_for(self, cls.gput))
+        MethBind.bind(self, 'get', MethBind.method_for(self, cls.get))
+        MethBind.bind(self, 'gget', MethBind.method_for(self, cls.gget))
 
     def send(self, event: EventType) -> EventType:
         return self.put_nowait(event) is not None
@@ -221,18 +221,18 @@ class Queue(DSWaitableComponent, SignalMixin):
     def _set_probed_methods(self):
         super()._set_probed_methods()
         cls = self.__class__
-        MethodBinder.bind(self, 'put', MethodBinder.probed(MethodBinder.method_for(self, cls.put), self.put_ep))
-        MethodBinder.bind(self, 'gput', MethodBinder.probed(MethodBinder.method_for(self, cls.gput), self.put_ep))
-        MethodBinder.bind(self, 'get', MethodBinder.probed(MethodBinder.method_for(self, cls.get), self.get_ep))
-        MethodBinder.bind(self, 'gget', MethodBinder.probed(MethodBinder.method_for(self, cls.gget), self.get_ep))
+        MethBind.bind(self, 'put', MethBind.probed(MethBind.method_for(self, cls.put), self.put_ep))
+        MethBind.bind(self, 'gput', MethBind.probed(MethBind.method_for(self, cls.gput), self.put_ep))
+        MethBind.bind(self, 'get', MethBind.probed(MethBind.method_for(self, cls.get), self.get_ep))
+        MethBind.bind(self, 'gget', MethBind.probed(MethBind.method_for(self, cls.gget), self.get_ep))
     
     def _set_unprobed_methods(self):
         super()._set_unprobed_methods()
         cls = self.__class__
-        MethodBinder.bind(self, 'put', MethodBinder.method_for(self, cls.put))
-        MethodBinder.bind(self, 'gput', MethodBinder.method_for(self, cls.gput))
-        MethodBinder.bind(self, 'get', MethodBinder.method_for(self, cls.get))
-        MethodBinder.bind(self, 'gget', MethodBinder.method_for(self, cls.gget))
+        MethBind.bind(self, 'put', MethBind.method_for(self, cls.put))
+        MethBind.bind(self, 'gput', MethBind.method_for(self, cls.gput))
+        MethBind.bind(self, 'get', MethBind.method_for(self, cls.get))
+        MethBind.bind(self, 'gget', MethBind.method_for(self, cls.gget))
 
     def send(self, event: EventType) -> EventType:
         return self.put_nowait(event) is not None

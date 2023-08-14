@@ -50,7 +50,7 @@ class DSProbedComponent(DSComponent):
     def _set_unprobed_methods(self): pass
 
 
-class MethodBinder:
+class MethBind:
     ''' A structure encapsulating 3 functions.
     The functions are helpers to route a method from a class to another method.
     '''
@@ -61,8 +61,7 @@ class MethodBinder:
     @staticmethod
     def bind(obj, name, wrapped):
         if obj is not None:
-            cls = obj.__class__
-            wrapper_bounded_with_instance = wrapped.__get__(obj, cls)
+            wrapper_bounded_with_instance = MethBind.method_for(obj, wrapped)
             setattr(obj, name, wrapper_bounded_with_instance)
         else:
             globals()[name] = wrapped
@@ -113,18 +112,18 @@ class DSWaitableComponent(DSProbedComponent, DSStatefulComponent):
     def _set_probed_methods(self):
         super()._set_probed_methods()
         cls = self.__class__
-        MethodBinder.bind(self, 'check_and_gwait', MethodBinder.probed(MethodBinder.method_for(self, cls.gwait), self.wait_ep))
-        MethodBinder.bind(self, 'check_and_wait', MethodBinder.probed(MethodBinder.method_for(self, cls.wait), self.wait_ep))
-        MethodBinder.bind(self, 'gwait', MethodBinder.probed(MethodBinder.method_for(self, cls.gwait), self.wait_ep))
-        MethodBinder.bind(self, 'wait', MethodBinder.probed(MethodBinder.method_for(self, cls.wait), self.wait_ep))
+        MethBind.bind(self, 'check_and_gwait', MethBind.probed(MethBind.method_for(self, cls.gwait), self.wait_ep))
+        MethBind.bind(self, 'check_and_wait', MethBind.probed(MethBind.method_for(self, cls.wait), self.wait_ep))
+        MethBind.bind(self, 'gwait', MethBind.probed(MethBind.method_for(self, cls.gwait), self.wait_ep))
+        MethBind.bind(self, 'wait', MethBind.probed(MethBind.method_for(self, cls.wait), self.wait_ep))
     
     def _set_unprobed_methods(self):
         super()._set_unprobed_methods()
         cls = self.__class__
-        MethodBinder.bind(self, 'check_and_gwait', MethodBinder.method_for(self, cls.check_and_gwait))
-        MethodBinder.bind(self, 'check_and_wait', MethodBinder.method_for(self, cls.check_and_wait))
-        MethodBinder.bind(self, 'gwait', MethodBinder.method_for(self, cls.gwait))
-        MethodBinder.bind(self, 'wait', MethodBinder.method_for(self, cls.wait))
+        MethBind.bind(self, 'check_and_gwait', MethBind.method_for(self, cls.check_and_gwait))
+        MethBind.bind(self, 'check_and_wait', MethBind.method_for(self, cls.check_and_wait))
+        MethBind.bind(self, 'gwait', MethBind.method_for(self, cls.gwait))
+        MethBind.bind(self, 'wait', MethBind.method_for(self, cls.wait))
 
     def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> EventType:
         ''' Wait for change in the state and returns when the condition is met '''
