@@ -51,17 +51,17 @@ class Resource(DSStatefulComponent, DSProbedComponent):
 
     def _set_probed_methods(self):
         super()._set_probed_methods()
-        self.put = self.probed_coroutine(self._put, self.put_ep)
-        self.gput = self.probed_generator(self._gput, self.put_ep)
-        self.get = self.probed_coroutine(self._get, self.get_ep)
-        self.gget = self.probed_generator(self._gget, self.get_ep)
+        MethodBinder.bind(self, 'put', MethodBinder.probed_coroutine(self.put, self.put_ep))
+        MethodBinder.bind(self, 'gput', MethodBinder.probed_generator(self.gput, self.put_ep))
+        MethodBinder.bind(self, 'get', MethodBinder.probed_coroutine(self.get, self.get_ep))
+        MethodBinder.bind(self, 'gget', MethodBinder.probed_generator(self.gget, self.get_ep))
     
     def _set_unprobed_methods(self):
         super()._set_unprobed_methods()
-        self.put = self._put
-        self.gput = self._gput
-        self.get = self._get
-        self.gget = self._gget
+        MethodBinder.bind(self, 'put', Resource.put)
+        MethodBinder.bind(self, 'gput', Resource.gput)
+        MethodBinder.bind(self, 'get', Resource.get)
+        MethodBinder.bind(self, 'gget', Resource.gget)
 
     def put_nowait(self, amount: NumericType) -> NumericType:
         if self.amount + amount > self.capacity:
@@ -72,7 +72,7 @@ class Resource(DSStatefulComponent, DSProbedComponent):
             retval = amount
         return retval
 
-    async def _put(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
+    async def put(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
         ''' Put amount into the resource pool.  '''
         with self.sim.consume(self.tx_changed, **policy_params):
             obj = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
@@ -84,7 +84,7 @@ class Resource(DSStatefulComponent, DSProbedComponent):
             retval = amount
         return retval
 
-    def _gput(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
+    def gput(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
         ''' Put amount into the resource pool.  '''
         with self.sim.consume(self.tx_changed, **policy_params):
             obj = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
@@ -105,7 +105,7 @@ class Resource(DSStatefulComponent, DSProbedComponent):
             retval = amount
         return retval
 
-    async def _get(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
+    async def get(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
         ''' Get resource. If the resource has not enough amount, wait to have enough requested amount. '''
         with self.sim.consume(self.tx_changed, **policy_params):
             obj = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount >= amount)
@@ -117,7 +117,7 @@ class Resource(DSStatefulComponent, DSProbedComponent):
             retval = amount
         return retval
 
-    def _gget(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
+    def gget(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
         ''' Get resource. If the resource has not enough amount, wait to have enough requested amount. '''
         with self.sim.consume(self.tx_changed, **policy_params):
             obj = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount >= amount)

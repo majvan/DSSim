@@ -22,7 +22,7 @@ import inspect
 from dssim.base import CondType, EventType, TimeType, DSAbortException, DSComponent
 from dssim.pubsub import DSProducer
 from dssim.process import DSProcess, DSSchedulable
-from dssim.components.base import DSWaitableComponent
+from dssim.components.base import DSWaitableComponent, MethodBinder
 from dssim.components.container import ContainerMixin
 from dssim.components.resource import ResourceMixin
 
@@ -56,14 +56,14 @@ class DSProcessComponent(DSWaitableComponent, ContainerMixin, ResourceMixin):
     def signal(self, event: EventType) -> None:
         self._scheduled_process.signal(event)
 
-    async def _wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: True, **policy_params: Any) -> EventType:
+    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: True, **policy_params: Any) -> EventType:
         try:
             retval = await self.sim.wait(timeout, cond=cond, **policy_params)
         except DSAbortException as exc:
             self._scheduled_process.abort()
         return retval
 
-    def _gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: True, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
+    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: True, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         try:
             retval = yield from self.sim.gwait(timeout, cond=cond, **policy_params)
         except DSAbortException as exc:
@@ -76,13 +76,13 @@ class DSProcessComponent(DSWaitableComponent, ContainerMixin, ResourceMixin):
 
     def _set_probed_methods(self):
         super()._set_probed_methods()
-        self.wait = self.probed_coroutine(self._wait, self.wait_ep)
-        self.gwait = self.probed_generator(self._gwait, self.wait_ep)
+        MethodBinder.bind(self, 'wait', MethodBinder.probed_coroutine(self.wait, self.wait_ep))
+        MethodBinder.bind(self, 'gwait', MethodBinder.probed_generator(self.gwait, self.wait_ep))
     
     def _set_unprobed_methods(self):
         super()._set_unprobed_methods()
-        self.wait = self._wait
-        self.gwait = self._gwait
+        MethodBinder.bind(self, 'wait', DSProcessComponent.wait)
+        MethodBinder.bind(self, 'gwait', DSProcessComponent.gwait)
 
 
 class _ComponentProcess(DSProcess):

@@ -48,9 +48,24 @@ class DSProbedComponent(DSComponent):
     @abstractmethod
     def _set_unprobed_methods(self): pass
 
-    def probed_generator(self, fcn: Callable, ep: DSProducer):
+
+class MethodBinder:
+    ''' A structure encapsulating 3 functions.
+    The functions are helpers to route a method from a class to another method.
+    '''
+    @staticmethod
+    def bind(obj, name, wrapped):
+        if obj is not None:
+            cls = obj.__class__
+            wrapper_bounded_with_instance = wrapped.__get__(obj, cls)
+            setattr(obj, name, wrapper_bounded_with_instance)
+        else:
+            globals()[name] = wrapped
+
+    @staticmethod
+    def probed_generator(fcn: Callable, ep: DSProducer):
         ''' Wrapper which derives new methods adding probing functionality '''
-        def probe_wrapper(*args, **kwargs) -> Any:
+        def probe_wrapper(self, *args, **kwargs) -> Any:
             retval = None
             t = self.sim.time
             try:
@@ -63,9 +78,10 @@ class DSProbedComponent(DSComponent):
             return retval
         return probe_wrapper
 
-    def probed_coroutine(self, fcn: Callable, ep: DSProducer):
+    @staticmethod
+    def probed_coroutine(fcn: Callable, ep: DSProducer):
         ''' Wrapper which derives new methods adding probing functionality '''
-        async def probe_wrapper(*args, **kwargs) -> Any:
+        async def probe_wrapper(self, *args, **kwargs) -> Any:
             retval = None
             t = self.sim.time
             try:
@@ -89,42 +105,37 @@ class DSWaitableComponent(DSProbedComponent, DSStatefulComponent):
 
     def _set_probed_methods(self):
         super()._set_probed_methods()
-        self.check_and_gwait = self.probed_generator(self._check_and_gwait, self.wait_ep)
-        self.check_and_wait = self.probed_coroutine(self._check_and_wait, self.wait_ep)
-        self.gwait = self.probed_generator(self._gwait, self.wait_ep)
-        self.wait = self.probed_coroutine(self._wait, self.wait_ep)
+        MethodBinder.bind(self, 'check_and_gwait', MethodBinder.probed_generator(self.check_and_gwait, self.wait_ep))
+        MethodBinder.bind(self, 'check_and_wait', MethodBinder.probed_coroutine(self.check_and_wait, self.wait_ep))
+        MethodBinder.bind(self, 'gwait', MethodBinder.probed_generator(self.gwait, self.wait_ep))
+        MethodBinder.bind(self, 'wait', MethodBinder.probed_coroutine(self.wait, self.wait_ep))
     
     def _set_unprobed_methods(self):
         super()._set_unprobed_methods()
-        self.check_and_gwait = self._check_and_gwait
-        self.check_and_wait = self._check_and_wait
-        self.gwait = self._gwait
-        self.wait = self._wait
+        MethodBinder.bind(self, 'check_and_gwait', self.check_and_gwait)
+        MethodBinder.bind(self, 'check_and_wait', self.check_and_wait)
+        MethodBinder.bind(self, 'gwait', self.gwait)
+        MethodBinder.bind(self, 'wait', self.wait)
 
-    # from dssim.base import probing_fcns
-    # @probing_fcns.create_probing_fcn('wait_ep', 'check_and_gwait')
-    def _check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> EventType:
+    def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> EventType:
         ''' Wait for change in the state and returns when the condition is met '''
         with self.sim.consume(self.tx_changed, **policy_params):
             retval = yield from self.sim.check_and_gwait(timeout, cond=cond)
         return retval
 
-    # @create_probing_fcn('wait_ep', 'check_and_gwait')
-    async def _check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> EventType:
+    async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> EventType:
         ''' Wait for change in the state and returns when the condition is met '''
         with self.sim.consume(self.tx_changed, **policy_params):
             retval = await self.sim.check_and_wait(timeout, cond=cond)
         return retval
 
-    # @create_probing_fcn('wait_ep', 'gwait')
-    def _gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
+    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         ''' Wait for change in the state and returns when the condition is met '''
         with self.sim.consume(self.tx_changed, **policy_params):
             retval = yield from self.sim.gwait(timeout, cond=cond)
         return retval
 
-    # @create_probing_fcn('wait_ep', 'wait')
-    async def _wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> EventType:
+    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> EventType:
         ''' Wait for change in the state and returns when the condition is met '''
         with self.sim.consume(self.tx_changed, **policy_params):
             retval = await self.sim.wait(timeout, cond=cond)
