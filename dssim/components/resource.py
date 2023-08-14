@@ -19,7 +19,8 @@ in the pool, just an abstract pool level information (e.g. amount of water in a 
 '''
 from typing import Any, Generator, TYPE_CHECKING
 from dssim.base import NumericType, TimeType, EventType
-from dssim.components.base import DSStatefulComponent, DSProbedComponent
+from dssim.pubsub import DSProducer
+from dssim.components.base import DSStatefulComponent, DSProbedComponent, MethodBinder
 
 
 if TYPE_CHECKING:
@@ -45,15 +46,15 @@ class Resource(DSStatefulComponent, DSProbedComponent):
 
     def _set_loggers(self):
         super()._set_loggers()
-        self.put_logger = []
-        self.get_logger = []
+        self.put_ep = DSProducer(name=self.name+'.tx_put')
+        self.get_ep = DSProducer(name=self.name+'.tx_get')
 
     def _set_probed_methods(self):
         super()._set_probed_methods()
-        self.put = self.probed_coroutine(self._put, self.put_logger)
-        self.gput = self.probed_generator(self._gput, self.put_logger)
-        self.get = self.probed_coroutine(self._get, self.get_logger)
-        self.gget = self.probed_generator(self._gget, self.get_logger)
+        self.put = self.probed_coroutine(self._put, self.put_ep)
+        self.gput = self.probed_generator(self._gput, self.put_ep)
+        self.get = self.probed_coroutine(self._get, self.get_ep)
+        self.gget = self.probed_generator(self._gget, self.get_ep)
     
     def _set_unprobed_methods(self):
         super()._set_unprobed_methods()
