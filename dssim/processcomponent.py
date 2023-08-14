@@ -72,14 +72,15 @@ class DSProcessComponent(DSWaitableComponent, ContainerMixin, ResourceMixin):
 
     def _set_probed_methods(self):
         super()._set_probed_methods()
-        MethodBinder.bind(self, 'wait', MethodBinder.probed_coroutine(self.wait, self.wait_ep))
-        MethodBinder.bind(self, 'gwait', MethodBinder.probed_generator(self.gwait, self.wait_ep))
+        cls = self.__class__
+        MethodBinder.bind(self, 'wait', MethodBinder.probed(MethodBinder.method_for(self, cls.wait), self.wait_ep))
+        MethodBinder.bind(self, 'gwait', MethodBinder.probed(MethodBinder.method_for(self, cls.gwait), self.wait_ep))
     
     def _set_unprobed_methods(self):
         super()._set_unprobed_methods()
-        MethodBinder.bind(self, 'wait', DSProcessComponent.wait)
-        MethodBinder.bind(self, 'gwait', DSProcessComponent.gwait)
-
+        cls = self.__class__
+        MethodBinder.bind(self, 'wait', MethodBinder.method_for(self, cls.wait))
+        MethodBinder.bind(self, 'gwait', MethodBinder.method_for(self, cls.gwait))
 
 class _ComponentProcess(DSProcess):
     def __init__(self, process_component: DSProcessComponent, *args: Any, **kwargs: Any) -> None:

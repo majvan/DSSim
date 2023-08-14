@@ -43,17 +43,19 @@ class Container(DSWaitableComponent, SignalMixin):
 
     def _set_probed_methods(self):
         super()._set_probed_methods()
-        MethodBinder.bind(self, 'put', MethodBinder.probed_coroutine(self.put, self.put_ep))
-        MethodBinder.bind(self, 'gput', MethodBinder.probed_generator(self.gput, self.put_ep))
-        MethodBinder.bind(self, 'get', MethodBinder.probed_coroutine(self.get, self.get_ep))
-        MethodBinder.bind(self, 'gget', MethodBinder.probed_generator(self.gget, self.get_ep))
+        cls = self.__class__
+        MethodBinder.bind(self, 'put', MethodBinder.probed(MethodBinder.method_for(self, cls.put), self.put_ep))
+        MethodBinder.bind(self, 'gput', MethodBinder.probed(MethodBinder.method_for(self, cls.gput), self.put_ep))
+        MethodBinder.bind(self, 'get', MethodBinder.probed(MethodBinder.method_for(self, cls.get), self.get_ep))
+        MethodBinder.bind(self, 'gget', MethodBinder.probed(MethodBinder.method_for(self, cls.gget), self.get_ep))
     
     def _set_unprobed_methods(self):
         super()._set_unprobed_methods()
-        MethodBinder.bind(self, 'put', Container.put)
-        MethodBinder.bind(self, 'gput', Container.gput)
-        MethodBinder.bind(self, 'get', Container.get)
-        MethodBinder.bind(self, 'gget', Container.gget)
+        cls = self.__class__
+        MethodBinder.bind(self, 'put', MethodBinder.method_for(self, cls.put))
+        MethodBinder.bind(self, 'gput', MethodBinder.method_for(self, cls.gput))
+        MethodBinder.bind(self, 'get', MethodBinder.method_for(self, cls.get))
+        MethodBinder.bind(self, 'gget', MethodBinder.method_for(self, cls.gget))
 
     def send(self, event: EventType) -> EventType:
         return self.put_nowait(event) is not None
@@ -218,17 +220,19 @@ class Queue(DSWaitableComponent, SignalMixin):
 
     def _set_probed_methods(self):
         super()._set_probed_methods()
-        MethodBinder.bind(self, 'put', MethodBinder.probed_coroutine(self.put, self.put_ep))
-        MethodBinder.bind(self, 'gput', MethodBinder.probed_generator(self.gput, self.put_ep))
-        MethodBinder.bind(self, 'get', MethodBinder.probed_coroutine(self.get, self.get_ep))
-        MethodBinder.bind(self, 'gget', MethodBinder.probed_generator(self.gget, self.get_ep))
+        cls = self.__class__
+        MethodBinder.bind(self, 'put', MethodBinder.probed(MethodBinder.method_for(self, cls.put), self.put_ep))
+        MethodBinder.bind(self, 'gput', MethodBinder.probed(MethodBinder.method_for(self, cls.gput), self.put_ep))
+        MethodBinder.bind(self, 'get', MethodBinder.probed(MethodBinder.method_for(self, cls.get), self.get_ep))
+        MethodBinder.bind(self, 'gget', MethodBinder.probed(MethodBinder.method_for(self, cls.gget), self.get_ep))
     
     def _set_unprobed_methods(self):
         super()._set_unprobed_methods()
-        MethodBinder.bind(self, 'put', Queue.put)
-        MethodBinder.bind(self, 'gput', Queue.gput)
-        MethodBinder.bind(self, 'get', Queue.get)
-        MethodBinder.bind(self, 'gget', Queue.gget)
+        cls = self.__class__
+        MethodBinder.bind(self, 'put', MethodBinder.method_for(self, cls.put))
+        MethodBinder.bind(self, 'gput', MethodBinder.method_for(self, cls.gput))
+        MethodBinder.bind(self, 'get', MethodBinder.method_for(self, cls.get))
+        MethodBinder.bind(self, 'gget', MethodBinder.method_for(self, cls.gget))
 
     def send(self, event: EventType) -> EventType:
         return self.put_nowait(event) is not None

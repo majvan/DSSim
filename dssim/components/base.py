@@ -16,6 +16,7 @@ The provides basic classes for the components.
 '''
 from typing import Any, Optional, Callable, Generator
 from abc import abstractmethod
+import inspect
 from dssim.base import TimeType, CondType, EventType, DSComponent
 from dssim.pubsub import DSProducer
 
@@ -54,6 +55,10 @@ class MethodBinder:
     The functions are helpers to route a method from a class to another method.
     '''
     @staticmethod
+    def method_for(obj, method):
+        return method.__get__(obj)
+    
+    @staticmethod
     def bind(obj, name, wrapped):
         if obj is not None:
             cls = obj.__class__
@@ -63,9 +68,9 @@ class MethodBinder:
             globals()[name] = wrapped
 
     @staticmethod
-    def probed_generator(fcn: Callable, ep: DSProducer):
+    def probed(fcn: Callable, ep: DSProducer):
         ''' Wrapper which derives new methods adding probing functionality '''
-        def probe_wrapper(self, *args, **kwargs) -> Any:
+        def probe_wrapper_gen(self, *args, **kwargs) -> Any:
             retval = None
             t = self.sim.time
             try:
@@ -76,12 +81,8 @@ class MethodBinder:
                 raise
             ep.send({'op': 'exit', 'pid': self.sim.pid, 'time': self.sim.time, 'event': retval})
             return retval
-        return probe_wrapper
 
-    @staticmethod
-    def probed_coroutine(fcn: Callable, ep: DSProducer):
-        ''' Wrapper which derives new methods adding probing functionality '''
-        async def probe_wrapper(self, *args, **kwargs) -> Any:
+        async def probe_wrapper_coro(self, *args, **kwargs) -> Any:
             retval = None
             t = self.sim.time
             try:
@@ -92,7 +93,13 @@ class MethodBinder:
                 raise
             ep.send({'op': 'exit', 'pid': self.sim.pid, 'time': self.sim.time, 'event': retval})
             return retval
-        return probe_wrapper
+        
+        if inspect.iscoroutinefunction(fcn):
+            return probe_wrapper_coro
+        elif inspect.isgeneratorfunction(fcn):
+            return probe_wrapper_gen
+        else:
+            raise ValueError('The callable is not generator or coroutine')
 
 
 class DSWaitableComponent(DSProbedComponent, DSStatefulComponent):
@@ -105,17 +112,19 @@ class DSWaitableComponent(DSProbedComponent, DSStatefulComponent):
 
     def _set_probed_methods(self):
         super()._set_probed_methods()
-        MethodBinder.bind(self, 'check_and_gwait', MethodBinder.probed_generator(self.check_and_gwait, self.wait_ep))
-        MethodBinder.bind(self, 'check_and_wait', MethodBinder.probed_coroutine(self.check_and_wait, self.wait_ep))
-        MethodBinder.bind(self, 'gwait', MethodBinder.probed_generator(self.gwait, self.wait_ep))
-        MethodBinder.bind(self, 'wait', MethodBinder.probed_coroutine(self.wait, self.wait_ep))
+        cls = self.__class__
+        MethodBinder.bind(self, 'check_and_gwait', MethodBinder.probed(MethodBinder.method_for(self, cls.gwait), self.wait_ep))
+        MethodBinder.bind(self, 'check_and_wait', MethodBinder.probed(MethodBinder.method_for(self, cls.wait), self.wait_ep))
+        MethodBinder.bind(self, 'gwait', MethodBinder.probed(MethodBinder.method_for(self, cls.gwait), self.wait_ep))
+        MethodBinder.bind(self, 'wait', MethodBinder.probed(MethodBinder.method_for(self, cls.wait), self.wait_ep))
     
     def _set_unprobed_methods(self):
         super()._set_unprobed_methods()
-        MethodBinder.bind(self, 'check_and_gwait', self.check_and_gwait)
-        MethodBinder.bind(self, 'check_and_wait', self.check_and_wait)
-        MethodBinder.bind(self, 'gwait', self.gwait)
-        MethodBinder.bind(self, 'wait', self.wait)
+        cls = self.__class__
+        MethodBinder.bind(self, 'check_and_gwait', MethodBinder.method_for(self, cls.check_and_gwait))
+        MethodBinder.bind(self, 'check_and_wait', MethodBinder.method_for(self, cls.check_and_wait))
+        MethodBinder.bind(self, 'gwait', MethodBinder.method_for(self, cls.gwait))
+        MethodBinder.bind(self, 'wait', MethodBinder.method_for(self, cls.wait))
 
     def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> EventType:
         ''' Wait for change in the state and returns when the condition is met '''
