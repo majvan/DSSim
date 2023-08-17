@@ -62,10 +62,10 @@ class DSConsumer(DSComponent):
         super().__init__(self, *args, **kwargs)
         self.create_metadata(**kwargs)
        
-    def create_metadata(self, **kwargs) -> ConsumerMetadata:
+    def create_metadata(self, cond=None, **kwargs) -> ConsumerMetadata:
         self.meta = ConsumerMetadata()
-        if 'cond' in kwargs:
-            self.meta.cond.push(kwargs['cond'])
+        if 'cond' is not None:
+            self.meta.cond.push(cond)
         return self.meta
 
     def get_cond(self):
