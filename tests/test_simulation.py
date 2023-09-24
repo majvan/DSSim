@@ -340,18 +340,21 @@ class TestConditionChecking(unittest.TestCase):
         p.meta = SomeObj()
         p.meta.cond = MagicMock()
         p.meta.cond.check = Mock(return_value=(True, 'abc'))
-        retval = sim.check_condition(p, 'test')
+        retval = sim.try_send(p, 'test')
         p.meta.cond.check.assert_called_once()
-        self.assertEqual(retval, (True, 'abc'))
+        self.assertEqual(retval, True)
     
     def test4_early_check(self):
         ''' Test if signal calls first check_condition and then send_object '''
         sim = DSSimulation()
-        sim.check_condition = Mock(return_value=(False, 'abc'))  # it will not allow to accept the event
         sim.send_object = Mock()
         consumer = Mock()
+        consumer.meta = SomeObj()
+        consumer.meta.cond = MagicMock()
+        consumer.meta.cond.check = Mock(return_value=(False, 'abc'))
+        consumer.get_cond = lambda: consumer.meta.cond
         sim.try_send(consumer, None)
-        sim.check_condition.assert_called_once()
+        consumer.meta.cond.check.assert_called_once()
         sim.send_object.assert_not_called()
 
         call_order = []
@@ -362,12 +365,16 @@ class TestConditionChecking(unittest.TestCase):
         def called_send_object(*args, **kwargs):
             call_order.append(call('send_object', *args, **kwargs))
             return True
-        sim.check_condition = Mock(side_effect=lambda *a, **kw: called_check_condition(*a, **kw))  # it will allow to accept the event
-        sim.send_object = Mock(side_effect=lambda *a, **kw: called_send_object(*a, **kw))
+        consumer = Mock()
+        consumer.meta = SomeObj()
+        consumer.meta.cond = MagicMock()
+        consumer.meta.cond.check = Mock(side_effect=called_check_condition)  # it will allow to accept the event
+        consumer.get_cond = lambda: consumer.meta.cond
+        sim.send_object = Mock(side_effect=called_send_object)
         sim.try_send(consumer, None)
-        sim.check_condition.assert_called_once()
+        consumer.meta.cond.check.assert_called_once()
         sim.send_object.assert_called_once()
-        self.assertEqual(call_order, [call('check_condition', consumer, None), call('send_object', consumer, 'abc')])
+        self.assertEqual(call_order, [call('check_condition', None), call('send_object', consumer, 'abc')])
 
     def test6_gwait_return(self):
         def my_process():
