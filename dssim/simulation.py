@@ -107,10 +107,6 @@ class DSSimulation(DSComponentSingleton,
             ftime = self.time + time
         return ftime
 
-    def delete(self, cond: Callable) -> None:
-        ''' An interface method to delete events on the queue '''
-        self.time_queue.delete(cond)
-
     def to_abs_time(self, time: TimeType) -> DSAbsTime:
         if isinstance(time, DSAbsTime):
             return time
@@ -234,7 +230,7 @@ class DSSimulation(DSComponentSingleton,
         finally:
             if event is not None and time != float('inf'):
                 # If we terminated before timeout and the timeout event is on time queue- remove it
-                self.delete(lambda e: e == (self._parent_process, None))
+                self.time_queue.delete(lambda e: e == (self._parent_process, None))
         return event
 
     def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
@@ -307,7 +303,7 @@ class DSSimulation(DSComponentSingleton,
         finally:
             if event is not None and time != float('inf'):
                 # If we terminated before timeout and the timeout event is on time queue- remove it
-                self.delete(lambda e: e == (self._parent_process, None))
+                self.time_queue.delete(lambda e: e == (self._parent_process, None))
         return event
 
     async def wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> EventType:
@@ -362,7 +358,7 @@ class DSSimulation(DSComponentSingleton,
         meta = consumer.meta
         meta.cond = StackedCond()
         # Remove all the events for this consumer
-        self.time_queue.delete(lambda e:e[0] is consumer)
+        self.time_queue.delete(lambda e: e[0] is consumer)
 
     def run(self, up_to: TimeType = float('inf'), future: EventType = object()) -> Tuple[float, int]:
         ''' This is the simulation machine. In a loop it takes first event and process it.

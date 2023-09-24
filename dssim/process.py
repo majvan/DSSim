@@ -292,7 +292,7 @@ class DSTimeoutContext:
             # the context manager relies on the assumption that the
             # the exception object is allocated only once in the
             # timequeue.
-            self.sim.delete(cond=lambda e: e[1] is self.exc)
+            self.sim.time_queue.delete_cond(cond=lambda e: e[1] is self.exc)
     
     def set_interrupted(self) -> None:
         self._interrupted = True
