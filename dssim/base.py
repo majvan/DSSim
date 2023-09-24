@@ -189,7 +189,10 @@ class DSComponent:
 
 # In the following, self is in fact of type DSConsumer, but PyLance makes troubles with variable types
 class SignalMixin:
-    ''' Pairs of methods for extending a functionality of a consumer '''
+    ''' Pairs of helper methods for extending a functionality of a consumer.
+    For better performance, it is recommended to avoid these helper methods
+    and call the underlying DSSimulation methods directly.
+    '''
 
     def signal(self: Any, event: EventType) -> EventType:
         ''' Signal event. '''
