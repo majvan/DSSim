@@ -82,18 +82,16 @@ class DSProcess(DSFuture, SignalMixin):
             self.value = self.generator.send(None)
         return self.value
 
-    def _schedule(self, time: TimeType) -> None:
-        ''' This api is used with sim.schedule(...) '''
+    def schedule(self: DSProcessType, time: Optional[TimeType] = 0) -> DSProcess:
+        ''' This api is to schedule the process '''
         if not self._scheduled:
+            # Prepare an event which will be sent to the created process upon scheduled time
             schedule_event = self._ScheduleEvent()
             self._scheduled = True
             self.get_cond().push(schedule_event)
             self.sim.schedule_event(time, schedule_event, self)
+        return self
 
-    def schedule(self: DSProcessType, time: TimeType) -> DSProcessType:
-        ''' This api is to schedule directly task.schedule(...) '''
-        return self.sim.schedule(time, self)
-    
     def started(self) -> bool:
         if inspect.iscoroutine(self.generator):
             retval = inspect.getcoroutinestate(self.generator) != inspect.CORO_CREATED

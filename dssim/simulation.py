@@ -135,8 +135,8 @@ class DSSimulation(DSComponentSingleton,
             process = DSCallback(schedulable, sim=self)
         else:
             raise ValueError(f'The provided function {schedulable} is probably missing @DSSchedulable decorator')
-        if hasattr(process, '_schedule'):
-            process._schedule(time)
+        if isinstance(process, DSProcess):
+            process.schedule(time)
         else:
             self.schedule_event(time, None, process)
         return process
