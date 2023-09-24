@@ -288,11 +288,7 @@ class DSTimeoutContext:
 
     def cleanup(self) -> None:
         if self.time is not None:
-            # We may compare also consumer, but
-            # the context manager relies on the assumption that the
-            # the exception object is allocated only once in the
-            # timequeue.
-            self.sim.time_queue.delete_cond(cond=lambda e: e[1] is self.exc)
+            self.sim.time_queue.delete_val((self.sim.pid, self.exc))
     
     def set_interrupted(self) -> None:
         self._interrupted = True

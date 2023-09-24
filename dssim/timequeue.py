@@ -58,12 +58,23 @@ class TimeQueue:
         time, element = self.timequeue.pop(0), self.elementqueue.pop(0)
         return time, element
 
-    def delete(self, cond: Callable) -> None:
+    def delete_cond(self, cond: Callable) -> None:
         ''' Delete all the objects which fit to the condition from the queue. '''
         new_timequeue = []
         new_elementqueue = []
         for time, element in zip(self.timequeue, self.elementqueue):
             if not cond(element):
+                new_timequeue.append(time)
+                new_elementqueue.append(element)
+        self.timequeue = new_timequeue
+        self.elementqueue = new_elementqueue
+
+    def delete_val(self, val: ElementType) -> None:
+        ''' Delete all the objects which have the provided value. '''
+        new_timequeue = []
+        new_elementqueue = []
+        for time, element in zip(self.timequeue, self.elementqueue):
+            if element != val:
                 new_timequeue.append(time)
                 new_elementqueue.append(element)
         self.timequeue = new_timequeue

@@ -230,7 +230,7 @@ class DSSimulation(DSComponentSingleton,
         finally:
             if event is not None and time != float('inf'):
                 # If we terminated before timeout and the timeout event is on time queue- remove it
-                self.time_queue.delete(lambda e: e == (self._parent_process, None))
+                self.time_queue.delete_val((self._parent_process, None))
         return event
 
     def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
@@ -303,7 +303,7 @@ class DSSimulation(DSComponentSingleton,
         finally:
             if event is not None and time != float('inf'):
                 # If we terminated before timeout and the timeout event is on time queue- remove it
-                self.time_queue.delete(lambda e: e == (self._parent_process, None))
+                self.time_queue.delete_val((self._parent_process, None))
         return event
 
     async def wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> EventType:
@@ -358,7 +358,7 @@ class DSSimulation(DSComponentSingleton,
         meta = consumer.meta
         meta.cond = StackedCond()
         # Remove all the events for this consumer
-        self.time_queue.delete(lambda e: e[0] is consumer)
+        self.time_queue.delete_cond(lambda e: e[0] is consumer)
 
     def run(self, up_to: TimeType = float('inf'), future: EventType = object()) -> Tuple[float, int]:
         ''' This is the simulation machine. In a loop it takes first event and process it.

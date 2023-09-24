@@ -748,14 +748,22 @@ class TestSim(unittest.TestCase):
         with self.assertRaises(ValueError):
             sim.schedule_event(-0.5, event_obj)
 
-    def test3_deleting_events(self):
+    def test3_cleanup(self):
         ''' Assert deleting from time queue when deleting events '''
         sim = DSSimulation()
-        sim.time_queue.delete = Mock()
-        condition = lambda x: 'A' * x
-        sim.delete(condition)
-        sim.time_queue.delete.assert_called_once_with(condition)
-        sim.time_queue.delete.reset_mock()
+        sim.time_queue.delete_cond = Mock()
+        consumer = Mock()
+        sim.cleanup(consumer)
+        sim.time_queue.delete_cond.assert_called_once()
+        # now test, if the call argument to the delete_cond was lambda e: e[0] is consumer
+        # first, get args
+        args, kwargs = sim.time_queue.delete_cond.call_args
+        # get the lambda fcn
+        lambda_fcn = args[0]
+        # check the lambda fcn on the tuple (consumer, )
+        self.assertTrue(lambda_fcn((consumer,)))
+        self.assertFalse(lambda_fcn((1,)))
+        self.assertEqual(kwargs, {})
 
     def test4_scheduling(self):
         ''' Assert the delay of scheduled process '''
