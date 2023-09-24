@@ -98,7 +98,7 @@ class DSProcess(DSFuture, SignalMixin):
         if not self.started():
             if exc is None:
                 exc = DSAbortException(self)
-            self.sim.delete(cond=lambda e: e[0] is self)
+            self.sim.time_queue.delete_val((self.sim._parent_process, None))
             self.fail(exc)
         else:
             super().abort(exc)
@@ -282,11 +282,7 @@ class DSTimeoutContext:
 
     def cleanup(self) -> None:
         if self.time is not None:
-            # We may compare also consumer, but
-            # the context manager relies on the assumption that the
-            # the exception object is allocated only once in the
-            # timequeue.
-            self.sim.delete(cond=lambda e: e[1] is self.exc)
+            self.sim.time_queue.delete_val((self.sim.pid, self.exc))
     
     def set_interrupted(self) -> None:
         self._interrupted = True

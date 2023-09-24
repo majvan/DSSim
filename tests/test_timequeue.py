@@ -99,17 +99,35 @@ class TestTimeQueue(unittest.TestCase):
         self.assertEqual((time, element), (10, '1st element'))
         self.assertEqual(self._get_len(), (0, 0, 0))
 
-    def test5_delete(self):
+    def test5_delete_cond(self):
         ''' Assert deleting an event '''
         self.tq.add_element(2, {'a': 1, 'b': 2, 'c': 3})
         self.tq.add_element(1, {'b': 1, 'c': 2, 'd': 3})
         self.tq.add_element(3, {'x': 1, 'y': 2, 'z': 3})
         self.tq.add_element(4, {'a': 1, 'b': 2, 'c': 3, 'x': -1, 'y': -2})
-        self.tq.delete(cond=lambda e:'x' in e)
+        self.tq.delete_cond(cond=lambda e:'x' in e)
         self.assertEqual(len(self.tq), 2)
         time, element = self.tq.pop()
         self.assertEqual((time, element), (1, {'b': 1, 'c': 2, 'd': 3}))
         time, element = self.tq.pop()
         self.assertEqual((time, element), (2, {'a': 1, 'b': 2, 'c': 3}))
-        self.tq.delete(cond=lambda e:'b' in e)
+        self.tq.delete_cond(lambda e:'b' in e)
+        self.assertEqual(len(self.tq), 0)
+
+    def test6_delete_val(self):
+        ''' Assert deleting an event '''
+        self.tq.add_element(2, {'a': 1, 'b': 2, 'c': 3})
+        self.tq.add_element(1, {'b': 1, 'c': 2, 'd': 3})
+        self.tq.add_element(3, {'x': 1, 'y': 2, 'z': 3})
+        self.tq.add_element(4, {'a': 1, 'b': 2, 'c': 3, 'x': -1, 'y': -2})
+        self.tq.delete_val({'x': 1, 'y': 2, 'z': 3})
+        self.assertEqual(len(self.tq), 3)
+        time, element = self.tq.pop()
+        self.assertEqual((time, element), (1, {'b': 1, 'c': 2, 'd': 3}))
+        time, element = self.tq.pop()
+        self.assertEqual((time, element), (2, {'a': 1, 'b': 2, 'c': 3}))
+        self.assertEqual(len(self.tq), 1)
+        self.tq.delete_val({'a': 100, 'b': 2, 'c': 3, 'x': -1, 'y': -2})
+        self.assertEqual(len(self.tq), 1)
+        self.tq.delete_val({'a': 1, 'b': 2, 'c': 3, 'x': -1, 'y': -2})
         self.assertEqual(len(self.tq), 0)
