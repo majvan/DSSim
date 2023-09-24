@@ -23,6 +23,56 @@ if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
+class QueueElements:
+    def __init__(self, sim: "DSSimulation") -> None:
+        self.sim = sim
+        self.stat = []  # stat of stay
+        self.queue = []
+        self.time_info = []
+
+    def enqueue(self, *items):
+        self.queue += items
+        self.time_info += [self.sim.time] * len(items)
+
+    def dequeue(self, num_items):
+        num_items = min(num_items, len(self.queue))
+        for i in range(num_items):
+            self.stat.append(self.sim.time - self.time_info[i])
+        self.time_info = self.time_info[num_items:]
+        retval, self.queue = self.queue[:num_items], self.queue[num_items:]
+        return retval
+
+    def remove(self, cond: CondType) -> None:
+        ''' Removes event(s) from queue. '''
+        length = len(self.queue)
+        if length > 0:
+            new_queue = []
+            new_time_info = []
+            for t, e in zip(self.time_info, self.queue):
+                if callable(cond) and cond(e) or (cond == e):
+                    self.stat.append(self.sim.time - t)
+                else:
+                    new_queue.append(e)
+                    new_time_info.append(t)
+            self.queue = new_queue
+            self.time_info = new_time_info
+    
+    def pop(self, index: int) -> None:
+        retval = self.queue.pop(index)
+        self.stat.append(self.sim.time - self.time_info[index])
+        self.time_info.pop(index)
+        return retval
+    
+    def __len__(self):
+        return len(self.queue)
+
+    def __getitem__(self, index):
+        return self.queue[index]
+
+    def __iter__(self):
+        return iter(self.queue)
+
+
 class SimpleQueueElements:
     def __init__(self, sim: "DSSimulation") -> None:
         self.sim = sim
@@ -79,20 +129,22 @@ class Container(DSWaitableComponent, SignalMixin):
         self.get_ep = DSProducer(name=self.name+'.tx_get')
 
     def _set_probed_methods(self):
-        super()._set_probed_methods()
-        cls = self.__class__
-        MethBind.bind(self, 'put', MethBind.probed(MethBind.method_for(self, cls.put), self.put_ep))
-        MethBind.bind(self, 'gput', MethBind.probed(MethBind.method_for(self, cls.gput), self.put_ep))
-        MethBind.bind(self, 'get', MethBind.probed(MethBind.method_for(self, cls.get), self.get_ep))
-        MethBind.bind(self, 'gget', MethBind.probed(MethBind.method_for(self, cls.gget), self.get_ep))
+        if not self._blocking_stat:
+            cls = self.__class__
+            MethBind.bind(self, 'put', MethBind.probed(MethBind.method_for(self, cls.put), self.put_ep))
+            MethBind.bind(self, 'gput', MethBind.probed(MethBind.method_for(self, cls.gput), self.put_ep))
+            MethBind.bind(self, 'get', MethBind.probed(MethBind.method_for(self, cls.get), self.get_ep))
+            MethBind.bind(self, 'gget', MethBind.probed(MethBind.method_for(self, cls.gget), self.get_ep))
+            super()._set_probed_methods()
     
     def _set_unprobed_methods(self):
-        super()._set_unprobed_methods()
-        cls = self.__class__
-        MethBind.bind(self, 'put', MethBind.method_for(self, cls.put))
-        MethBind.bind(self, 'gput', MethBind.method_for(self, cls.gput))
-        MethBind.bind(self, 'get', MethBind.method_for(self, cls.get))
-        MethBind.bind(self, 'gget', MethBind.method_for(self, cls.gget))
+        if self._blocking_stat:
+            cls = self.__class__
+            MethBind.bind(self, 'put', MethBind.method_for(self, cls.put))
+            MethBind.bind(self, 'gput', MethBind.method_for(self, cls.gput))
+            MethBind.bind(self, 'get', MethBind.method_for(self, cls.get))
+            MethBind.bind(self, 'gget', MethBind.method_for(self, cls.gget))
+            super()._set_unprobed_methods()
 
     def send(self, event: EventType) -> EventType:
         return self.put_nowait(event) is not None
@@ -248,28 +300,34 @@ class Queue(DSWaitableComponent, SignalMixin):
     def __init__(self, capacity: NumericType = float('inf'), *args: Any, **policy_params: Any) -> None:
         super().__init__(*args, **policy_params)
         self.capacity = capacity
-        self.queue = SimpleQueueElements(sim=self.sim)
+        if self._blocking_stat:
+            self.queue = QueueElements(sim=self.sim)  # QueueElements List[EventType] = []
+        else:
+            self.queue = SimpleQueueElements(sim=self.sim)
+        self.stat: Dict = {'put_time': [], 'stay_time': []}
 
     def _set_loggers(self):
-        super()._set_loggers()
         self.put_ep = DSProducer(name=self.name+'.tx_put')
         self.get_ep = DSProducer(name=self.name+'.tx_get')
+        super()._set_loggers()
 
     def _set_probed_methods(self):
-        super()._set_probed_methods()
-        cls = self.__class__
-        MethBind.bind(self, 'put', MethBind.probed(MethBind.method_for(self, cls.put), self.put_ep))
-        MethBind.bind(self, 'gput', MethBind.probed(MethBind.method_for(self, cls.gput), self.put_ep))
-        MethBind.bind(self, 'get', MethBind.probed(MethBind.method_for(self, cls.get), self.get_ep))
-        MethBind.bind(self, 'gget', MethBind.probed(MethBind.method_for(self, cls.gget), self.get_ep))
+        if not self._blocking_stat:
+            cls = self.__class__
+            MethBind.bind(self, 'put', MethBind.probed(MethBind.method_for(self, cls.put), self.put_ep))
+            MethBind.bind(self, 'gput', MethBind.probed(MethBind.method_for(self, cls.gput), self.put_ep))
+            MethBind.bind(self, 'get', MethBind.probed(MethBind.method_for(self, cls.get), self.get_ep))
+            MethBind.bind(self, 'gget', MethBind.probed(MethBind.method_for(self, cls.gget), self.get_ep))
+            super()._set_probed_methods()
     
     def _set_unprobed_methods(self):
-        super()._set_unprobed_methods()
-        cls = self.__class__
-        MethBind.bind(self, 'put', MethBind.method_for(self, cls.put))
-        MethBind.bind(self, 'gput', MethBind.method_for(self, cls.gput))
-        MethBind.bind(self, 'get', MethBind.method_for(self, cls.get))
-        MethBind.bind(self, 'gget', MethBind.method_for(self, cls.gget))
+        if self._blocking_stat:
+            cls = self.__class__
+            MethBind.bind(self, 'put', MethBind.method_for(self, cls.put))
+            MethBind.bind(self, 'gput', MethBind.method_for(self, cls.gput))
+            MethBind.bind(self, 'get', MethBind.method_for(self, cls.get))
+            MethBind.bind(self, 'gget', MethBind.method_for(self, cls.gget))
+            super()._set_unprobed_methods()
 
     def send(self, event: EventType) -> EventType:
         return self.put_nowait(event) is not None
@@ -348,7 +406,7 @@ class Queue(DSWaitableComponent, SignalMixin):
             self.queue.remove(cond)
             if length != len(self.queue):
                 self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
-
+    
     def __len__(self):
         return len(self.queue)
 
@@ -362,6 +420,21 @@ class Queue(DSWaitableComponent, SignalMixin):
     def __iter__(self) -> Iterator[EventType]:
         return iter(self.queue)
 
+    def print_statistics(self):
+        print(f'{self}')
+        total = sum(self.queue.stat)
+        n = len(self.queue.stat)
+        avg_time: float = total / n
+        print(f'Average stay time: {avg_time}')
+
+
+'''
+TODO: add SimpleQueue
+- no setitem
+- no remove, only _remove
+- split tx_changed into tx_added and tx_removed (performance reasons)
+- no wait/gwait
+'''
 
 # In the following, self is in fact of type DSProcessComponent, but PyLance makes troubles with variable types
 class ContainerMixin:

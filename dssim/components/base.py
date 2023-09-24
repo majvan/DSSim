@@ -35,19 +35,23 @@ class DSProbedComponent(DSComponent):
     def __init__(self, *args: Any, blocking_stat: bool = False, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._set_loggers()
+        self._blocking_stat = False
         if blocking_stat:
             self._set_probed_methods()
         else:
             self._set_unprobed_methods()
 
     @abstractmethod
-    def _set_loggers(self): pass
+    def _set_loggers(self):
+        raise NotImplementedError()
 
     @abstractmethod
-    def _set_probed_methods(self): pass
+    def _set_probed_methods(self):
+        raise NotImplementedError()
     
     @abstractmethod
-    def _set_unprobed_methods(self): pass
+    def _set_unprobed_methods(self):
+        raise NotImplementedError()
 
 
 class MethBind:
@@ -106,24 +110,28 @@ class DSWaitableComponent(DSProbedComponent, DSStatefulComponent):
     upon a change of the component.
     '''
     def _set_loggers(self):
-        super()._set_loggers()
+        # super()._set_loggers()
         self.wait_ep = DSProducer(name=self.name+'.tx_wait')
 
     def _set_probed_methods(self):
-        super()._set_probed_methods()
-        cls = self.__class__
-        MethBind.bind(self, 'check_and_gwait', MethBind.probed(MethBind.method_for(self, cls.gwait), self.wait_ep))
-        MethBind.bind(self, 'check_and_wait', MethBind.probed(MethBind.method_for(self, cls.wait), self.wait_ep))
-        MethBind.bind(self, 'gwait', MethBind.probed(MethBind.method_for(self, cls.gwait), self.wait_ep))
-        MethBind.bind(self, 'wait', MethBind.probed(MethBind.method_for(self, cls.wait), self.wait_ep))
+        if not self._blocking_stat:
+            cls = self.__class__
+            MethBind.bind(self, 'check_and_gwait', MethBind.probed(MethBind.method_for(self, cls.gwait), self.wait_ep))
+            MethBind.bind(self, 'check_and_wait', MethBind.probed(MethBind.method_for(self, cls.wait), self.wait_ep))
+            MethBind.bind(self, 'gwait', MethBind.probed(MethBind.method_for(self, cls.gwait), self.wait_ep))
+            MethBind.bind(self, 'wait', MethBind.probed(MethBind.method_for(self, cls.wait), self.wait_ep))
+            # super()._set_probed_methods()
+            self._blocking_stat = True
     
     def _set_unprobed_methods(self):
-        super()._set_unprobed_methods()
-        cls = self.__class__
-        MethBind.bind(self, 'check_and_gwait', MethBind.method_for(self, cls.check_and_gwait))
-        MethBind.bind(self, 'check_and_wait', MethBind.method_for(self, cls.check_and_wait))
-        MethBind.bind(self, 'gwait', MethBind.method_for(self, cls.gwait))
-        MethBind.bind(self, 'wait', MethBind.method_for(self, cls.wait))
+        if self._blocking_stat:
+            cls = self.__class__
+            MethBind.bind(self, 'check_and_gwait', MethBind.method_for(self, cls.check_and_gwait))
+            MethBind.bind(self, 'check_and_wait', MethBind.method_for(self, cls.check_and_wait))
+            MethBind.bind(self, 'gwait', MethBind.method_for(self, cls.gwait))
+            MethBind.bind(self, 'wait', MethBind.method_for(self, cls.wait))
+            # super()._set_unprobed_methods()
+            self._blocking_stat = False
 
     def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> EventType:
         ''' Wait for change in the state and returns when the condition is met '''

@@ -20,14 +20,14 @@ in the pool, just an abstract pool level information (e.g. amount of water in a 
 from typing import Any, Generator, TYPE_CHECKING
 from dssim.base import NumericType, TimeType, EventType
 from dssim.pubsub import DSProducer
-from dssim.components.base import DSStatefulComponent, DSProbedComponent, MethBind
+from dssim.components.base import DSWaitableComponent, DSProbedComponent, MethBind
 
 
 if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
-class Resource(DSStatefulComponent, DSProbedComponent):
+class Resource(DSWaitableComponent):
     ''' The Resource models a container of virtual resource(s).
     By virtual, it means that the components holds only the amount of the resources,
     not individual objects. The amount can be divisable to any extent, it is represented
@@ -45,25 +45,27 @@ class Resource(DSStatefulComponent, DSProbedComponent):
         self.capacity = capacity
 
     def _set_loggers(self):
-        super()._set_loggers()
         self.put_ep = DSProducer(name=self.name+'.tx_put')
         self.get_ep = DSProducer(name=self.name+'.tx_get')
+        super()._set_loggers()
 
     def _set_probed_methods(self):
-        super()._set_probed_methods()
-        cls = self.__class__
-        MethBind.bind(self, 'put', MethBind.probed(MethBind.method_for(self, cls.put), self.put_ep))
-        MethBind.bind(self, 'gput', MethBind.probed(MethBind.method_for(self, cls.gput), self.put_ep))
-        MethBind.bind(self, 'get', MethBind.probed(MethBind.method_for(self, cls.get), self.get_ep))
-        MethBind.bind(self, 'gget', MethBind.probed(MethBind.method_for(self, cls.gget), self.get_ep))
+        if not self._blocking_stat:
+            cls = self.__class__
+            MethBind.bind(self, 'put', MethBind.probed(MethBind.method_for(self, cls.put), self.put_ep))
+            MethBind.bind(self, 'gput', MethBind.probed(MethBind.method_for(self, cls.gput), self.put_ep))
+            MethBind.bind(self, 'get', MethBind.probed(MethBind.method_for(self, cls.get), self.get_ep))
+            MethBind.bind(self, 'gget', MethBind.probed(MethBind.method_for(self, cls.gget), self.get_ep))
+            super()._set_probed_methods()
     
     def _set_unprobed_methods(self):
-        super()._set_unprobed_methods()
-        cls = self.__class__
-        MethBind.bind(self, 'put', MethBind.method_for(self, cls.put))
-        MethBind.bind(self, 'gput', MethBind.method_for(self, cls.gput))
-        MethBind.bind(self, 'get', MethBind.method_for(self, cls.get))
-        MethBind.bind(self, 'gget', MethBind.method_for(self, cls.gget))
+        if self._blocking_stat:
+            cls = self.__class__
+            MethBind.bind(self, 'put', MethBind.method_for(self, cls.put))
+            MethBind.bind(self, 'gput', MethBind.method_for(self, cls.gput))
+            MethBind.bind(self, 'get', MethBind.method_for(self, cls.get))
+            MethBind.bind(self, 'gget', MethBind.method_for(self, cls.gget))
+            super()._set_unprobed_methods()
 
     def put_nowait(self, amount: NumericType) -> NumericType:
         if self.amount + amount > self.capacity:

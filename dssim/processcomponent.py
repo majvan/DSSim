@@ -71,16 +71,18 @@ class DSProcessComponent(DSWaitableComponent, ContainerMixin, ResourceMixin):
         return retval
 
     def _set_probed_methods(self):
-        super()._set_probed_methods()
-        cls = self.__class__
-        MethBind.bind(self, 'wait', MethBind.probed(MethBind.method_for(self, cls.wait), self.wait_ep))
-        MethBind.bind(self, 'gwait', MethBind.probed(MethBind.method_for(self, cls.gwait), self.wait_ep))
+        if not self._blocking_stat:
+            cls = self.__class__
+            MethBind.bind(self, 'wait', MethBind.probed(MethBind.method_for(self, cls.wait), self.wait_ep))
+            MethBind.bind(self, 'gwait', MethBind.probed(MethBind.method_for(self, cls.gwait), self.wait_ep))
+            super()._set_probed_methods()
     
     def _set_unprobed_methods(self):
-        super()._set_unprobed_methods()
-        cls = self.__class__
-        MethBind.bind(self, 'wait', MethBind.method_for(self, cls.wait))
-        MethBind.bind(self, 'gwait', MethBind.method_for(self, cls.gwait))
+        if self._blocking_stat:
+            cls = self.__class__
+            MethBind.bind(self, 'wait', MethBind.method_for(self, cls.wait))
+            MethBind.bind(self, 'gwait', MethBind.method_for(self, cls.gwait))
+            super()._set_unprobed_methods()
 
 
 class _ComponentProcess(DSProcess):
