@@ -65,38 +65,13 @@ class StackedCond(ICondition):
 
     def push(self, cond: Any) -> "StackedCond":
         ''' Adds new condition to the stack '''
-
         self.conds.append(cond)
         return self
 
     def pop(self) -> Any:
         ''' Removes last condition from the stack '''
-
         return self.conds.pop()
 
-    def check_one(self, cond: CondType, event: EventType) -> Tuple[bool, Any]:
-        ''' Checks one condition on the stack.
-        
-        :returns: a tuple (event_passed, value_of_event)
-        '''
-
-        # Check the event first
-        # Instead of the following generic rule, it is better to add it as a stacked condition
-        # for "None" value, it will be caught later by cond == event rule.
-        # if event is None:  # timeout received
-        #     return True, None
-        if isinstance(event, Exception):  # any exception raised
-            return True, event
-        # Check the type of condition
-        if cond == event:  # we are expecting exact event and it came
-            return True, event
-        elif isinstance(cond, ICondition):
-            return cond.check(event)
-        elif callable(cond) and cond(event):  # there was a filter function set and the condition is met
-            return True, event
-        else:  # the event does not match our condition and hence will be ignored
-            return False, None
-    
     def check(self, event: EventType) -> Tuple[bool, EventType]:
         ''' Checks the stack.
         The event is passed to all the conditions on the stack till it finds the first one
@@ -104,10 +79,24 @@ class StackedCond(ICondition):
         
         :returns: a result of pass check- a tuple (event_passed, value_of_event)
         '''
-
         signaled, retval = False, event
         for cond in self.conds:
-            signaled, event = self.check_one(cond, retval)
+            # Check the event first
+            # Instead of the following generic rule, it is better to add it as a stacked condition
+            # for "None" value, it will be caught later by cond == event rule.
+            # if event is None:  # timeout received
+            #     return True, None
+            if isinstance(retval, Exception):  # any exception raised
+                signaled, event = True, retval
+            # Check the type of condition
+            elif cond == retval:  # we are expecting exact event and it came
+                signaled, event = True, retval
+            elif isinstance(cond, ICondition):
+                signaled, event = cond.check(retval)
+            elif callable(cond) and cond(retval):  # there was a filter function set and the condition is met
+                signaled, event = True, retval
+            else:  # the event does not match our condition and hence will be ignored
+                signaled, event = False, None
             if signaled:
                 if hasattr(cond, 'cond_value'):
                     retval = cond.cond_value()
