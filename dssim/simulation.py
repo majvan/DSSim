@@ -141,10 +141,6 @@ class DSSimulation(DSComponentSingleton,
             self.schedule_event(time, None, process)
         return process
 
-    def check_condition(self, consumer: DSConsumer, event: EventType) -> Tuple[bool, EventType]:
-        conds = consumer.get_cond()
-        return conds.check(event)
-
     def send_object(self, consumer: DSConsumer, event: EventType) -> EventType:
         ''' Send an event object to a consumer. Return value from the consumer. '''
 
@@ -190,7 +186,8 @@ class DSSimulation(DSComponentSingleton,
         # upon waiting for a pattern event.
         # The idea is that the consumer will get the event only if the condition is met-
         # an early check.
-        signaled, event = self.check_condition(consumer, event)
+        conds = consumer.get_cond()
+        signaled, event = conds.check(event)
         if not signaled:
             return False  # not signalled
         retval = self.send_object(consumer, event)
