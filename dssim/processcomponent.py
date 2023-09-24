@@ -82,6 +82,7 @@ class DSProcessComponent(DSWaitableComponent, ContainerMixin, ResourceMixin):
         MethBind.bind(self, 'wait', MethBind.method_for(self, cls.wait))
         MethBind.bind(self, 'gwait', MethBind.method_for(self, cls.gwait))
 
+
 class _ComponentProcess(DSProcess):
     def __init__(self, process_component: DSProcessComponent, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)

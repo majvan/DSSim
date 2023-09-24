@@ -20,7 +20,7 @@ Consumer: an object which takes signal from producer and then stops
   further spread.
 '''
 from abc import abstractmethod
-from typing import List, Dict, Any, Type, Generator, Callable, Tuple, Iterator, TYPE_CHECKING
+from typing import List, Dict, Any, Optional, Type, Generator, Callable, Tuple, Iterator, TYPE_CHECKING
 from dssim.base import TimeType, CondType, StackedCond, DSComponent, DSEvent, EventType, EventRetType, SignalMixin
 
 
@@ -62,9 +62,9 @@ class DSConsumer(DSComponent):
         super().__init__(self, *args, **kwargs)
         self.create_metadata(**kwargs)
        
-    def create_metadata(self, cond=None, **kwargs) -> ConsumerMetadata:
+    def create_metadata(self, cond: Optional[CondType] = None, **kwargs) -> ConsumerMetadata:
         self.meta = ConsumerMetadata()
-        if 'cond' is not None:
+        if cond is not None:
             self.meta.cond.push(cond)
         return self.meta
 
