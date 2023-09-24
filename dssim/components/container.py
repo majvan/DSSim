@@ -156,7 +156,7 @@ class Container(DSWaitableComponent, SignalMixin):
             for item in obj:
                 self.container[item] = self.container.get(item, 0) + 1
             self.size += num_items
-            self.tx_changed.schedule_event(0, {'event': 'container changed', 'process': self.sim.pid})
+            self.sim.schedule_event(0, {'event': 'container changed', 'process': self.sim.pid}, self.tx_changed)
             retval = obj
         else:
             retval = None
@@ -171,7 +171,7 @@ class Container(DSWaitableComponent, SignalMixin):
             for item in obj:
                 self.container[item] = self.container.get(item, 0) + 1
             self.size += num_items
-            self.tx_changed.schedule_event(0, {'event': 'container changed', 'process': self.sim.pid})
+            self.sim.schedule_event(0, {'event': 'container changed', 'process': self.sim.pid}, self.tx_changed)
         return retval
 
     def gput(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
@@ -183,7 +183,7 @@ class Container(DSWaitableComponent, SignalMixin):
             for item in obj:
                 self.container[item] = self.container.get(item, 0) + 1
             self.size += num_items
-            self.tx_changed.schedule_event(0, {'event': 'container changed', 'process': self.sim.pid})
+            self.sim.schedule_event(0, {'event': 'container changed', 'process': self.sim.pid}, self.tx_changed)
         return retval
     
     def _pop_element(self, element: EventType) -> EventType:
@@ -217,7 +217,7 @@ class Container(DSWaitableComponent, SignalMixin):
         num_items = len(retval)
         if num_items > 0:
             self.size -= num_items
-            self.tx_changed.schedule_event(0, {'event': 'container changed', 'process': self.sim.pid})
+            self.sim.schedule_event(0, {'event': 'container changed', 'process': self.sim.pid}, self.tx_changed)
         return retval
     
     async def get(self, timeout: TimeType = float('inf'), *obj: EventType, all_or_nothing: bool = True, **policy_params: Any) -> Optional[List[EventType]]:
@@ -336,7 +336,7 @@ class Queue(DSWaitableComponent, SignalMixin):
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         if len(self) + len(obj) <= self.capacity:
             self.queue.enqueue(*obj)
-            self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
+            self.sim.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid}, self.tx_changed)
             retval = obj
         else:
             retval = None
@@ -348,7 +348,7 @@ class Queue(DSWaitableComponent, SignalMixin):
             retval = await self.sim.check_and_wait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)
         if retval is not None:
             self.queue.enqueue(*obj)
-            self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
+            self.sim.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid}, self.tx_changed)
         return retval
 
     def gput(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
@@ -357,13 +357,13 @@ class Queue(DSWaitableComponent, SignalMixin):
             retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)
         if retval is not None:
             self.queue.enqueue(*obj)
-            self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
+            self.sim.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid}, self.tx_changed)
         return retval
 
     def get_nowait(self, amount: int = 1, cond: CondType = lambda e: True) -> Optional[List[EventType]]:
         if len(self) >= amount and cond(self.queue[:amount]):
             retval = self.queue.dequeue(amount)
-            self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
+            self.sim.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid}, self.tx_changed)
         else:
             retval = None
         return retval
@@ -376,7 +376,7 @@ class Queue(DSWaitableComponent, SignalMixin):
             retval = None
         else:
             retval = self.queue.dequeue(amount)
-            self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
+            self.sim.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid}, self.tx_changed)
         return retval
     
     def gget(self, timeout: TimeType = float('inf'), amount: int = 1, cond: CondType = lambda e: True, **policy_params: Any) -> Generator[EventType, Optional[List[EventType]], Optional[List[EventType]]]:
@@ -387,14 +387,14 @@ class Queue(DSWaitableComponent, SignalMixin):
             retval = None
         else:
             retval = self.queue.dequeue(amount)
-            self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
+            self.sim.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid}, self.tx_changed)
         return retval
 
     def pop(self, index: int = 0, default: Optional[EventType] = None) -> Optional[EventType]:
         retval = None
         try:
             retval = self.queue.pop(index)
-            self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
+            self.sim.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid}, self.tx_changed)
         except IndexError as e:
             retval = default
         return retval
@@ -405,7 +405,7 @@ class Queue(DSWaitableComponent, SignalMixin):
         if length > 0:
             self.queue.remove(cond)
             if length != len(self.queue):
-                self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
+                self.sim.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid}, self.tx_changed)
     
     def __len__(self):
         return len(self.queue)
@@ -415,7 +415,7 @@ class Queue(DSWaitableComponent, SignalMixin):
 
     def __setitem__(self, index: int, data: EventType) -> None:
         self.queue[index] = data
-        self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
+        self.sim.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid}, self.tx_changed)
 
     def __iter__(self) -> Iterator[EventType]:
         return iter(self.queue)
