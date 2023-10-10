@@ -20,7 +20,7 @@ from typing import List, Set, Any, Dict, Union, Optional, Callable, Iterable, TY
 import inspect
 import copy
 from enum import Enum
-from dssim.base import CondType, EventType
+from dssim.base import CondType, EventType, ICondition
 from dssim.pubsub import ConsumerMetadata
 from dssim.future import DSFuture
 from dssim.process import DSProcess
@@ -35,7 +35,7 @@ FilterExpression = Callable[[Iterable[object]], bool]
 SignalType = Union["DSFilter", "DSCircuit"]
 SignalList = List[SignalType]
 
-class DSFilter(DSFuture):
+class DSFilter(DSFuture, ICondition):
     ''' A future which can be used in the circuit. It can be used as a signal to a
     circuit.
 
@@ -112,10 +112,10 @@ class DSFilter(DSFuture):
     def finished(self) -> bool:
         return self.signaled
     
-    def __call__(self, event: EventType) -> bool:
+    def check(self, event: EventType) -> bool:
         ''' Tries to evaluate the event. '''
         if self.signaled and not self.reevaluate:
-            return True
+            return True, self.value
         signaled, value = False, None
         if isinstance(self.cond, DSFuture):
             # now we should get this signaled only after return
@@ -142,7 +142,7 @@ class DSFilter(DSFuture):
             self.signaled = signaled
         if signaled:
             self._finish(value, async_future=False)
-        return signaled
+        return signaled, value
 
     def get_future_eps(self) -> Set["DSProducer"]:
         retval = {self._finish_tx,}
@@ -169,7 +169,7 @@ class DSFilter(DSFuture):
         return self.cond if isinstance(self.cond, DSProcess) else None        
 
 
-class DSCircuit(DSFuture):
+class DSCircuit(DSFuture, ICondition):
     ''' DSCircuit aggregates several DSFutures / DSCircuits into logical
     circuit (AND / OR).
 
@@ -254,7 +254,7 @@ class DSCircuit(DSFuture):
         retval = []
         for fut in futures:
             if isinstance(fut, DSFilter) or isinstance(fut, DSCircuit):
-                retval.append(fut(event))
+                retval.append(fut.check(event)[0])
             else:
                 retval.append(fut.finished())
         return retval
@@ -269,9 +269,10 @@ class DSCircuit(DSFuture):
             retval |= s.get_future_eps()
         return retval
 
-    def __call__(self, event: EventType) -> bool:
+    def check(self, event: EventType) -> bool:
         ''' Handles logic for the event. Pushes the event to the inputs and then evaluates the circuit. '''
         signaled = False
+        value = event
         # In the following, we have to send the event to the whole circuit. The reason is that
         # once some gate is signaled, it could be reset later; however if the signal stops event
         # to be spread to other gates; the other gates could be activated as well with the same
@@ -303,8 +304,9 @@ class DSCircuit(DSFuture):
                     signaled = self.expression(results)
             self.signaled = signaled
             if signaled:
-                self.finish(self.cond_value())
-        return signaled
+                value = self.cond_value()
+                self.finish(value)
+        return signaled, value
     
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
