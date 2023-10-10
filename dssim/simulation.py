@@ -349,7 +349,8 @@ class DSSimulation(DSComponentSingleton,
             conds.pop()
         return event
 
-    def cleanup(self, consumer: DSConsumer) -> None:
+    def cleanup(self, consumer: Optional[DSConsumer] = None) -> None:
+        consumer = consumer or self.pid 
         # The consumer has finished.
         # We make a cleanup of a waitable condition. There is still waitable condition kept
         # for the consumer. Since the process has finished, it will never need it, however

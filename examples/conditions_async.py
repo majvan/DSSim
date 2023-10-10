@@ -69,7 +69,7 @@ async def demo_filtering():
     t6 = sim.schedule_event(9, {'greeting': 'Neither I like you'})
     ret = await sim.wait(10, cond=-(f(t6) | f(t2)) & f(t0) & f(t1) & f(t3))
     assert sim.time == time + 8
-    sim.delete(cond=lambda e:True)
+    sim.cleanup()
 
     time = sim.time
     t1, t2 = sim.schedule_event(1, {'value': 'ham'}), sim.schedule_event(2, {'value': 'eggs'})
@@ -84,7 +84,7 @@ async def demo_filtering():
     assert tuple(ret.values()) == ({'value': 'ham'},)
     assert sim.time == time + 1
     print(ret)
-    sim.delete(cond=lambda e:True)
+    sim.cleanup()
 
     time = sim.time
     t1, t2, t3 = [sim.schedule_event(i, i + 1) for i in range(3)]
@@ -92,7 +92,7 @@ async def demo_filtering():
     assert tuple(ret.values()) == (1, 2)  # after t1 and t2 it should finish, so the last is t2
     assert sim.time == time + 1
     print(ret)  
-    sim.delete(cond=lambda e:True)
+    sim.cleanup()
 
     time = sim.time
     t1, t2, t3 = sim.schedule_event(3, {'value': 'ham'}), sim.schedule_event(1, {'value': 'ham'}), sim.schedule_event(2, {'value': 'eggs'})
@@ -100,7 +100,7 @@ async def demo_filtering():
     assert tuple(ret.values()) == ({'value': 'ham'}, {'value': 'ham'})  # the first event {'value': 'ham'} satisfies both f(t1) and f(t2) filters, hence it finishes after 1 second
     assert sim.time == time + 1
     print(ret)
-    sim.delete(cond=lambda e:True)
+    sim.cleanup()
 
     time = sim.time
     t1, t2 = sim.schedule_event(1, {'food': 'ham'}), sim.schedule_event(2, {'food': 'eggs'}),
@@ -110,7 +110,7 @@ async def demo_filtering():
     assert tuple(ret.values()) == ({'drink': 'tea'},)  # waiting for either food with tools or a drink - first we are satisfied with the drink
     assert sim.time == time + 3
     print(ret)
-    sim.delete(cond=lambda e:True)
+    sim.cleanup()  # delete(cond=lambda e:True)
 
     time = sim.time
     t0 = sim.schedule_event(10, {'apologize': 'sorry'})
@@ -122,7 +122,7 @@ async def demo_filtering():
     assert tuple(ret.values()) == ({'service': 'good'},)
     assert sim.time == time + 5
     print(ret)
-    sim.delete(cond=lambda e:True)
+    sim.cleanup()  # delete(cond=lambda e:True)
 
     # Test case: A generator "return_greetings_after_10" is going to send event after we return from wait. We should not be affected.
     time = sim.time
@@ -148,4 +148,4 @@ if __name__ == '__main__':
     f = sim.filter
     proc = sim.schedule(0, demo_filtering())
     retval = sim.run()
-    assert retval == (79, 69)
+    assert retval == (79, 82)
