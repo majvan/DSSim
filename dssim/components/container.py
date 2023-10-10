@@ -23,6 +23,43 @@ if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
+class SimpleQueueElements:
+    def __init__(self, sim: "DSSimulation") -> None:
+        self.sim = sim
+        self.queue = []
+
+    def enqueue(self, *items):
+        self.queue += items
+
+    def dequeue(self, num_items):
+        num_items = min(num_items, len(self.queue))
+        retval, self.queue = self.queue[:num_items], self.queue[num_items:]
+        return retval
+
+    def remove(self, cond: CondType) -> None:
+        ''' Removes event(s) from queue. '''
+        length = len(self.queue)
+        if length > 0:
+            new_queue = []
+            for e in self.queue:
+                if not (callable(cond) and cond(e) or (cond == e)):
+                    new_queue.append(e)
+            self.queue = new_queue
+
+    def pop(self, index: int) -> None:
+        retval = self.queue.pop(index)
+        return retval
+
+    def __len__(self):
+        return len(self.queue)
+
+    def __getitem__(self, index):
+        return self.queue[index]
+    
+    def __iter__(self):
+        return iter(self.queue)
+
+
 class Container(DSWaitableComponent, SignalMixin):
     ''' The container of objects / events is a SW component which collects objects
     of any type where the order of the objects is not preserved / maintained.
@@ -211,7 +248,7 @@ class Queue(DSWaitableComponent, SignalMixin):
     def __init__(self, capacity: NumericType = float('inf'), *args: Any, **policy_params: Any) -> None:
         super().__init__(*args, **policy_params)
         self.capacity = capacity
-        self.queue: List[EventType] = []
+        self.queue = SimpleQueueElements(sim=self.sim)
 
     def _set_loggers(self):
         super()._set_loggers()
@@ -240,7 +277,7 @@ class Queue(DSWaitableComponent, SignalMixin):
     def put_nowait(self, *obj: EventType) -> Optional[EventType]:
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         if len(self) + len(obj) <= self.capacity:
-            self.queue += list(obj)
+            self.queue.enqueue(*obj)
             self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
             retval = obj
         else:
@@ -252,7 +289,7 @@ class Queue(DSWaitableComponent, SignalMixin):
         with self.sim.consume(self.tx_changed, **policy_params):
             retval = await self.sim.check_and_wait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)
         if retval is not None:
-            self.queue += list(obj)
+            self.queue.enqueue(*obj)
             self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
         return retval
 
@@ -261,14 +298,13 @@ class Queue(DSWaitableComponent, SignalMixin):
         with self.sim.consume(self.tx_changed, **policy_params):
             retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e:len(self) + len(obj) <= self.capacity)
         if retval is not None:
-            self.queue += list(obj)
+            self.queue.enqueue(*obj)
             self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
         return retval
 
     def get_nowait(self, amount: int = 1, cond: CondType = lambda e: True) -> Optional[List[EventType]]:
         if len(self) >= amount and cond(self.queue[:amount]):
-            retval = self.queue[:amount]
-            self.queue = self.queue[amount + 1:]
+            retval = self.queue.dequeue(amount)
             self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
         else:
             retval = None
@@ -281,8 +317,7 @@ class Queue(DSWaitableComponent, SignalMixin):
         if element is None:
             retval = None
         else:
-            retval = self.queue[:amount]
-            self.queue = self.queue[amount:]
+            retval = self.queue.dequeue(amount)
             self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
         return retval
     
@@ -293,29 +328,24 @@ class Queue(DSWaitableComponent, SignalMixin):
         if element is None:
             retval = None
         else:
-            retval = self.queue[:amount]
-            self.queue = self.queue[amount:]
+            retval = self.queue.dequeue(amount)
             self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
         return retval
 
     def pop(self, index: int = 0, default: Optional[EventType] = None) -> Optional[EventType]:
         retval = None
-        if len(self.queue) > index:
-            try:
-                retval = self.queue.pop(index)
-                self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
-            except IndexError as e:
-                retval = default
+        try:
+            retval = self.queue.pop(index)
+            self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
+        except IndexError as e:
+            retval = default
         return retval
 
     def remove(self, cond: CondType) -> None:
-        ''' Removes event(s) from queue '''
-        # Get list of elements to be removed
+        ''' Removes event(s) from queue. '''
         length = len(self.queue)
         if length > 0:
-            # Remove all others except the first one
-            self.queue = [e for e in self.queue if not ((callable(cond) and cond(e) or (cond == e)))]
-            # now find what we may emit: "queue changed"
+            self.queue.remove(cond)
             if length != len(self.queue):
                 self.tx_changed.schedule_event(0, {'event': 'queue changed', 'process': self.sim.pid})
 
