@@ -23,7 +23,7 @@ from contextlib import contextmanager
 from functools import wraps
 import inspect
 from dssim.base import TimeType, EventType, EventRetType, CondType
-from dssim.base import DSTransferableCondition, SignalMixin
+from dssim.base import DSAbortException, DSTransferableCondition, SignalMixin
 from dssim.pubsub import ConsumerMetadata, TrackEvent
 from dssim.future import DSFuture
 
@@ -87,7 +87,24 @@ class DSProcess(DSFuture, SignalMixin):
     def schedule(self: DSProcessType, time: TimeType) -> DSProcessType:
         ''' This api is to schedule directly task.schedule(...) '''
         return self.sim.schedule(time, self)
-    
+
+    def abort(self, exc: Optional[Exception] = None) -> None:
+        ''' Aborts the process.
+
+        If the process has not yet started (still sitting in the time queue),
+        its scheduled start event is removed from the queue and the process is
+        marked as failed — no generator code ever runs.  If the process has
+        already started, the base-class behaviour applies (send DSAbortException
+        into the running generator).
+        '''
+        if not self.started():
+            if exc is None:
+                exc = DSAbortException(self)
+            self.sim.delete(cond=lambda e: e[0] is self)
+            self.fail(exc)
+        else:
+            super().abort(exc)
+
     def started(self) -> bool:
         if inspect.iscoroutine(self.generator):
             retval = inspect.getcoroutinestate(self.generator) != inspect.CORO_CREATED

@@ -948,3 +948,141 @@ class TestSim(unittest.TestCase):
         process.abort(DSAbortException(testing=-1)),  # abort after time; this will schedule abort event
         num_events = self.sim.run(3)
         self.assertEqual(len(self.sim.time_queue), 0)  # test if the timeout event was removed after abort
+
+
+class TestDSProcessAbort(unittest.TestCase):
+    '''Tests for DSProcess.abort() covering both conditional branches:
+       - process not yet started (sitting in the time queue)
+       - process already started (running / suspended inside a yield)
+    '''
+
+    def _waiting_gen(self, ran):
+        '''Generator that records execution and suspends inside a gwait.'''
+        ran.append('started')
+        yield from self.sim.gwait(100)
+
+    def _recording_gen(self, ran, tag='ran'):
+        '''Generator that records execution and finishes immediately.'''
+        ran.append(tag)
+        return
+        yield  # makes this a generator without executing the yield
+
+    # ------------------------------------------------------------------
+    # Branch A: not started — process still in the time queue
+    # ------------------------------------------------------------------
+
+    def test_unstarted_abort_removes_startup_event_from_time_queue(self):
+        '''Aborting an unstarted process removes the process startup entry.
+
+        DSFuture.fail() fires _finish_tx.signal() which may add a separate
+        notification event, but the process's own startup entry is gone.
+        '''
+        self.sim = DSSimulation()
+        ran = []
+        process = self.sim.schedule(5, self._waiting_gen(ran))
+        self.assertFalse(process.started())
+        entries_before = len(self.sim.time_queue)  # 1: the startup event
+
+        process.abort()
+
+        # The process startup entry (consumer == process) must be gone.
+        # (fail() may add a _finish_tx notification, but that has a different consumer.)
+        process_entries = sum(
+            1 for _, (consumer, _) in
+            [self.sim.time_queue.pop() for _ in range(len(self.sim.time_queue))]
+            if consumer is process
+        )
+        self.assertEqual(process_entries, 0)
+        self.assertFalse(ran)  # generator body never executed
+
+    def test_unstarted_abort_sets_default_exception(self):
+        '''abort() with no argument stores a DSAbortException on the process.'''
+        self.sim = DSSimulation()
+        process = self.sim.schedule(5, self._waiting_gen([]))
+
+        process.abort()
+
+        self.assertIsInstance(process.exc, DSAbortException)
+
+    def test_unstarted_abort_sets_custom_exception(self):
+        '''abort(exc) with a custom exception stores that exception.'''
+        class _MyExc(Exception):
+            pass
+
+        self.sim = DSSimulation()
+        process = self.sim.schedule(5, self._waiting_gen([]))
+
+        process.abort(_MyExc())
+
+        self.assertIsInstance(process.exc, _MyExc)
+
+    def test_unstarted_abort_generator_never_runs_after_sim_run(self):
+        '''After aborting an unstarted process, sim.run() does not execute it.'''
+        self.sim = DSSimulation()
+        ran = []
+
+        process = self.sim.schedule(1, self._recording_gen(ran))
+        process.abort()
+        self.sim.run(10)
+
+        self.assertFalse(ran)
+
+    def test_unstarted_abort_other_processes_unaffected(self):
+        '''Aborting one unstarted process leaves other scheduled processes intact.'''
+        self.sim = DSSimulation()
+        ran = []
+
+        proc_a = self.sim.schedule(1, self._recording_gen(ran, 'a'))
+        proc_b = self.sim.schedule(2, self._recording_gen(ran, 'b'))
+
+        proc_a.abort()
+        self.sim.run(10)
+
+        self.assertEqual(ran, ['b'])
+
+    # ------------------------------------------------------------------
+    # Branch B: already started — delegates to DSFuture.abort()
+    # ------------------------------------------------------------------
+
+    def test_started_abort_raises_default_exception_in_generator(self):
+        '''abort() on a running process injects DSAbortException into the generator.'''
+        self.sim = DSSimulation()
+        caught = []
+
+        def my_gen():
+            try:
+                yield from self.sim.gwait(100)
+            except DSAbortException as exc:
+                caught.append(exc)
+
+        process = self.sim.schedule(0, my_gen())
+        self.sim.run(1)  # kick and suspend inside gwait
+        self.assertTrue(process.started())
+
+        process.abort()
+
+        self.assertEqual(len(caught), 1)
+        self.assertIsInstance(caught[0], DSAbortException)
+
+    def test_started_abort_raises_custom_exception_in_generator(self):
+        '''abort(exc) on a running process injects the custom exception.'''
+        class _MyExc(Exception):
+            pass
+
+        self.sim = DSSimulation()
+        caught = []
+
+        def my_gen():
+            try:
+                yield from self.sim.gwait(100)
+            except _MyExc as exc:
+                caught.append(exc)
+
+        process = self.sim.schedule(0, my_gen())
+        self.sim.run(1)
+        self.assertTrue(process.started())
+
+        process.abort(_MyExc())
+
+        self.assertEqual(len(caught), 1)
+        self.assertIsInstance(caught[0], _MyExc)
