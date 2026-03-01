@@ -48,7 +48,7 @@ class Resource(DSStatefulComponent):
             retval: NumericType = 0
         else:
             self.amount += amount
-            self.tx_changed.schedule_event(0, {'event': 'resource changed', 'process': self.sim.pid})
+            self.tx_changed.schedule_event(0, self.tx_changed)
             retval = amount
         return retval
 
@@ -60,7 +60,7 @@ class Resource(DSStatefulComponent):
             retval: NumericType = 0
         else:
             self.amount += amount
-            self.tx_changed.schedule_event(0, {'event': 'resource changed', 'process': self.sim.pid})
+            self.tx_changed.schedule_event(0, self.tx_changed)
             retval = amount
         return retval
 
@@ -72,7 +72,7 @@ class Resource(DSStatefulComponent):
             retval: NumericType = 0
         else:
             self.amount += amount
-            self.tx_changed.schedule_event(0, {'event': 'resource changed', 'process': self.sim.pid})
+            self.tx_changed.schedule_event(0, self.tx_changed)
             retval = amount
         return retval
 
@@ -81,7 +81,7 @@ class Resource(DSStatefulComponent):
             retval: NumericType = 0
         else:
             self.amount -= amount
-            self.tx_changed.schedule_event(0, {'event': 'resource changed', 'process': self.sim.pid})
+            self.tx_changed.schedule_event(0, self.tx_changed)
             retval = amount
         return retval
 
@@ -93,7 +93,7 @@ class Resource(DSStatefulComponent):
             retval: NumericType = 0
         else:
             self.amount -= amount
-            self.tx_changed.schedule_event(0, {'event': 'resource changed', 'process': self.sim.pid})
+            self.tx_changed.schedule_event(0, self.tx_changed)
             retval = amount
         return retval
 
@@ -105,7 +105,7 @@ class Resource(DSStatefulComponent):
             retval: NumericType = 0
         else:
             self.amount -= amount
-            self.tx_changed.schedule_event(0, {'event': 'resource changed', 'process': self.sim.pid})
+            self.tx_changed.schedule_event(0, self.tx_changed)
             retval = amount
         return retval
 

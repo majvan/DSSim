@@ -39,7 +39,7 @@ class Person(DSComponent):
             self.queue.remove({'person': self})  # remove myself from the queue and return the waiting process
             try:
                 first_person = None
-                first_person = q.queue[0]['person']
+                first_person = q[0]['person']
             except Exception as e:
                 pass
             print(f'{self.sim.time:<5} {self}: Giving up waiting in queue. First one is {first_person}')
@@ -66,7 +66,7 @@ class VisaCheck(DSComponent):
         while True:
             try:
                 first_person = None
-                first_person = q.queue[0]['person']
+                first_person = q[0]['person']
             except Exception as e:
                 pass
             print(f'{self.sim.time:<5} {self}: Waiting for a person; first one is {first_person}')
@@ -80,7 +80,7 @@ class VisaCheck(DSComponent):
 
             try:
                 first_person = None
-                first_person = q.queue[0]['person']
+                first_person = q[0]['person']
             except Exception as e:
                 pass
 

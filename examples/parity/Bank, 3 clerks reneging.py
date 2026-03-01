@@ -61,4 +61,4 @@ print("number balked", stat['balked'])
 assert stat['reneged'] == 6665, f"Unexpected number of reneged."
 assert stat['balked'] == 23330, f"Unexpected number of balked."
 assert time == 299995, f"Time {time} is out of expected range."
-assert events == 289995, f"Number of events {events} is out of expected range."
+assert events == 289994, f"Number of events {events} is out of expected range."
