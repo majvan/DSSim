@@ -112,7 +112,7 @@ class Resource(DSStatefulComponent):
 
 class Mutex(Resource):
     def __init__(self, *args, **kwargs):
-        super().__init__(1, 1, args, **kwargs)
+        super().__init__(1, 1, *args, **kwargs)
         self.last_owner = None
         self.context_manager_timeout = None
 
