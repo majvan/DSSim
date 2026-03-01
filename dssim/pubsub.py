@@ -275,16 +275,19 @@ class DSProducer(DSConsumer, SignalMixin):
             'post+': notifier(),
             'post-': notifier(),
         }
+        self._subscriber_count = 0  # total ref-count across all tiers; kept in sync by add/remove_subscriber
         # A producer takes any event - no conditional
         self.meta.cond.push(lambda e: True)
 
     def add_subscriber(self, subscriber: DSConsumer, phase: str = 'act', **kwargs: Any) -> None:
         subs = self.subs[phase]
         subs.inc(subscriber, **kwargs)
+        self._subscriber_count += 1
 
     def remove_subscriber(self, subscriber: DSConsumer, phase: str = 'act', **kwargs: Any) -> None:
         subs = self.subs[phase]
         subs.dec(subscriber, **kwargs)
+        self._subscriber_count -= 1
 
     @TrackEvent
     def send(self, event: EventType) -> None:
@@ -319,12 +322,18 @@ class DSProducer(DSConsumer, SignalMixin):
         for queue in self.subs.values():
             queue.cleanup()
 
+    def has_subscribers(self) -> bool:
+        '''Returns True if any subscriber is attached in any tier (pre, act, post+, post-).
+        O(1) — backed by a cached ref-count maintained by add_subscriber / remove_subscriber.
+        '''
+        return self._subscriber_count > 0
+
     def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
         with self.sim.consume(self):
             retval = yield from self.sim.gwait(timeout, cond, val)
         return retval
 
-    async def wait(self, timeout: TimeType = float('inf'), cond: CondType =lambda e: False, val: EventRetType = True) -> EventType:
+    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> EventType:
         with self.sim.consume(self):
             retval = await self.sim.wait(timeout, cond, val)
         return retval
