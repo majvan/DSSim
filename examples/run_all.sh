@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]:-$0}"; )" &> /dev/null && pwd 2> /dev/null; )";
-PYTHONPATH="$SCRIPT_DIR/.."
+export PYTHONPATH="$SCRIPT_DIR/.."
 
 echo "Process schedule"
 python $SCRIPT_DIR/process_schedule.py
