@@ -16,19 +16,17 @@ from random import randint
 
 class Customer(DSProcessComponent):
     def process(self):
-        ret = self.enter_nowait(waitingline)
+        ret = self.enter_nowait(waiting_line)
         if ret is None:
             print(f'{sim.time} {self} balked')
             stat['balked'] += 1
-            #self.sim.print_trace("", "", "balked")
             return
         print(f'{sim.time} {self} waiting in line')
         ret = yield from self.gwait(50)  # wait maximum 50 for signal from clerk
         if ret is None:
             print(f'{sim.time} {self} reneged')
-            self.leave(waitingline)
+            self.leave(waiting_line)
             stat['reneged'] += 1
-            #self.sim.print_trace("", "", "reneged")
         else:
             print(f'{sim.time} {self} being serviced')
             yield from self.gwait()  # wait for service to be completed
@@ -36,22 +34,23 @@ class Customer(DSProcessComponent):
 
 class Clerk(DSProcessComponent):
     async def process(self):
+        self.processed_customers = []
         while True:
-            customer = await self.pop(waitingline)  # take somebody from waiting line
+            customer = await self.pop(waiting_line)  # take somebody from waiting line
             customer.signal(self)  # notify customer that we are going to process him
             print(f'{sim.time} {self} starting processing {customer}')
             await self.wait(30)  # process with customer 30
+            self.processed_customers.append(customer)
             print(f'{sim.time} {self} finished processing {customer}')
             customer.signal('stop')
 
 if __name__ == '__main__':
     sim = DSSimulation()
-    waitingline = Queue(capacity=5, name='waitingline')
+    waiting_line = Queue(capacity=5, name='waiting_line')
     PCGenerator(Customer, lambda last: 7, name='CustomerGenerator')
     stat = {'balked': 0, 'reneged': 0}
     clerks = [Clerk() for i in range(3)]
-    sim.run(up_to=1500)  # first do a prerun of 1500 time units without collecting data
-    #waitingline.length_of_stay.print_histogram(30, 0, 10)
+    sim.run(up_to=1500)
     print("number reneged", stat['reneged'])
     print("number balked", stat['balked'])
     assert stat == {'balked': 48, 'reneged': 13}
