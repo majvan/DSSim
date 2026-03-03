@@ -47,9 +47,14 @@ class ICondition:
     @abstractmethod
     def check(self, event: EventType) -> Tuple[bool, Any]:
         raise NotImplementedError("The ICondition is an interface. Use derived class.")
-    
-    def __call__(self, event: EventType) -> Tuple[bool, Any]:
-        return self.check(event)
+
+
+class CallableConditionMixin:
+    ''' Mixin that makes an ICondition subclass usable as a plain callable returning bool. '''
+    def __call__(self, event: EventType) -> bool:
+        # check() returns (signaled, value), we extract only the signaled info
+        return self.check(event)[0]
+
 
 CondType = Union[Callable, Any,]
 
@@ -80,29 +85,30 @@ class StackedCond(ICondition):
         ''' Checks the stack.
         The event is passed to all the conditions on the stack till it finds the first one
         which passes.
-        
+
         :returns: a result of pass check- a tuple (event_passed, value_of_event)
         '''
+        # Exceptions bypass all conditions — check once before the loop.
+        # retval never changes inside the loop (only mutated after break),
+        # so this is equivalent to the per-iteration check that was here before.
+        if isinstance(event, Exception):
+            self.value = event
+            return True, event
         signaled, retval = False, event
         for cond in self.conds:
-            # Check the event first
-            # Instead of the following generic rule, it is better to add it as a stacked condition
-            # for "None" value, it will be caught later by cond == event rule.
-            # if event is None:  # timeout received
-            #     return True, None
-            if isinstance(retval, Exception):  # any exception raised
-                signaled, event = True, retval
-            # Check the type of condition
-            elif cond == retval:  # we are expecting exact event and it came
-                signaled, event = True, retval
-            elif isinstance(cond, ICondition):
+            # ICondition first: its __call__ returns a tuple (always truthy), so it must
+            # not fall through to the callable branch below.
+            is_icond = isinstance(cond, ICondition)
+            if is_icond:
                 signaled, event = cond.check(retval)
-            elif callable(cond) and cond(retval):  # there was a filter function set and the condition is met
+            elif callable(cond) and cond(retval):  # plain lambda / function
                 signaled, event = True, retval
-            else:  # the event does not match our condition and hence will be ignored
-                signaled, event = False, None
+            elif cond == retval:  # exact event match (e.g. None timeout sentinel)
+                signaled, event = True, retval
+            # else the event does not match our condition and hence will be ignored
+            #     signaled, event = False, None  # not needed
             if signaled:
-                if hasattr(cond, 'cond_value'):
+                if is_icond:  # reuse precomputed result — cond hasn't changed
                     retval = cond.cond_value()
                 else:
                     retval = event
@@ -145,7 +151,11 @@ class DSTransferableCondition(ICondition):
         signaled, retval = self.cond.check(value)
         if signaled:
             retval = self.transfer(retval)
+            self.value = retval
         return signaled, retval
+
+    def cond_value(self) -> Any:
+        return self.value
 
 
 if TYPE_CHECKING:

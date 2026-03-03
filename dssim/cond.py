@@ -16,11 +16,11 @@
 This file implements advanced logic - with overloading operators
 to be able create advanced expressions for conditions.
 '''
-from typing import List, Set, Any, Dict, Union, Optional, Callable, Iterable, TYPE_CHECKING
+from typing import List, Set, Any, Dict, Tuple, Union, Optional, Callable, Iterable, TYPE_CHECKING
 import inspect
 import copy
 from enum import Enum
-from dssim.base import CondType, EventType
+from dssim.base import CondType, EventType, ICondition, CallableConditionMixin
 from dssim.pubsub import ConsumerMetadata
 from dssim.future import DSFuture
 from dssim.process import DSProcess
@@ -35,7 +35,7 @@ FilterExpression = Callable[[Iterable[object]], bool]
 SignalType = Union["DSFilter", "DSCircuit"]
 SignalList = List[SignalType]
 
-class DSFilter(DSFuture):
+class DSFilter(DSFuture, ICondition, CallableConditionMixin):
     ''' A future which can be used in the circuit. It can be used as a signal to a
     circuit.
 
@@ -112,10 +112,9 @@ class DSFilter(DSFuture):
     def finished(self) -> bool:
         return self.signaled
     
-    def __call__(self, event: EventType) -> bool:
-        ''' Tries to evaluate the event. '''
+    def check(self, event: EventType) -> Tuple[bool, EventType]:
         if self.signaled and not self.reevaluate:
-            return True
+            return True, self.cond_value()
         signaled, value = False, None
         if isinstance(self.cond, DSFuture):
             # now we should get this signaled only after return
@@ -142,7 +141,8 @@ class DSFilter(DSFuture):
             self.signaled = signaled
         if signaled:
             self._finish(value, async_future=False)
-        return signaled
+            return True, self.cond_value()
+        return False, None
 
     def get_future_eps(self) -> Set["DSProducer"]:
         retval = {self._finish_tx,}
@@ -165,11 +165,12 @@ class DSFilter(DSFuture):
     def cond_value(self) -> EventType:
         return self.value
 
+
     def get_process(self) -> Optional[DSProcess]:
-        return self.cond if isinstance(self.cond, DSProcess) else None        
+        return self.cond if isinstance(self.cond, DSProcess) else None
 
 
-class DSCircuit(DSFuture):
+class DSCircuit(DSFuture, ICondition, CallableConditionMixin):
     ''' DSCircuit aggregates several DSFutures / DSCircuits into logical
     circuit (AND / OR).
 
@@ -249,12 +250,12 @@ class DSCircuit(DSFuture):
 
     def finished(self) -> bool:
         return self.signaled
-    
+
     def _gather_results(self, event: EventType, futures: SignalList) -> List[bool]:
         retval = []
         for fut in futures:
-            if isinstance(fut, DSFilter) or isinstance(fut, DSCircuit):
-                retval.append(fut(event))
+            if isinstance(fut, ICondition):
+                retval.append(fut.check(event)[0])
             else:
                 retval.append(fut.finished())
         return retval
@@ -269,7 +270,7 @@ class DSCircuit(DSFuture):
             retval |= s.get_future_eps()
         return retval
 
-    def __call__(self, event: EventType) -> bool:
+    def check(self, event: EventType) -> Tuple[bool, EventType]:
         ''' Handles logic for the event. Pushes the event to the inputs and then evaluates the circuit. '''
         signaled = False
         # In the following, we have to send the event to the whole circuit. The reason is that
@@ -304,7 +305,9 @@ class DSCircuit(DSFuture):
             self.signaled = signaled
             if signaled:
                 self.finish(self.cond_value())
-        return signaled
+        if signaled:
+            return True, self.cond_value()
+        return False, None
     
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
