@@ -22,7 +22,7 @@ from types import TracebackType
 from contextlib import contextmanager
 from functools import wraps
 import inspect
-from dssim.base import TimeType, EventType, EventRetType, CondType
+from dssim.base import TimeType, EventType, EventRetType, CondType, AlwaysFalse
 from dssim.base import DSAbortException, DSTransferableCondition, SignalMixin
 from dssim.pubsub import ConsumerMetadata, TrackEvent
 from dssim.future import DSFuture
@@ -181,7 +181,7 @@ class SimProcessMixin:
             cm.cleanup()
 
     @contextmanager
-    def interruptible(self: Any, cond: CondType = lambda e: False) -> Iterator:
+    def interruptible(self: Any, cond: CondType = AlwaysFalse) -> Iterator:
         cm = DSInterruptibleContext(cond, sim=self)
         with self.extend_cond(cm.cond):
             try:

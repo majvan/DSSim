@@ -21,7 +21,7 @@ Consumer: an object which takes signal from producer and then stops
 '''
 from abc import abstractmethod
 from typing import List, Dict, Any, Type, Generator, Callable, Tuple, Iterator, TYPE_CHECKING
-from dssim.base import TimeType, CondType, StackedCond, DSComponent, DSEvent, EventType, EventRetType, SignalMixin, AlwaysTrue
+from dssim.base import TimeType, CondType, StackedCond, DSComponent, DSEvent, EventType, EventRetType, SignalMixin, AlwaysTrue, AlwaysFalse
 
 
 if TYPE_CHECKING:
@@ -328,12 +328,12 @@ class DSProducer(DSConsumer, SignalMixin):
         '''
         return self._subscriber_count > 0
 
-    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
+    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         with self.sim.consume(self, **policy_params):
             retval = yield from self.sim.gwait(timeout, cond, val)
         return retval
 
-    async def wait(self, timeout: TimeType = float('inf'), cond: CondType =lambda e: False, val: EventRetType = True, **policy_params: Any) -> EventType:
+    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True, **policy_params: Any) -> EventType:
         with self.sim.consume(self, **policy_params):
             retval = await self.sim.wait(timeout, cond, val)
         return retval

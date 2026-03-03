@@ -19,7 +19,7 @@ import sys
 import inspect
 from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Optional, overload, TYPE_CHECKING
 from dssim.timequeue import TimeQueue
-from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, CondType, StackedCond, DSComponentSingleton
+from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, CondType, StackedCond, DSComponentSingleton, AlwaysFalse
 from dssim.pubsub import DSConsumer, DSCallback, void_consumer, SimPubsubMixin
 from dssim.future import DSFuture, SimFutureMixin
 from dssim.process import DSProcessType, DSProcess, SimProcessMixin
@@ -229,7 +229,7 @@ class DSSimulation(DSComponentSingleton,
                 self.time_queue.delete_val((self._parent_process, None))
         return event
 
-    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
         ''' Wait for an event from producer for max. timeout time. The criteria which events to be
         accepted is given by cond. An accepted event returns from the wait function. An event which
         causes cond to be False is ignored and the function is waiting.
@@ -244,7 +244,6 @@ class DSSimulation(DSComponentSingleton,
         # just ended and disappeared in scheduler. But we need that the scheduler is said to plan
         # another timeout for this process.
         conds = self._parent_process.meta.cond
-        # Set the condition object (lambda / object / ...) in the process metadata
         conds.push(cond)
         try:
             event = yield from self._gwait_for_event(timeout, val)
@@ -254,7 +253,7 @@ class DSSimulation(DSComponentSingleton,
             event = cond.cond_value()
         return event
 
-    def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+    def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
         # This function can be used to run a pre-check for such conditions, which are
         # invariant to the passed event, for instance to check for a state of an object
         # so if the state matches, it returns immediately
@@ -298,7 +297,7 @@ class DSSimulation(DSComponentSingleton,
                 self.time_queue.delete_val((self._parent_process, None))
         return event
 
-    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> EventType:
+    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> EventType:
         ''' Wait for an event from producer for max. timeout time. The criteria which events to be
         accepted is given by cond. An accepted event returns from the wait function. An event which
         causes cond to be False is ignored and the function is waiting.
@@ -313,7 +312,6 @@ class DSSimulation(DSComponentSingleton,
         # just ended and disappeared in scheduler. But we need that the scheduler is said to plan
         # another timeout for this process.
         conds = self._parent_process.meta.cond
-        # Set the condition object (lambda / object / ...) in the process metadata
         conds.push(cond)
         try:
             event = await self._wait_for_event(timeout, val)
@@ -323,7 +321,7 @@ class DSSimulation(DSComponentSingleton,
             event = cond.cond_value()
         return event
 
-    async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: False, val: EventRetType = True) -> EventType:
+    async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> EventType:
         # This function can be used to run a pre-check for such conditions, which are
         # invariant to the passed event, for instance to check for a state of an object
         # so if the state matches, it returns immediately

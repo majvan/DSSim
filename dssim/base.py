@@ -56,6 +56,9 @@ CondType = Union[Callable, Any,]
 def AlwaysTrue(e: EventType) -> bool:
     return True
 
+def AlwaysFalse(e: EventType) -> bool:
+    return False
+
 
 class StackedCond(ICondition):
     ''' A condition which can stack several simple conditions '''
