@@ -239,10 +239,10 @@ class TestException(unittest.TestCase):
     def test2_exception_usercode_process(self):
         sim = DSSimulation()
         process1 = DSProcess(self.__first_cyclic(sim), name="First cyclic", sim=sim).schedule(0)
-        process1.send(None)
+        sim.send_object(process1, None)  # initialize via send_object so _started is set correctly
         process1.meta.cond.push(lambda e:True)  # accept any event
         process2 = DSProcess(self.__second_cyclic(sim), name="Second cyclic", sim=sim).schedule(0)
-        process2.send(None)
+        sim.send_object(process2, None)  # initialize via send_object so _started is set correctly
         process2.meta.cond.push(lambda e:True)  # accept any event
         sim.try_send(process1, process2)  # Inform processes about the other process
         sim.try_send(process2, process1)

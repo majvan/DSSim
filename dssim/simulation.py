@@ -140,6 +140,21 @@ class DSSimulation(DSComponentSingleton,
     def send_object(self, consumer: DSConsumer, event: EventType) -> EventType:
         ''' Send an event object to a consumer. Return value from the consumer. '''
 
+        # Unstarted DSProcess: fire its _Starter first (→ generator.send(None)) and
+        # discard the current event.  This preserves the "first event → init with None"
+        # semantics that DSFilter's forward_events and direct send_object callers rely on.
+        if isinstance(consumer, DSProcess) and not consumer._started:
+            if consumer._starter is not None:
+                # Fire the starter to initialize the generator (generator.send(None)).
+                # The starter entry stays in the time queue; it will be processed as a
+                # harmless no-op once the simulation reaches time 0 (idempotent guard).
+                return consumer._starter.send(None)
+            else:
+                # process() created without schedule(): init directly with None
+                consumer._started = True
+                consumer.meta.cond.push(None)
+                return self.send_object(consumer, None)
+
         retval: EventType = False
 
         # We want to kick from this process to another process (see below). However, after

@@ -22,7 +22,7 @@ from types import TracebackType
 from contextlib import contextmanager
 from functools import wraps
 import inspect
-from dssim.base import TimeType, EventType, EventRetType, CondType, AlwaysFalse
+from dssim.base import TimeType, EventType, EventRetType, CondType, AlwaysFalse, AlwaysTrue
 from dssim.base import DSAbortException, DSTransferableCondition, SignalMixin
 from dssim.pubsub import ConsumerMetadata, TrackEvent, DSProducer
 from dssim.future import DSFuture
@@ -41,12 +41,36 @@ class DSProcess(DSFuture, SignalMixin):
     '''
     class _ScheduleEvent: pass
 
+    class _Starter:
+        ''' One-shot bootstrap consumer for DSProcess.
+        Scheduled in place of the process itself so DSProcess.send() can be
+        branch-free: no "first call?" check on every event delivered to the process.
+        '''
+        def __init__(self, process: 'DSProcess', schedule_event: Any) -> None:
+            self._process = process
+            self.schedule_event = schedule_event
+            self.meta = ConsumerMetadata()
+            self.meta.cond.push(AlwaysTrue)
+
+        def get_cond(self) -> 'StackedCond':
+            return self.meta.cond
+
+        def send(self, event: EventType) -> EventRetType:
+            p = self._process
+            if p._started:
+                return None  # already initialized (fired via send_object check) — no-op
+            p._started = True
+            p.get_cond().pop()      # remove _ScheduleEvent guard added by schedule()
+            p.meta.cond.push(None)  # add timeout sentinel (None == timeout)
+            return p.sim.send_object(p, None)  # deliver first generator.send(None)
+
     def __init__(self, generator: Union[Generator, Coroutine], *args: Any, **kwargs: Any) -> None:
         ''' Initializes DSProcess. The input has to be a generator function. '''
         self.generator = generator
         self._scheduled = False
         self._started = False
         self._finished = False
+        self._starter = None
         # One-time validation that the generator / coroutine has not been started yet.
         # Uses inspect here intentionally — this path is cold (called once at construction).
         if inspect.iscoroutine(generator):
@@ -76,39 +100,34 @@ class DSProcess(DSFuture, SignalMixin):
     @TrackEvent
     def send(self, event: EventType) -> EventRetType:
         ''' Pushes an event to the task and gets new state. '''
-        if self._started:
-            self.value = self.generator.send(event)
-        else:
-            self._started = True
-            self.get_cond().pop()  # for the first kick, we added temporarily "_ScheduleEvent" condition (see _schedule)
-            # By default, a future accepts timeout events (None) and events to self
-            self.meta.cond.push(None)
-            self.value = self.generator.send(None)
+        self.value = self.generator.send(event)
         return self.value
 
     def schedule(self: DSProcessType, time: Optional[TimeType] = 0) -> DSProcess:
         ''' This api is to schedule the process '''
         if not self._scheduled:
-            # Prepare an event which will be sent to the created process upon scheduled time
-            schedule_event = self._ScheduleEvent()
             self._scheduled = True
+            schedule_event = self._ScheduleEvent()
+            # _Starter handles the first-kick initialization so send() stays branch-free
+            self._starter = self._Starter(self, schedule_event)
+            # Guard: keep _ScheduleEvent on the cond stack to reject spurious events
+            # delivered to the process before it actually starts
             self.get_cond().push(schedule_event)
-            self.sim.schedule_event(time, schedule_event, self)
+            self.sim.schedule_event(time, schedule_event, self._starter)
         return self
 
     def abort(self, exc: Optional[Exception] = None) -> None:
         ''' Aborts the process.
 
         If the process has not yet started (still sitting in the time queue),
-        its scheduled start event is removed from the queue and the process is
-        marked as failed — no generator code ever runs.  If the process has
-        already started, the base-class behaviour applies (send DSAbortException
-        into the running generator).
+        fail() removes the starter entry from the queue and marks the process
+        as failed — no generator code ever runs.  If the process has already
+        started, the base-class behaviour applies (send DSAbortException into
+        the running generator).
         '''
         if not self.started():
             if exc is None:
                 exc = DSAbortException(self)
-            self.sim.time_queue.delete_val((self.sim._parent_process, None))
             self.fail(exc)
         else:
             super().abort(exc)
@@ -125,6 +144,9 @@ class DSProcess(DSFuture, SignalMixin):
     def finish(self, value: EventType) -> EventType:
         self._finished = True
         self.value = value
+        if self._starter is not None:
+            self.sim.time_queue.delete_cond(lambda e: e[0] is self._starter)
+            self._starter = None
         self.sim.cleanup(self)
         # The last event is the process itself. This enables to wait for a process as an asyncio's Future
         self._finish_tx.signal(self)
@@ -133,6 +155,9 @@ class DSProcess(DSFuture, SignalMixin):
     def fail(self, exc: Exception) -> Exception:
         self._finished = True
         self.exc = exc
+        if self._starter is not None:
+            self.sim.time_queue.delete_cond(lambda e: e[0] is self._starter)
+            self._starter = None
         self.sim.cleanup(self)
         self._finish_tx.signal(self)
         return self.exc

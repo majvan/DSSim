@@ -367,7 +367,9 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(len(sim.time_queue) == 1)
         scheduled = sim.time_queue.pop()
         self.assertTrue(scheduled[0] == 0)
-        self.assertTrue(scheduled[1][0] == p)
+        # With _Starter, the time queue consumer is the _Starter, not the process itself
+        self.assertIsInstance(scheduled[1][0], DSProcess._Starter)
+        self.assertIs(scheduled[1][0]._process, p)
         self.assertTrue(isinstance(scheduled[1][1], DSProcess._ScheduleEvent))
         self.assertTrue(len(sim.time_queue) == 0)
 
