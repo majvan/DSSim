@@ -19,7 +19,7 @@ application.
 from abc import abstractmethod
 from typing import Any, Optional, Generator, Type, Callable
 import inspect
-from dssim.base import CondType, EventType, TimeType, DSAbortException, DSComponent
+from dssim.base import CondType, EventType, TimeType, DSAbortException, DSComponent, AlwaysTrue
 from dssim.process import DSProcess
 from dssim.process import DSSchedulable
 from dssim.components.container import ContainerMixin
@@ -55,14 +55,14 @@ class DSProcessComponent(DSComponent, ContainerMixin, ResourceMixin):
     def signal(self, event: EventType) -> None:
         self._scheduled_process.signal(event)
 
-    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: True) -> EventType:
+    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue) -> EventType:
         try:
             retval = await self.sim.wait(timeout, cond=cond)
         except DSAbortException as exc:
             self._scheduled_process.abort()
         return retval
 
-    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e: True) -> Generator[EventType, EventType, EventType]:
+    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue) -> Generator[EventType, EventType, EventType]:
         try:
             retval = yield from self.sim.gwait(timeout, cond=cond)
         except DSAbortException as exc:

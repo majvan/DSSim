@@ -16,7 +16,7 @@
 Simple controllable bottleneck components
 '''
 from typing import Any, List
-from dssim.base import EventType, DSComponent
+from dssim.base import EventType, DSComponent, AlwaysTrue
 from dssim.pubsub import DSCallback, DSProducer
 from dssim.process import DSProcess
 
@@ -106,7 +106,7 @@ class Limiter(DSComponent):
         while True:
             # State 1: waiting for first event
             while len(self.buffer) <= 0:
-                await self.sim.wait(cond=lambda e: True)
+                await self.sim.wait(cond=AlwaysTrue)
                 self.report_period = self._update_period
             # State 2: waiting while having something in the buffer
             next_time = self.sim.time
@@ -117,6 +117,6 @@ class Limiter(DSComponent):
                     previous_time = self.sim.time
                     next_time = previous_time + self.report_period
                 wait_next = next_time - self.sim.time
-                await self.sim.wait(wait_next, cond=lambda e: True)
+                await self.sim.wait(wait_next, cond=AlwaysTrue)
                 self.report_period = self._update_period
                 next_time = previous_time + self.report_period

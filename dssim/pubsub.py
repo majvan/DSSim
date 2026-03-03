@@ -21,7 +21,7 @@ Consumer: an object which takes signal from producer and then stops
 '''
 from abc import abstractmethod
 from typing import List, Dict, Any, Type, Generator, Callable, Tuple, Iterator, TYPE_CHECKING
-from dssim.base import TimeType, CondType, StackedCond, DSComponent, DSEvent, EventType, EventRetType, SignalMixin
+from dssim.base import TimeType, CondType, StackedCond, DSComponent, DSEvent, EventType, EventRetType, SignalMixin, AlwaysTrue
 
 
 if TYPE_CHECKING:
@@ -87,7 +87,7 @@ class DSCallback(DSConsumer):
     ''' A callback interface.
     The callback interface is called from the simulator when a process sends events.
     '''
-    def __init__(self, forward_method: Callable[..., EventType], cond: CondType = lambda e: True, **kwargs):
+    def __init__(self, forward_method: Callable[..., EventType], cond: CondType = AlwaysTrue, **kwargs):
         super().__init__(cond=cond, **kwargs)
         self.forward_method = forward_method
 
@@ -277,7 +277,7 @@ class DSProducer(DSConsumer, SignalMixin):
         }
         self._subscriber_count = 0  # total ref-count across all tiers; kept in sync by add/remove_subscriber
         # A producer takes any event - no conditional
-        self.meta.cond.push(lambda e: True)
+        self.meta.cond.push(AlwaysTrue)
 
     def add_subscriber(self, subscriber: DSConsumer, phase: str = 'act', **kwargs: Any) -> None:
         subs = self.subs[phase]
