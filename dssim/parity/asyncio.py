@@ -17,6 +17,7 @@ The light asyncio api implementation for dssim.
 import inspect
 from dssim import DSSimulation, DSAbsTime, DSAbortException
 from dssim import DSSchedulable, DSFuture, DSProcess, DSCallback
+from dssim.pubsub import DSProducer
 # other imports
 from dssim.process import DSTimeoutContext
 from dssim.cond import DSCircuit, DSFilter
@@ -98,9 +99,9 @@ class FutureAsyncMixin:
 
     def add_done_callback(self, callback, * , context=None):
         if isinstance(callback, DSCallback):
-            self._finish_tx.add_subscriber(callback, phase='pre')
+            self._finish_tx.add_subscriber(callback, phase=DSProducer.Phase.PRE)
         elif callable(callback):
-            self._finish_tx.add_subscriber(DSCallback(callback, sim=self.sim), phase='pre')
+            self._finish_tx.add_subscriber(DSCallback(callback, sim=self.sim), phase=DSProducer.Phase.PRE)
         else:
             raise ValueError(f'Callback {callback} shall be a DSCallback or a callable')
 

@@ -20,6 +20,7 @@ Consumer: an object which takes signal from producer and then stops
   further spread.
 '''
 from abc import abstractmethod
+from enum import IntEnum
 from typing import List, Dict, Any, Type, Generator, Callable, Tuple, Iterator, TYPE_CHECKING
 from dssim.base import TimeType, CondType, StackedCond, DSComponent, DSEvent, EventType, EventRetType, SignalMixin, AlwaysTrue, AlwaysFalse
 
@@ -267,63 +268,64 @@ class NotifierPriority(NotifierPolicy):
 
 class DSProducer(DSConsumer, SignalMixin):
     ''' Full feature producer which consumes signal events and resends it to the attached consumers. '''
+
+    class Phase(IntEnum):
+        PRE = 0
+        CONSUME = 1
+        POST_HIT = 2   # event was consumed
+        POST_MISS = 3  # event was not consumed
+
     def __init__(self, notifier: Type[NotifierPolicy] = NotifierDict, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.subs = {
-            'pre': notifier(),
-            'act': notifier(),
-            'post+': notifier(),
-            'post-': notifier(),
-        }
+        self.subs = (notifier(), notifier(), notifier(), notifier())
         self._subscriber_count = 0  # total ref-count across all tiers; kept in sync by add/remove_subscriber
         # A producer takes any event - no conditional
         self.meta.cond.push(AlwaysTrue)
 
-    def add_subscriber(self, subscriber: DSConsumer, phase: str = 'act', **kwargs: Any) -> None:
-        subs = self.subs[phase]
-        subs.inc(subscriber, **kwargs)
+    def add_subscriber(self, subscriber: DSConsumer, phase: Phase = Phase.CONSUME, **kwargs: Any) -> None:
+        self.subs[phase].inc(subscriber, **kwargs)
         self._subscriber_count += 1
 
-    def remove_subscriber(self, subscriber: DSConsumer, phase: str = 'act', **kwargs: Any) -> None:
-        subs = self.subs[phase]
-        subs.dec(subscriber, **kwargs)
+    def remove_subscriber(self, subscriber: DSConsumer, phase: Phase = Phase.CONSUME, **kwargs: Any) -> None:
+        self.subs[phase].dec(subscriber, **kwargs)
         self._subscriber_count -= 1
 
     @TrackEvent
     def send(self, event: EventType) -> None:
         ''' Send signal object to the subscribers '''
+        pre, consume, post_hit, post_miss = self.subs
 
         # Emit the signal to all pre-observers
-        for subscriber, refs in self.subs['pre']:
+        for subscriber, refs in pre:
             if refs:
                 self.sim.try_send(subscriber, event)
 
         # Emit the signal to all consumers and stop with the first one
         # which accepted the signal
-        for consumer, refs in self.subs['act']:
+        for consumer, refs in consume:
             if refs and self.sim.try_send(consumer, event):
                 # The event was consumed.
-                self.subs['act'].rewind()  # this will rewind for round robin
+                consume.rewind()  # this will rewind for round robin
                 # Notify all the post-observers about consumed event.
-                for subscriber, prefs in self.subs['post+']:
+                for subscriber, prefs in post_hit:
                     # The post-observers will receive a dict with two objects
                     if prefs:
                         self.sim.try_send(subscriber, {'consumer': consumer, 'event': event})
                 break
         else:
             # Emit the missed signal to all post-observers
-            for subscriber, refs in self.subs['post-']:
+            for subscriber, refs in post_miss:
                 if refs:
                     self.sim.try_send(subscriber, event)
 
         # cleanup- remove items with zero references
         # We do not cleanup in remove_subscriber, because remove_subscriber could
-        # be called from the notify(...) and that could produce an error 
-        for queue in self.subs.values():
+        # be called from the notify(...) and that could produce an error
+        for queue in self.subs:
             queue.cleanup()
 
     def has_subscribers(self) -> bool:
-        '''Returns True if any subscriber is attached in any tier (pre, act, post+, post-).
+        '''Returns True if any subscriber is attached in any tier (pre, consume, post+, post-).
         O(1) — backed by a cached ref-count maintained by add_subscriber / remove_subscriber.
         '''
         return self._subscriber_count > 0

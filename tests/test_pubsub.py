@@ -131,52 +131,52 @@ class TestProducer(unittest.TestCase):
         c0 = DSProcess(process, start=True, sim=self.sim)
         c1 = DSProcess(process, start=True, sim=self.sim)
         p.add_subscriber(subscriber=c0)
-        self.assertEqual(p.subs['pre'].d, {})
-        self.assertEqual(p.subs['act'].d, {c0: 1})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
         p.add_subscriber(subscriber=c1)
-        self.assertEqual(p.subs['pre'].d, {})
-        self.assertEqual(p.subs['act'].d, {c0: 1, c1: 1})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 1, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
         p.add_subscriber(subscriber=c0)
-        self.assertEqual(p.subs['pre'].d, {})
-        self.assertEqual(p.subs['act'].d, {c0: 2, c1: 1})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
-        p.add_subscriber(phase='pre', subscriber=c0)
-        self.assertEqual(p.subs['pre'].d, {c0: 1})
-        self.assertEqual(p.subs['act'].d, {c0: 2, c1: 1})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
-        p.add_subscriber(phase='post+', subscriber=c1)
-        self.assertEqual(p.subs['pre'].d, {c0: 1})
-        self.assertEqual(p.subs['act'].d, {c0: 2, c1: 1})
-        self.assertEqual(p.subs['post+'].d, {c1: 1})
-        self.assertEqual(p.subs['post-'].d, {})
-        p.add_subscriber(phase='post-', subscriber=c0)
-        self.assertEqual(p.subs['pre'].d, {c0: 1})
-        self.assertEqual(p.subs['act'].d, {c0: 2, c1: 1})
-        self.assertEqual(p.subs['post+'].d, {c1: 1})
-        self.assertEqual(p.subs['post-'].d, {c0: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 2, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
+        p.add_subscriber(phase=DSProducer.Phase.PRE, subscriber=c0)
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 2, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
+        p.add_subscriber(phase=DSProducer.Phase.POST_HIT, subscriber=c1)
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 2, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
+        p.add_subscriber(phase=DSProducer.Phase.POST_MISS, subscriber=c0)
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 2, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {c0: 1})
         c2 = lambda e: False
         c3 = lambda e: True
-        p.add_subscriber(phase='post+', subscriber=c2)
-        self.assertEqual(p.subs['pre'].d, {c0: 1})
-        self.assertEqual(p.subs['act'].d, {c0: 2, c1: 1})
-        self.assertEqual(p.subs['post+'].d, {c2: 1, c1: 1})
-        self.assertEqual(p.subs['post-'].d, {c0: 1})
-        p.add_subscriber(phase='post+', subscriber=c2)
-        self.assertEqual(p.subs['pre'].d, {c0: 1})
-        self.assertEqual(p.subs['act'].d, {c0: 2, c1: 1})
-        self.assertEqual(p.subs['post+'].d, {c2: 2, c1: 1})
-        self.assertEqual(p.subs['post-'].d, {c0: 1})
-        p.add_subscriber(phase='pre', subscriber=c3)
-        self.assertEqual(p.subs['pre'].d, {c3: 1, c0: 1})
-        self.assertEqual(p.subs['act'].d, {c0: 2, c1: 1})
-        self.assertEqual(p.subs['post+'].d, {c2: 2, c1: 1})
-        self.assertEqual(p.subs['post-'].d, {c0: 1})
+        p.add_subscriber(phase=DSProducer.Phase.POST_HIT, subscriber=c2)
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 2, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {c2: 1, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {c0: 1})
+        p.add_subscriber(phase=DSProducer.Phase.POST_HIT, subscriber=c2)
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 2, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {c2: 2, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {c0: 1})
+        p.add_subscriber(phase=DSProducer.Phase.PRE, subscriber=c3)
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c3: 1, c0: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 2, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {c2: 2, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {c0: 1})
 
     def test1_producer_remove(self):
         p = DSProducer(sim=DSSimulation())
@@ -190,76 +190,76 @@ class TestProducer(unittest.TestCase):
         c1.meta.cond = Mock()
         c1.meta.cond.check = Mock(return_value=(True, None))
         c1.get_cond = lambda: c0.meta.cond
-        p.subs['pre'].d = {}
-        p.subs['act'].d = {c0: 1}
-        p.subs['post+'].d = {}
-        p.subs['post-'].d = {}
+        p.subs[DSProducer.Phase.PRE].d = {}
+        p.subs[DSProducer.Phase.CONSUME].d = {c0: 1}
+        p.subs[DSProducer.Phase.POST_HIT].d = {}
+        p.subs[DSProducer.Phase.POST_MISS].d = {}
         p.remove_subscriber(subscriber=c0)
-        self.assertEqual(p.subs['pre'].d, {})
-        self.assertEqual(p.subs['act'].d, {c0: 0})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 0})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
         p.send(None)
-        self.assertEqual(p.subs['pre'].d, {})
-        self.assertEqual(p.subs['act'].d, {})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
 
-        p.subs['pre'].d = {}
-        p.subs['act'].d = {c0: 1, c1: 1}
-        p.subs['post+'].d = {}
-        p.subs['post-'].d = {}
+        p.subs[DSProducer.Phase.PRE].d = {}
+        p.subs[DSProducer.Phase.CONSUME].d = {c0: 1, c1: 1}
+        p.subs[DSProducer.Phase.POST_HIT].d = {}
+        p.subs[DSProducer.Phase.POST_MISS].d = {}
         p.remove_subscriber(subscriber=c0)
-        self.assertEqual(p.subs['pre'].d, {})
-        self.assertEqual(p.subs['act'].d, {c0: 0, c1:1})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 0, c1:1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
         p.send(None)
-        self.assertEqual(p.subs['pre'].d, {})
-        self.assertEqual(p.subs['act'].d, {c1: 1})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
 
-        p.subs['pre'].d = {c0: 1, c1: 1}
-        p.subs['act'].d = {c0: 1, c1: 1}
-        p.subs['post+'].d = {}
-        p.subs['post-'].d = {}
+        p.subs[DSProducer.Phase.PRE].d = {c0: 1, c1: 1}
+        p.subs[DSProducer.Phase.CONSUME].d = {c0: 1, c1: 1}
+        p.subs[DSProducer.Phase.POST_HIT].d = {}
+        p.subs[DSProducer.Phase.POST_MISS].d = {}
         p.remove_subscriber(subscriber=c0)
-        self.assertEqual(p.subs['pre'].d, {c0: 1, c1: 1})
-        self.assertEqual(p.subs['act'].d, {c0: 0, c1: 1})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 0, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
         p.send(None)
-        self.assertEqual(p.subs['pre'].d, {c0: 1, c1: 1})
-        self.assertEqual(p.subs['act'].d, {c1: 1})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
-        p.remove_subscriber(phase='pre', subscriber=c1)
-        self.assertEqual(p.subs['pre'].d, {c0: 1, c1: 0})
-        self.assertEqual(p.subs['act'].d, {c1: 1})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
+        p.remove_subscriber(phase=DSProducer.Phase.PRE, subscriber=c1)
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1, c1: 0})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
         p.send(None)
-        self.assertEqual(p.subs['pre'].d, {c0: 1})
-        self.assertEqual(p.subs['act'].d, {c1: 1})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
 
         c2 = SomeIterableObj()
-        p.subs['pre'].d = {c0: 1, c2: 1}
-        p.subs['act'].d = {c1: 1, c2: 1}
-        p.subs['post+'].d = {}
-        p.subs['post-'].d = {}
-        p.remove_subscriber(phase='pre', subscriber=c2)
-        self.assertEqual(p.subs['pre'].d, {c0: 1, c2: 0})
-        self.assertEqual(p.subs['act'].d, {c1: 1, c2: 1})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
+        p.subs[DSProducer.Phase.PRE].d = {c0: 1, c2: 1}
+        p.subs[DSProducer.Phase.CONSUME].d = {c1: 1, c2: 1}
+        p.subs[DSProducer.Phase.POST_HIT].d = {}
+        p.subs[DSProducer.Phase.POST_MISS].d = {}
+        p.remove_subscriber(phase=DSProducer.Phase.PRE, subscriber=c2)
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1, c2: 0})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c1: 1, c2: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
         p.remove_subscriber(subscriber=c2)
-        self.assertEqual(p.subs['pre'].d, {c0: 1, c2: 0})
-        self.assertEqual(p.subs['act'].d, {c1: 1, c2: 0})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1, c2: 0})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c1: 1, c2: 0})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
 
     def test2_producer_signal_act_retval(self):
         self.sim.try_send = Mock(return_value=False)
@@ -299,13 +299,13 @@ class TestProducer(unittest.TestCase):
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
-        p.add_subscriber(c0, phase='pre')
-        p.add_subscriber(c1, phase='pre')
+        p.add_subscriber(c0, phase=DSProducer.Phase.PRE)
+        p.add_subscriber(c1, phase=DSProducer.Phase.PRE)
         p.send(1)
         self.sim.try_send.assert_has_calls([call(c0, 1), call(c1, 1)])
 
         self.sim.try_send.reset_mock()
-        p.add_subscriber(c0, phase='pre')  # 2 times a subscriber
+        p.add_subscriber(c0, phase=DSProducer.Phase.PRE)  # 2 times a subscriber
         p.send(2)
         self.sim.try_send.assert_has_calls([call(c0, 2), call(c1, 2)])
 
@@ -314,22 +314,22 @@ class TestProducer(unittest.TestCase):
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
-        p.add_subscriber(c0, phase='post+')
-        p.add_subscriber(c1, phase='post+')
+        p.add_subscriber(c0, phase=DSProducer.Phase.POST_HIT)
+        p.add_subscriber(c1, phase=DSProducer.Phase.POST_HIT)
         p.send(1)
         self.sim.try_send.assert_not_called()
 
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
-        p.add_subscriber(c0, phase='post+')
-        p.add_subscriber(c1, phase='post+')
+        p.add_subscriber(c0, phase=DSProducer.Phase.POST_HIT)
+        p.add_subscriber(c1, phase=DSProducer.Phase.POST_HIT)
         p.add_subscriber(c0)  # add consumer
         p.send(1)
         self.sim.try_send.assert_has_calls([call(c0, 1), call(c0, {'consumer': c0, 'event': 1}), call(c1, {'consumer': c0, 'event': 1})])
 
         self.sim.try_send.reset_mock()
-        p.add_subscriber(c0, phase='post+')  # 2 times a subscriber
+        p.add_subscriber(c0, phase=DSProducer.Phase.POST_HIT)  # 2 times a subscriber
         p.send(2)
         self.sim.try_send.assert_has_calls([call(c0, 2), call(c0, {'consumer': c0, 'event': 2}), call(c1, {'consumer': c0, 'event': 2})])
 
@@ -338,13 +338,13 @@ class TestProducer(unittest.TestCase):
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
-        p.add_subscriber(c0, phase='post-')
-        p.add_subscriber(c1, phase='post-')
+        p.add_subscriber(c0, phase=DSProducer.Phase.POST_MISS)
+        p.add_subscriber(c1, phase=DSProducer.Phase.POST_MISS)
         p.send(1)
         self.sim.try_send.assert_has_calls([call(c0, 1), call(c1, 1)])
 
         self.sim.try_send.reset_mock()
-        p.add_subscriber(c0, phase='post-')  # 2 times a subscriber
+        p.add_subscriber(c0, phase=DSProducer.Phase.POST_MISS)  # 2 times a subscriber
         p.send(2)
         self.sim.try_send.assert_has_calls([call(c0, 2), call(c1, 2)])
 
@@ -354,14 +354,14 @@ class TestProducer(unittest.TestCase):
         c1 = DSCallback(None, sim=self.sim)
         self.sim.try_send = Mock(return_value=False)
         tests = ( 
-            ('pre', 'c0c1', True, True),
-            ('pre', 'c1c0', True, True),
-            ('act', 'c0c1', True, True),
-            ('act', 'c1c0', False, True),
-            ('post+', 'c0c1', False, False),  # post+ requires the signal to be consumed
-            ('post+', 'c1c0', False, False),
-            ('post-', 'c0c1', True, True),
-            ('post-', 'c1c0', True, True),
+            (DSProducer.Phase.PRE, 'c0c1', True, True),
+            (DSProducer.Phase.PRE, 'c1c0', True, True),
+            (DSProducer.Phase.CONSUME, 'c0c1', True, True),
+            (DSProducer.Phase.CONSUME, 'c1c0', False, True),
+            (DSProducer.Phase.POST_HIT, 'c0c1', False, False),  # post+ requires the signal to be consumed
+            (DSProducer.Phase.POST_HIT, 'c1c0', False, False),
+            (DSProducer.Phase.POST_MISS, 'c0c1', True, True),
+            (DSProducer.Phase.POST_MISS, 'c1c0', True, True),
         )
         for phase, order, c0_called, c1_called in tests:
             self.sim.try_send.reset_mock()
@@ -387,18 +387,18 @@ class TestProducer(unittest.TestCase):
         self.sim.try_send = Mock(return_value=False)
 
         tests = ( 
-            ('pre', 'act', call(c0, 'Hi'), call(c1, 'Hi')),
-            ('act', 'pre', call(c0, 'Hi'), call(c1, 'Hi')),
-            ('pre', 'post+', call(c0, 'Hi'), None),
-            ('post+', 'pre', None, call(c1, 'Hi')),
-            ('pre', 'post-', call(c0, 'Hi'), call(c1, 'Hi')),
-            ('post-', 'pre', call(c0, 'Hi'), call(c1, 'Hi')),
-            ('act', 'post+', call(c0, 'Hi'), None),
-            ('post+', 'act', None, call(c1, 'Hi')),
-            ('act', 'post-', call(c0, 'Hi'), call(c1, 'Hi')),
-            ('post-', 'act', call(c0, 'Hi'), call(c1, 'Hi')),
-            ('post+', 'post-', None, call(c1, 'Hi')),
-            ('post-', 'post+', call(c0, 'Hi'), None),
+            (DSProducer.Phase.PRE, DSProducer.Phase.CONSUME, call(c0, 'Hi'), call(c1, 'Hi')),
+            (DSProducer.Phase.CONSUME, DSProducer.Phase.PRE, call(c0, 'Hi'), call(c1, 'Hi')),
+            (DSProducer.Phase.PRE, DSProducer.Phase.POST_HIT, call(c0, 'Hi'), None),
+            (DSProducer.Phase.POST_HIT, DSProducer.Phase.PRE, None, call(c1, 'Hi')),
+            (DSProducer.Phase.PRE, DSProducer.Phase.POST_MISS, call(c0, 'Hi'), call(c1, 'Hi')),
+            (DSProducer.Phase.POST_MISS, DSProducer.Phase.PRE, call(c0, 'Hi'), call(c1, 'Hi')),
+            (DSProducer.Phase.CONSUME, DSProducer.Phase.POST_HIT, call(c0, 'Hi'), None),
+            (DSProducer.Phase.POST_HIT, DSProducer.Phase.CONSUME, None, call(c1, 'Hi')),
+            (DSProducer.Phase.CONSUME, DSProducer.Phase.POST_MISS, call(c0, 'Hi'), call(c1, 'Hi')),
+            (DSProducer.Phase.POST_MISS, DSProducer.Phase.CONSUME, call(c0, 'Hi'), call(c1, 'Hi')),
+            (DSProducer.Phase.POST_HIT, DSProducer.Phase.POST_MISS, None, call(c1, 'Hi')),
+            (DSProducer.Phase.POST_MISS, DSProducer.Phase.POST_HIT, call(c0, 'Hi'), None),
         )
         for c0_phase, c1_phase, c0_called, c1_called in tests:
             self.sim.try_send.reset_mock()
@@ -420,18 +420,18 @@ class TestProducer(unittest.TestCase):
         self.sim.try_send = Mock(return_value=True)
 
         tests = ( 
-            ('pre', 'act', call(c0, 'Hi'), call(c1, 'Hi')),
-            ('act', 'pre', call(c0, 'Hi'), call(c1, 'Hi')),
-            ('pre', 'post+', call(c0, 'Hi'), None),
-            ('post+', 'pre', None, call(c1, 'Hi')),
-            ('pre', 'post-', call(c0, 'Hi'), call(c1, 'Hi')),
-            ('post-', 'pre', call(c0, 'Hi'), call(c1, 'Hi')),
-            ('act', 'post+', call(c0, 'Hi'), call(c1, {'consumer': c0, 'event': 'Hi'})),
-            ('post+', 'act', call(c0, {'consumer': c1, 'event': 'Hi'}), call(c1, 'Hi')),
-            ('act', 'post-', call(c0, 'Hi'), None),
-            ('post-', 'act', None, call(c1, 'Hi')),
-            ('post+', 'post-', None, call(c1, 'Hi')),
-            ('post-', 'post+', call(c0, 'Hi'), None),
+            (DSProducer.Phase.PRE, DSProducer.Phase.CONSUME, call(c0, 'Hi'), call(c1, 'Hi')),
+            (DSProducer.Phase.CONSUME, DSProducer.Phase.PRE, call(c0, 'Hi'), call(c1, 'Hi')),
+            (DSProducer.Phase.PRE, DSProducer.Phase.POST_HIT, call(c0, 'Hi'), None),
+            (DSProducer.Phase.POST_HIT, DSProducer.Phase.PRE, None, call(c1, 'Hi')),
+            (DSProducer.Phase.PRE, DSProducer.Phase.POST_MISS, call(c0, 'Hi'), call(c1, 'Hi')),
+            (DSProducer.Phase.POST_MISS, DSProducer.Phase.PRE, call(c0, 'Hi'), call(c1, 'Hi')),
+            (DSProducer.Phase.CONSUME, DSProducer.Phase.POST_HIT, call(c0, 'Hi'), call(c1, {'consumer': c0, 'event': 'Hi'})),
+            (DSProducer.Phase.POST_HIT, DSProducer.Phase.CONSUME, call(c0, {'consumer': c1, 'event': 'Hi'}), call(c1, 'Hi')),
+            (DSProducer.Phase.CONSUME, DSProducer.Phase.POST_MISS, call(c0, 'Hi'), None),
+            (DSProducer.Phase.POST_MISS, DSProducer.Phase.CONSUME, None, call(c1, 'Hi')),
+            (DSProducer.Phase.POST_HIT, DSProducer.Phase.POST_MISS, None, call(c1, 'Hi')),
+            (DSProducer.Phase.POST_MISS, DSProducer.Phase.POST_HIT, call(c0, 'Hi'), None),
         )
         for c0_phase, c1_phase, c0_called, c1_called in tests:
             self.sim.try_send.reset_mock()
@@ -455,16 +455,16 @@ class TestProducer(unittest.TestCase):
         c1 = DSCallback(lambda e: p.add_subscriber(subscriber=c0), sim=self.sim)
         p.add_subscriber(subscriber=c1)
         p.add_subscriber(subscriber=c0)
-        self.assertEqual(p.subs['pre'].d, {})
-        self.assertEqual(p.subs['act'].d, {c0: 1, c1: 1})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 1, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
         p.send(None)
         c0.forward_method.assert_called_once()
-        self.assertEqual(p.subs['pre'].d, {})
-        self.assertEqual(p.subs['act'].d, {c0: 2, c1: 1})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 2, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
 
 
     def test11_producer_remove_subscriber_in_send_hook(self):
@@ -475,16 +475,16 @@ class TestProducer(unittest.TestCase):
         c1 = DSCallback(lambda e: p.remove_subscriber(subscriber=c1), sim=self.sim)
         p.add_subscriber(subscriber=c1)
         p.add_subscriber(subscriber=c0)
-        self.assertEqual(p.subs['pre'].d, {})
-        self.assertEqual(p.subs['act'].d, {c0: 1, c1: 1})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 1, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
         p.send(None)
         c0.forward_method.assert_called_once()
-        self.assertEqual(p.subs['pre'].d, {})
-        self.assertEqual(p.subs['act'].d, {c0: 1})
-        self.assertEqual(p.subs['post+'].d, {})
-        self.assertEqual(p.subs['post-'].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
+        self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
 
 class TestNotifierDict(unittest.TestCase):
 

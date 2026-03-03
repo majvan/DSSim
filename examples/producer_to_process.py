@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSSimulation, DSProcess, DSComponent, DSCallback, Timer
+from dssim import DSSimulation, DSProcess, DSComponent, DSCallback, Timer, DSProducer
 
 class MyComponent(DSComponent):
     def __init__(self, *args, **kwargs):
@@ -23,18 +23,18 @@ class MyComponent(DSComponent):
 
         # Case 1: The producer event starts a new process 'start_process'
         starter = lambda e: DSProcess(self.start_process(e)).schedule(0)  # the starter is a new function which schedules a new process
-        prod.add_subscriber(DSCallback(starter), phase='pre')
+        prod.add_subscriber(DSCallback(starter), phase=DSProducer.Phase.PRE)
 
         # Case 2: The producer event pushes events into running 'listen_process'
         proc = DSProcess(self.listen_process(), name=self.name+'.listener').schedule(0)
-        prod.add_subscriber(proc, phase='pre')
+        prod.add_subscriber(proc, phase=DSProducer.Phase.PRE)
 
         # Case 3: The producer event starts a new process 'start_listen_process' and then pushes events to it
         starter = lambda e: \
             prod.add_subscriber(
                 DSProcess(self.start_listen_process(e)).schedule(0),  # this creates a new process
-                phase='pre')  # and connects the new process with the producer
-        prod.add_subscriber(DSCallback(starter), phase='pre')
+                phase=DSProducer.Phase.PRE)  # and connects the new process with the producer
+        prod.add_subscriber(DSCallback(starter), phase=DSProducer.Phase.PRE)
 
     async def start_process(self, arg_event):
         print(self.sim.time, f"start_process({arg_event}) started.")
