@@ -45,8 +45,18 @@ class DSProcess(DSFuture, SignalMixin):
         ''' Initializes DSProcess. The input has to be a generator function. '''
         self.generator = generator
         self._scheduled = False
-        if self.started():  # check if the generator / coro has already been started...
-            raise ValueError('The DSProcess can be used only on non-started generators / coroutines')
+        self._started = False
+        self._finished = False
+        # One-time validation that the generator / coroutine has not been started yet.
+        # Uses inspect here intentionally — this path is cold (called once at construction).
+        if inspect.iscoroutine(generator):
+            if inspect.getcoroutinestate(generator) != inspect.CORO_CREATED:
+                raise ValueError('The DSProcess can be used only on non-started generators / coroutines')
+        elif inspect.isgenerator(generator):
+            if inspect.getgeneratorstate(generator) != inspect.GEN_CREATED:
+                raise ValueError('The DSProcess can be used only on non-started generators / coroutines')
+        else:
+            raise ValueError(f'The assigned code {generator} to the process is not a generator, neither a coroutine.')
         super().__init__(*args, **kwargs)
 
     def create_metadata(self, **kwargs: Any) -> ConsumerMetadata:
@@ -66,10 +76,11 @@ class DSProcess(DSFuture, SignalMixin):
     @TrackEvent
     def send(self, event: EventType) -> EventRetType:
         ''' Pushes an event to the task and gets new state. '''
-        if self.started():
+        if self._started:
             self.value = self.generator.send(event)
         else:
-            self.get_cond().pop()  # for the first kick, we added temporarily "_ScheduleEvent" condition (see _schedule) 
+            self._started = True
+            self.get_cond().pop()  # for the first kick, we added temporarily "_ScheduleEvent" condition (see _schedule)
             # By default, a future accepts timeout events (None) and events to self
             self.meta.cond.push(None)
             self.value = self.generator.send(None)
@@ -103,34 +114,24 @@ class DSProcess(DSFuture, SignalMixin):
             super().abort(exc)
 
     def started(self) -> bool:
-        if inspect.iscoroutine(self.generator):
-            retval = inspect.getcoroutinestate(self.generator) != inspect.CORO_CREATED
-        elif inspect.isgenerator(self.generator):
-            retval = inspect.getgeneratorstate(self.generator) != inspect.GEN_CREATED
-        else:
-            raise ValueError(f'The assigned code {self.generator} to the process {self} is not generator, neither coroutine.')
-        return retval
+        return self._started
 
     def finished(self) -> bool:
         ''' The finished evaluation cannot be the same as with the Futures because a process
         changes its value / exc more times during its runtime.
         '''
-        if inspect.iscoroutine(self.generator):
-            retval = inspect.getcoroutinestate(self.generator) == inspect.CORO_CLOSED
-        elif inspect.isgenerator(self.generator):
-            retval = inspect.getgeneratorstate(self.generator) == inspect.GEN_CLOSED
-        else:
-            raise ValueError(f'The assigned code {self.generator} to the process {self} is not generator, neither coroutine.')
-        return retval
+        return self._finished
 
     def finish(self, value: EventType) -> EventType:
+        self._finished = True
         self.value = value
         self.sim.cleanup(self)
-        # The last event is the process itself. This enables to wait for a process as an asyncio's Future 
+        # The last event is the process itself. This enables to wait for a process as an asyncio's Future
         self._finish_tx.signal(self)
         return self.value
-    
+
     def fail(self, exc: Exception) -> Exception:
+        self._finished = True
         self.exc = exc
         self.sim.cleanup(self)
         self._finish_tx.signal(self)
