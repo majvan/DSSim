@@ -119,8 +119,13 @@ class DSFilter(DSFuture, ICondition, CallableConditionMixin):
         if isinstance(self.cond, DSFuture):
             # now we should get this signaled only after return
             if self.forward_events:
-                # forward message to the consumer
-                self.sim.try_send(self.cond, event)
+                if isinstance(self.cond, DSProcess) and not self.cond._started:
+                    # First event to an unstarted process: fire the starter to initialize
+                    # the generator (generator.send(None)).  The triggering event is
+                    # intentionally discarded — same semantics as before.
+                    self.cond._starter.send(None)
+                else:
+                    self.sim.try_send(self.cond, event)
             if self.cond.finished():
                 if self.cond.exc is not None:
                     pass

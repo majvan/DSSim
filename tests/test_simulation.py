@@ -274,7 +274,7 @@ class TestConditionChecking(unittest.TestCase):
         cond.push, cond.pop = Mock(), Mock()
         cond.check = Mock(return_value=(True, 'return event'))
         cond.cond_value = lambda: 'condition value result'
-        retval = sim.send_object(waitable, None)  # kick the process
+        waitable._starter.send(None)  # kick the process
         cond.push.assert_has_calls([call(None), call('condition'),])
         try:
             retval = sim.try_send(waitable, 'something')
@@ -336,7 +336,8 @@ class TestConditionChecking(unittest.TestCase):
     def test3_check_condition(self):
         ''' The check_condition should retrieve cond from the metadata and then call _check_cond '''
         sim = DSSimulation()
-        p = DSProcess(self.__my_process(), sim=sim)
+        p = DSProcess(self.__my_process(), sim=sim).schedule(0)
+        p._starter.send(None)  # initialize the generator before replacing meta
         p.meta = SomeObj()
         p.meta.cond = MagicMock()
         p.meta.cond.check = Mock(return_value=(True, 'abc'))
