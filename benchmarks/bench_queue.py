@@ -62,7 +62,7 @@ def report(label, n, min_t, mean_t, stdev_t, total_t):
 # ===========================================================================
 # DSSim
 # ===========================================================================
-from dssim import DSSimulation, Queue
+from dssim import DSSimulation, Queue, DSSchedulable
 
 
 def dssim_free_flow(n):
@@ -75,17 +75,15 @@ def dssim_free_flow(n):
     q = Queue(sim=sim)
     got = [0]
 
+    @DSSchedulable
     def producer():
         for i in range(n):
             q.put_nowait(i)
-        yield from sim.gwait(0)   # yield to let consumer run
 
     def consumer():
-        while True:
-            items = yield from q.gget(timeout=0)
-            if items is None:
-                break
-            got[0] += len(items)
+        while got[0] < n:
+            yield from q.gget1(timeout=0)
+            got[0] += 1
 
     sim.schedule(0, producer())
     sim.schedule(0, consumer())
@@ -102,15 +100,15 @@ def dssim_backpressure(n, capacity):
     q = Queue(capacity=capacity, sim=sim)
     got = [0]
 
+    @DSSchedulable
     def producer():
         for i in range(n):
             yield from q.gput(float('inf'), i)
 
     def consumer():
         while got[0] < n:
-            items = yield from q.gget()
-            if items:
-                got[0] += len(items)
+            yield from q.gget1()
+            got[0] += 1
 
     sim.schedule(0, producer())
     sim.schedule(0, consumer())
@@ -129,16 +127,15 @@ def dssim_many_workers(n, k):
     per = n // k
     got = [0]
 
+    @DSSchedulable
     def producer():
         for i in range(per):
             q.put_nowait(i)
-        yield from sim.gwait(0)
 
     def consumer():
         for _ in range(per):
-            items = yield from q.gget()
-            if items:
-                got[0] += len(items)
+            yield from q.gget1()
+            got[0] += 1
 
     for _ in range(k):
         sim.schedule(0, producer())
@@ -160,9 +157,8 @@ def dssim_blocked_getters(n, k):
 
     def getter():
         for _ in range(per):
-            items = yield from q.gget()
-            if items:
-                got[0] += len(items)
+            yield from q.gget1()
+            got[0] += 1
 
     def producer():
         for i in range(n):
@@ -195,9 +191,8 @@ def dssim_cross_notify(n, k, capacity):
 
     def consumer():
         for _ in range(per):
-            items = yield from q.gget()
-            if items:
-                got[0] += len(items)
+            yield from q.gget1()
+            got[0] += 1
 
     for _ in range(k):
         sim.schedule(0, consumer())  # consumers first → subscribe before producers
