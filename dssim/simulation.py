@@ -18,7 +18,7 @@ The file provides basic logic to run the simulation and supported methods.
 import sys
 import inspect
 from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Optional, overload, TYPE_CHECKING
-from dssim.timequeue import TimeQueue
+from dssim.timequeue import TimeQueue, ZeroTimeQueue
 from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, CondType, StackedCond, DSComponentSingleton, AlwaysFalse
 from dssim.pubsub import DSConsumer, DSCallback, void_consumer, SimPubsubMixin
 from dssim.future import DSFuture, SimFutureMixin
@@ -91,6 +91,7 @@ class DSSimulation(DSComponentSingleton,
 
     def _restart(self) -> None:
         self.time_queue = TimeQueue()
+        self.now_queue = ZeroTimeQueue()
         self.num_events: int = 0
         # By default, we use fake consumer. It will be rewritten on the first 
         self._parent_process: DSConsumer = void_consumer
@@ -202,6 +203,11 @@ class DSSimulation(DSComponentSingleton,
         consumer = consumer or self._parent_process  # schedule to a process or to itself
         self.time_queue.add_element(time, (consumer, event))
         return event
+
+    def schedule_event_now(self, event: EventType, consumer: Optional[DSConsumer] = None) -> SchedulableType:
+        ''' Schedules an event object onto a special queue for fast processing. '''
+        consumer = consumer or self._parent_process  # schedule to a process or to itself
+        self.now_queue.append((consumer, event))
 
     def _gwait_for_event(self, timeout: TimeType, val: EventRetType = None) -> Generator[EventType, EventType, EventType]:
         # Re-compute abs/relative time to abs for the timeout
@@ -349,6 +355,7 @@ class DSSimulation(DSComponentSingleton,
         meta = consumer.meta
         meta.cond = StackedCond()
         # Remove all the events for this consumer
+        self.now_queue = ZeroTimeQueue(item for item in self.now_queue if item[0] is not consumer)
         self.time_queue.delete_cond(lambda e: e[0] is consumer)
 
     def run(self, up_to: TimeType = float('inf'), future: EventType = object()) -> Tuple[float, int]:
@@ -363,13 +370,21 @@ class DSSimulation(DSComponentSingleton,
                 retval_time = self.time
                 self._simtime = ftime
                 break
+            # The following lines are required for asyncio parity which requires
+            # an event loop implementation of run_until_complete(future)
             if event_obj == future:
-                retval_time = self.time
-                break
+                return self.time, self.num_events
             self.num_events += 1
             self._simtime = tevent
             self.time_queue.pop()
             self.try_send(consumer, event_obj)
+            while self.now_queue:
+                (consumer, event_obj) = self.now_queue.popleft()
+                # check for the future as well in the now_queue
+                if event_obj == future:
+                    return self.time, self.num_events
+                self.num_events += 1
+                self.try_send(consumer, event_obj)
         else:
             retval_time = self.time
             self._simtime = ftime
