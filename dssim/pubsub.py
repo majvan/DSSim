@@ -131,6 +131,8 @@ void_consumer = VoidConsumer()
 
 
 class NotifierPolicy:
+    needs_cleanup: bool = False  # overridden to True by dec() in subclasses that defer removal
+
     @abstractmethod
     def __iter__(self) -> Iterator: ...
 
@@ -165,12 +167,14 @@ class NotifierDict(NotifierPolicy):
         self.d[key] = self.d.get(key, 0) + 1
 
     def dec(self, key: DSConsumer, **kwargs: Any) -> None:
-        self.d[key] = self.d.get(key, 0) - 1
+        v = self.d.get(key, 0) - 1
+        if v <= 0:
+            self.d.pop(key, None)  # remove immediately; __iter__ uses a list() snapshot so this is safe
+        else:
+            self.d[key] = v
 
     def cleanup(self) -> None:
-        old_dict = self.d
-        new_dict = {k: v for k, v in old_dict.items() if v > 0}
-        self.d = new_dict
+        pass  # dec() already removes zero-count entries inline
 
 
 class NotifierRoundRobinItem:
@@ -192,6 +196,7 @@ NotifierRRItemsType = List[NotifierRoundRobinItem]
 class NotifierRoundRobin(NotifierPolicy):
     def __init__(self) -> None:
         self.queue: NotifierRRItemsType = []
+        self.needs_cleanup: bool = False
 
     def __iter__(self) -> "NotifierRoundRobin":
         self.current_index: int = 0
@@ -219,15 +224,14 @@ class NotifierRoundRobin(NotifierPolicy):
         for item in self.queue:
             if item.key == key:
                 item.value -= 1
+                if item.value <= 0:
+                    self.needs_cleanup = True
                 return
         raise ValueError('A key was supposed to be in the queue')
 
     def cleanup(self) -> None:
-        new_queue = []
-        for item in self.queue:
-            if item.value > 0:
-                new_queue.append(item)
-        self.queue = new_queue
+        self.needs_cleanup = False
+        self.queue = [item for item in self.queue if item.value > 0]
 
 
 NotifierPriorityItemType = Tuple[int, Dict[DSConsumer, int]]
@@ -255,15 +259,16 @@ class NotifierPriority(NotifierPolicy):
 
     def dec(self, key: DSConsumer, priority: int = 0, **kwargs: Any) -> None:
         priority_dict = self.d[priority] = self.d.get(priority, {})
-        priority_dict[key] = priority_dict.get(key, 0) - 1
+        v = priority_dict.get(key, 0) - 1
+        if v <= 0:
+            priority_dict.pop(key, None)
+            if not priority_dict:
+                self.d.pop(priority, None)
+        else:
+            priority_dict[key] = v
 
     def cleanup(self) -> None:
-        new_prio_dict = {}
-        for key, old_dict in self.d.items():
-            new_dict = {k: v for k, v in old_dict.items() if v > 0}
-            if new_dict:
-                new_prio_dict[key] = new_dict
-        self.d = new_prio_dict
+        pass  # dec() already removes zero-count entries inline
 
 
 class DSProducer(DSConsumer, SignalMixin):
@@ -322,7 +327,8 @@ class DSProducer(DSConsumer, SignalMixin):
         # We do not cleanup in remove_subscriber, because remove_subscriber could
         # be called from the notify(...) and that could produce an error
         for queue in self.subs:
-            queue.cleanup()
+            if queue.needs_cleanup:
+                queue.cleanup()
 
     def has_subscribers(self) -> bool:
         '''Returns True if any subscriber is attached in any tier (pre, consume, post+, post-).
