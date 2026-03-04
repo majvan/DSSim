@@ -20,6 +20,7 @@ from contextlib import contextmanager
 from unittest.mock import Mock, MagicMock, call
 from dssim import DSSimulation, DSProcess, DSFuture
 from dssim.cond import DSFilter as _f, DSCircuit
+from dssim.process import _StartProcess
 
 class TestDSFilter(unittest.TestCase):
 
@@ -370,7 +371,7 @@ class TestDSFilter(unittest.TestCase):
         # With _Starter, the time queue consumer is the _Starter, not the process itself
         self.assertIsInstance(scheduled[1][0], DSProcess._Starter)
         self.assertIs(scheduled[1][0]._process, p)
-        self.assertTrue(isinstance(scheduled[1][1], DSProcess._ScheduleEvent))
+        self.assertIs(scheduled[1][1], _StartProcess)
         self.assertTrue(len(sim.time_queue) == 0)
 
 

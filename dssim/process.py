@@ -33,22 +33,25 @@ if TYPE_CHECKING:
 
 DSProcessType = TypeVar('DSProcessType', bound='DSProcess')
 
+# Singleton sentinel used as the scheduled event for process start-up.
+# Using a shared object (instead of a per-process _ScheduleEvent instance) lets
+# _Starter.send() remove it from the cond stack by identity regardless of its
+# position — so user-pushed conditions between schedule() and start are safe.
+_StartProcess = object()
+
 
 class DSProcess(DSFuture, SignalMixin):
     ''' Typical task used in the simulations.
     This class "extends" generator / coroutine for additional info.
     The best practise is to use DSProcess instead of generators.
     '''
-    class _ScheduleEvent: pass
-
     class _Starter:
         ''' One-shot bootstrap consumer for DSProcess.
         Scheduled in place of the process itself so DSProcess.send() can be
         branch-free: no "first call?" check on every event delivered to the process.
         '''
-        def __init__(self, process: 'DSProcess', schedule_event: Any) -> None:
+        def __init__(self, process: 'DSProcess') -> None:
             self._process = process
-            self.schedule_event = schedule_event
             self.meta = ConsumerMetadata()
             self.meta.cond.push(AlwaysTrue)
 
@@ -58,9 +61,9 @@ class DSProcess(DSFuture, SignalMixin):
         def send(self, event: EventType) -> EventRetType:
             p = self._process
             if p._started:
-                return None  # already initialized (fired via send_object check) — no-op
+                return None  # already initialized — no-op (idempotent guard)
             p._started = True
-            p.get_cond().pop()      # remove _ScheduleEvent guard added by schedule()
+            p.get_cond().conds.remove(_StartProcess)  # remove by identity, order-independent
             p.meta.cond.push(None)  # add timeout sentinel (None == timeout)
             return p.sim.send_object(p, None)  # deliver first generator.send(None)
 
@@ -107,13 +110,12 @@ class DSProcess(DSFuture, SignalMixin):
         ''' This api is to schedule the process '''
         if not self._scheduled:
             self._scheduled = True
-            schedule_event = self._ScheduleEvent()
             # _Starter handles the first-kick initialization so send() stays branch-free
-            self._starter = self._Starter(self, schedule_event)
-            # Guard: keep _ScheduleEvent on the cond stack to reject spurious events
-            # delivered to the process before it actually starts
-            self.get_cond().push(schedule_event)
-            self.sim.schedule_event(time, schedule_event, self._starter)
+            self._starter = self._Starter(self)
+            # Guard: push _StartProcess sentinel onto the cond stack to reject
+            # spurious events delivered to the process before it actually starts
+            self.get_cond().push(_StartProcess)
+            self.sim.schedule_event(time, _StartProcess, self._starter)
         return self
 
     def abort(self, exc: Optional[Exception] = None) -> None:
