@@ -173,7 +173,7 @@ class Container(DSStatefulComponent, SignalMixin):
     Queue does not use any routing of signals.
     '''
     def __init__(self, capacity: Optional[int] = None, *args: Any, **policy_params: Any) -> None:
-        ''' Init Queue component. No special arguments here. '''
+        ''' Init Container component. No special arguments here. '''
         super().__init__(*args, **policy_params)
         self.capacity = capacity
         self.container: Dict[EventType, int] = {}  # object: count; the dict is used for quick search
@@ -184,7 +184,7 @@ class Container(DSStatefulComponent, SignalMixin):
         self.tx_nempty = self.sim.producer(name=self.name + '.tx_nempty')
 
     def _available(self, num_items: int) -> bool:
-        return self.capacity is None or (len(self) + num_items <= self.capacity)
+        return self.capacity is None or (self.size + num_items <= self.capacity)
 
     def _fire_nempty(self) -> None:
         if self.tx_nempty.has_subscribers():
@@ -253,7 +253,18 @@ class Container(DSStatefulComponent, SignalMixin):
         if retval is not None:
             self.size -= 1
 
-    def get_nowait(self, *obj: EventType) -> List[EventType]:
+    def get_nowait(self) -> Optional[EventType]:
+        ''' Get any first object from the container immediately. Returns None if empty. '''
+        if self.size == 0:
+            return None
+        el = next(iter(self.container.keys()))
+        retval = self._pop_element(el)
+        if retval is not None:
+            self.size -= 1
+            self._fire_changed()
+        return retval
+
+    def get_n_nowait(self, *obj: EventType) -> List[EventType]:
         ''' Get requested object from the container - as many as possible. '''
         retval = []
         if len(obj) > 0:
@@ -287,7 +298,7 @@ class Container(DSStatefulComponent, SignalMixin):
             else:
                 with self.sim.consume(self.tx_nempty, **policy_params):
                     # get any object first
-                    element = await self.sim.check_and_wait(timeout, cond=lambda e: len(self) > 0)  # wait while first element does not match the cond
+                    element = await self.sim.check_and_wait(timeout, cond=lambda e: self.size > 0)  # wait while first element does not match the cond
                     if element is not None:
                         retval = self.get_nowait()
         elif len(obj) > 0:
@@ -320,7 +331,7 @@ class Container(DSStatefulComponent, SignalMixin):
             else:
                 with self.sim.consume(self.tx_nempty, **policy_params):
                     # get any object first
-                    element = yield from self.sim.check_and_gwait(timeout, cond=lambda e: len(self) > 0)  # wait while first element does not match the cond
+                    element = yield from self.sim.check_and_gwait(timeout, cond=lambda e: self.size > 0)  # wait while first element does not match the cond
                     if element is not None:
                         retval = self.get_nowait()
         elif len(obj) > 0:
