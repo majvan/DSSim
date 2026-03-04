@@ -196,7 +196,7 @@ class TestProducer(unittest.TestCase):
         p.subs[DSProducer.Phase.POST_MISS].d = {}
         p.remove_subscriber(subscriber=c0)
         self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {})
-        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 0})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {})
         self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
         self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
         p.send(None)
@@ -211,7 +211,7 @@ class TestProducer(unittest.TestCase):
         p.subs[DSProducer.Phase.POST_MISS].d = {}
         p.remove_subscriber(subscriber=c0)
         self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {})
-        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 0, c1:1})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c1: 1})
         self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
         self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
         p.send(None)
@@ -226,7 +226,7 @@ class TestProducer(unittest.TestCase):
         p.subs[DSProducer.Phase.POST_MISS].d = {}
         p.remove_subscriber(subscriber=c0)
         self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1, c1: 1})
-        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c0: 0, c1: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c1: 1})
         self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
         self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
         p.send(None)
@@ -235,7 +235,7 @@ class TestProducer(unittest.TestCase):
         self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
         self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
         p.remove_subscriber(phase=DSProducer.Phase.PRE, subscriber=c1)
-        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1, c1: 0})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1})
         self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c1: 1})
         self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
         self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
@@ -251,13 +251,13 @@ class TestProducer(unittest.TestCase):
         p.subs[DSProducer.Phase.POST_HIT].d = {}
         p.subs[DSProducer.Phase.POST_MISS].d = {}
         p.remove_subscriber(phase=DSProducer.Phase.PRE, subscriber=c2)
-        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1, c2: 0})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1})
         self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c1: 1, c2: 1})
         self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
         self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
         p.remove_subscriber(subscriber=c2)
-        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1, c2: 0})
-        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c1: 1, c2: 0})
+        self.assertEqual(p.subs[DSProducer.Phase.PRE].d, {c0: 1})
+        self.assertEqual(p.subs[DSProducer.Phase.CONSUME].d, {c1: 1})
         self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
         self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
 
@@ -491,14 +491,19 @@ class TestNotifierDict(unittest.TestCase):
     def test0_inc_dec(self):
         n = NotifierDict()
         self.assertTrue(n.d == {})
+        self.assertFalse(n.needs_cleanup)
         n.inc('a'), n.inc('a')
         self.assertEqual(n.d, {'a': 2})
+        self.assertFalse(n.needs_cleanup)
         n.inc('b'), n.inc('a')
         self.assertEqual(n.d, {'a': 3, 'b': 1})
+        self.assertFalse(n.needs_cleanup)
         n.dec('a'), n.inc('b')
         self.assertEqual(n.d, {'a': 2, 'b': 2})
+        self.assertFalse(n.needs_cleanup)
         n.dec('a'), n.dec('a')
-        self.assertEqual(n.d, {'a': 0, 'b': 2})
+        self.assertEqual(n.d, {'b': 2})
+        self.assertFalse(n.needs_cleanup)
 
     def test1_iter_change(self):
         n = NotifierDict()
@@ -512,19 +517,26 @@ class TestNotifierDict(unittest.TestCase):
 
     def test2_cleanup(self):
         n = NotifierDict()
+        self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.d, {})
         n.cleanup()
+        self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.d, {})
         n.d = {'a': 2, 'b': 3}
         n.cleanup()
+        self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.d, {'a': 2, 'b': 3})
         n.dec('a'), n.dec('a')
-        self.assertEqual(n.d, {'a': 0, 'b': 3})
+        self.assertFalse(n.needs_cleanup)
+        self.assertEqual(n.d, {'b': 3})
         n.cleanup()
+        self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.d, {'b': 3})
         n.dec('b'), n.dec('b'), n.dec('b')
-        self.assertEqual(n.d, {'b': 0})
+        self.assertFalse(n.needs_cleanup)
+        self.assertEqual(n.d, {})
         n.cleanup()
+        self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.d, {})
 
     def test3_iter(self):
@@ -562,14 +574,19 @@ class TestNotifierRoundRobin(unittest.TestCase):
     def test0_inc_dec(self):
         n = NotifierRoundRobin()
         self.assertTrue(n.queue == [])
+        self.assertFalse(n.needs_cleanup)
         n.inc('a'), n.inc('a')
         self.assertEqual(n.queue, [('a', 2)])
+        self.assertFalse(n.needs_cleanup)
         n.inc('b'), n.inc('a')
         self.assertEqual(n.queue, [('a', 3), ('b', 1)])
+        self.assertFalse(n.needs_cleanup)
         n.dec('a'), n.inc('b')
         self.assertEqual(n.queue, [('a', 2), ('b', 2)])
+        self.assertFalse(n.needs_cleanup)
         n.dec('a'), n.dec('a')
         self.assertEqual(n.queue, [('a', 0), ('b', 2)])
+        self.assertTrue(n.needs_cleanup)
 
     def test1_iter_change(self):
         n = NotifierRoundRobin()
@@ -583,19 +600,26 @@ class TestNotifierRoundRobin(unittest.TestCase):
 
     def test2_cleanup(self):
         n = NotifierRoundRobin()
+        self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.queue, [])
         n.cleanup()
+        self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.queue, [])
         n.queue = [NotifierRoundRobinItem('a', 2), NotifierRoundRobinItem('b', 3)]
         n.cleanup()
+        self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.queue, [('a', 2), ('b', 3)])
         n.dec('a'), n.dec('a')
+        self.assertTrue(n.needs_cleanup)
         self.assertEqual(n.queue, [('a', 0), ('b', 3)])
         n.cleanup()
+        self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.queue, [('b', 3)])
         n.dec('b'), n.dec('b'), n.dec('b')
+        self.assertTrue(n.needs_cleanup)
         self.assertEqual(n.queue, [('b', 0)])
         n.cleanup()
+        self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.queue, [])
 
     def test3_iter(self):
@@ -633,16 +657,22 @@ class TestNotifierPriority(unittest.TestCase):
     def test0_inc_dec(self):
         n = NotifierPriority()
         self.assertTrue(n.d == {})
+        self.assertFalse(n.needs_cleanup)
         n.inc('a', priority=1), n.inc('a', priority=1)
         self.assertEqual(n.d, {1: {'a': 2}})
+        self.assertFalse(n.needs_cleanup)
         n.inc('b', priority=1), n.inc('a', priority=2)
         self.assertEqual(n.d, {1: {'a': 2, 'b': 1}, 2: {'a': 1}})
+        self.assertFalse(n.needs_cleanup)
         n.dec('a', priority=1), n.inc('b', priority=1)
         self.assertEqual(n.d, {1: {'a': 1, 'b': 2}, 2: {'a': 1}})
+        self.assertFalse(n.needs_cleanup)
         n.dec('a', priority=1)
-        self.assertEqual(n.d, {1: {'a': 0, 'b': 2}, 2: {'a': 1}})
+        self.assertEqual(n.d, {1: {'b': 2}, 2: {'a': 1}})
+        self.assertFalse(n.needs_cleanup)
         n.dec('a', priority=2)
-        self.assertEqual(n.d, {1: {'a': 0, 'b': 2}, 2: {'a': 0}})
+        self.assertEqual(n.d, {1: {'b': 2}})
+        self.assertFalse(n.needs_cleanup)
 
     def test1_iter_change(self):
         n = NotifierPriority()
@@ -656,21 +686,30 @@ class TestNotifierPriority(unittest.TestCase):
 
     def test2_cleanup(self):
         n = NotifierPriority()
+        self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.d, {})
         n.cleanup()
+        self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.d, {})
         n.d = {1: {'a': 2, 'b': 3}, 2: {'a': 1}}
         n.cleanup()
+        self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.d, {1: {'a': 2, 'b': 3}, 2: {'a': 1}})
         n.dec('a', priority=1), n.dec('a', priority=1)
-        self.assertEqual(n.d, {1: {'a': 0, 'b': 3}, 2: {'a': 1}})
+        self.assertFalse(n.needs_cleanup)
+        self.assertEqual(n.d, {1: {'b': 3}, 2: {'a': 1}})
         n.cleanup()
+        self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.d, {1: {'b': 3}, 2: {'a': 1}})
         n.dec('a', priority=2)
+        self.assertFalse(n.needs_cleanup)
         n.cleanup()
+        self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.d, {1: {'b': 3}})
         n.dec('b', priority=1), n.dec('b', priority=1), n.dec('b', priority=1)
+        self.assertFalse(n.needs_cleanup)
         n.cleanup()
+        self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.d, {})
 
     def test3_iter(self):
