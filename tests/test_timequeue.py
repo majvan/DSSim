@@ -15,7 +15,7 @@
 Tests for timequeue module
 '''
 import unittest
-from dssim.timequeue import TimeQueue
+from dssim.timequeue import TimeQueue, ZeroTimeQueue
 from dssim.pubsub import void_consumer
 
 class TestTimeQueue(unittest.TestCase):
@@ -131,3 +131,61 @@ class TestTimeQueue(unittest.TestCase):
         self.assertEqual(len(self.tq), 1)
         self.tq.delete_val({'a': 1, 'b': 2, 'c': 3, 'x': -1, 'y': -2})
         self.assertEqual(len(self.tq), 0)
+
+
+class TestZeroTimeQueue(unittest.TestCase):
+    ''' Test the ZeroTimeQueue class behavior '''
+
+    def setUp(self):
+        self.q = ZeroTimeQueue()
+
+    def test0_init(self):
+        ''' Assert initialization — queue is empty '''
+        self.assertEqual(len(self.q), 0)
+        self.assertFalse(self.q)
+
+    def test1_append_popleft(self):
+        ''' Single item: append then popleft round-trips correctly '''
+        self.q.append('a')
+        self.assertEqual(len(self.q), 1)
+        self.assertTrue(self.q)
+        item = self.q.popleft()
+        self.assertEqual(item, 'a')
+        self.assertEqual(len(self.q), 0)
+        self.assertFalse(self.q)
+
+    def test2_fifo_order(self):
+        ''' Multiple items are delivered in FIFO order '''
+        self.q.append('first')
+        self.q.append('second')
+        self.q.append('third')
+        self.assertEqual(len(self.q), 3)
+        self.assertEqual(self.q.popleft(), 'first')
+        self.assertEqual(self.q.popleft(), 'second')
+        self.assertEqual(self.q.popleft(), 'third')
+        self.assertEqual(len(self.q), 0)
+
+    def test3_tuple_elements(self):
+        ''' Stores (consumer, event) tuples as used by the simulator '''
+        consumer_a, consumer_b = object(), object()
+        self.q.append((consumer_a, 'event1'))
+        self.q.append((consumer_b, 'event2'))
+        c, e = self.q.popleft()
+        self.assertIs(c, consumer_a)
+        self.assertEqual(e, 'event1')
+        c, e = self.q.popleft()
+        self.assertIs(c, consumer_b)
+        self.assertEqual(e, 'event2')
+
+    def test4_filter_constructor(self):
+        ''' ZeroTimeQueue(generator) filters items — used by cleanup() '''
+        consumer_a, consumer_b = object(), object()
+        self.q.append((consumer_a, 'ev1'))
+        self.q.append((consumer_b, 'ev2'))
+        self.q.append((consumer_a, 'ev3'))
+        # Keep only items NOT for consumer_a (same pattern as sim.cleanup)
+        filtered = ZeroTimeQueue(item for item in self.q if item[0] is not consumer_a)
+        self.assertEqual(len(filtered), 1)
+        c, e = filtered.popleft()
+        self.assertIs(c, consumer_b)
+        self.assertEqual(e, 'ev2')

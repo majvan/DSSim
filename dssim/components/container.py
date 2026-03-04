@@ -188,11 +188,11 @@ class Container(DSStatefulComponent, SignalMixin):
 
     def _fire_nempty(self) -> None:
         if self.tx_nempty.has_subscribers():
-            self.sim.schedule_event(0, self.tx_nempty, self.tx_nempty)
+            self.sim.schedule_event_now(self.tx_nempty, self.tx_nempty)
 
     def _fire_changed(self) -> None:
         if self.tx_changed.has_subscribers():
-            self.sim.schedule_event(0, self.tx_changed, self.tx_changed)
+            self.sim.schedule_event_now(self.tx_changed, self.tx_changed)
 
     def send(self, event: EventType) -> EventType:
         return self.put_nowait(event) is not None
@@ -416,15 +416,15 @@ class Queue(DSStatefulComponent, SignalMixin):
 
     def _fire_nempty(self) -> None:
         if self.tx_nempty.has_subscribers():
-            self.sim.schedule_event(0, self.tx_nempty, self.tx_nempty)
+            self.sim.schedule_event_now(self.tx_nempty, self.tx_nempty)
 
     def _fire_nfull(self) -> None:
         if self.tx_nfull.has_subscribers():
-            self.sim.schedule_event(0, self.tx_nfull, self.tx_nfull)
+            self.sim.schedule_event_now(self.tx_nfull, self.tx_nfull)
 
     def _fire_changed(self) -> None:
         if self.tx_changed.has_subscribers():
-            self.sim.schedule_event(0, self.tx_changed, self.tx_changed)
+            self.sim.schedule_event_now(self.tx_changed, self.tx_changed)
 
     # ---- put side ----------------------------------------------------------
 

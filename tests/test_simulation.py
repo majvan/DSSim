@@ -1102,3 +1102,127 @@ class TestDSProcessAbort(unittest.TestCase):
 
         self.assertEqual(len(caught), 1)
         self.assertIsInstance(caught[0], _MyExc)
+
+
+class TestScheduleEventNow(unittest.TestCase):
+    ''' Tests for DSSimulation.schedule_event_now() and the now_queue drain in run(). '''
+
+    def test0_appends_to_now_queue(self):
+        ''' schedule_event_now appends a (consumer, event) tuple to now_queue. '''
+        sim = DSSimulation()
+        consumer = Mock()
+        sim.schedule_event_now('ev', consumer)
+        self.assertEqual(len(sim.now_queue), 1)
+        c, e = sim.now_queue[0]
+        self.assertIs(c, consumer)
+        self.assertEqual(e, 'ev')
+
+    def test1_default_consumer_is_parent_process(self):
+        ''' When consumer is omitted, _parent_process is used as the target. '''
+        sim = DSSimulation()
+        sentinel = object()
+        sim._parent_process = sentinel
+        sim.schedule_event_now('ev')
+        c, e = sim.now_queue[0]
+        self.assertIs(c, sentinel)
+
+    def test2_restart_clears_now_queue(self):
+        ''' restart() resets the now_queue to empty. '''
+        sim = DSSimulation()
+        consumer = Mock()
+        sim.schedule_event_now('ev1', consumer)
+        sim.schedule_event_now('ev2', consumer)
+        self.assertEqual(len(sim.now_queue), 2)
+        sim.restart()
+        self.assertEqual(len(sim.now_queue), 0)
+
+    def test3_cleanup_removes_consumer_events_from_now_queue(self):
+        ''' cleanup(consumer) filters that consumer's events out of now_queue. '''
+        sim = DSSimulation()
+        ca = Mock()
+        ca.meta.cond = Mock()
+        cb = Mock()
+        cb.meta.cond = Mock()
+        sim.schedule_event_now('ev_a1', ca)
+        sim.schedule_event_now('ev_b',  cb)
+        sim.schedule_event_now('ev_a2', ca)
+        self.assertEqual(len(sim.now_queue), 3)
+        sim.cleanup(ca)
+        self.assertEqual(len(sim.now_queue), 1)
+        c, e = sim.now_queue[0]
+        self.assertIs(c, cb)
+        self.assertEqual(e, 'ev_b')
+
+    def test4_now_queue_drained_after_each_timed_event(self):
+        ''' Events appended to now_queue during a timed callback are dispatched
+        before the next timed event fires, and at the same sim.time. '''
+        sim = DSSimulation()
+        log = []
+
+        def sink(event):
+            log.append(('sink', sim.time, event))
+            return True
+
+        from dssim import DSCallback
+        sink_cb = DSCallback(sink, sim=sim)
+
+        def burst(event):
+            log.append(('burst', sim.time))
+            sim.schedule_event_now('a', sink_cb)
+            sim.schedule_event_now('b', sink_cb)
+            return True
+
+        burst_cb = DSCallback(burst, sim=sim)
+        sim.schedule_event(1, None, burst_cb)   # timed event at t=1
+        sim.schedule_event(2, None, burst_cb)   # timed event at t=2
+        sim.run()
+
+        # burst fires at t=1, then now_queue drains at t=1, then t=2 fires
+        self.assertEqual(log[0], ('burst', 1))
+        self.assertEqual(log[1], ('sink',  1, 'a'))
+        self.assertEqual(log[2], ('sink',  1, 'b'))
+        self.assertEqual(log[3], ('burst', 2))
+        self.assertEqual(log[4], ('sink',  2, 'a'))
+        self.assertEqual(log[5], ('sink',  2, 'b'))
+
+    def test5_now_queue_fifo_order(self):
+        ''' Multiple events scheduled via schedule_event_now are consumed in FIFO order. '''
+        sim = DSSimulation()
+        received = []
+
+        def sink(event):
+            received.append(event)
+            return True
+
+        from dssim import DSCallback
+        sink_cb = DSCallback(sink, sim=sim)
+
+        def burst(event):
+            for i in range(5):
+                sim.schedule_event_now(i, sink_cb)
+            return True
+
+        burst_cb = DSCallback(burst, sim=sim)
+        sim.schedule_event(0, None, burst_cb)
+        sim.run()
+        self.assertEqual(received, [0, 1, 2, 3, 4])
+
+    def test6_now_queue_empty_after_run(self):
+        ''' now_queue is fully drained by run() — nothing left afterwards. '''
+        sim = DSSimulation()
+
+        def sink(event):
+            return True
+
+        from dssim import DSCallback
+        sink_cb = DSCallback(sink, sim=sim)
+
+        def burst(event):
+            sim.schedule_event_now('x', sink_cb)
+            sim.schedule_event_now('y', sink_cb)
+            return True
+
+        burst_cb = DSCallback(burst, sim=sim)
+        sim.schedule_event(1, None, burst_cb)
+        sim.run()
+        self.assertEqual(len(sim.now_queue), 0)

@@ -20,12 +20,25 @@ from typing import List, Tuple, Union, Callable, TYPE_CHECKING
 from bisect import bisect_right
 from dssim.base import EventType
 from dssim.pubsub import void_consumer
+from collections import deque
 
 if TYPE_CHECKING:
     from dssim.pubsub import DSConsumer
 
 TimeType = float
 ElementType = Tuple["DSConsumer", Union[EventType, "DSConsumer"]]
+
+
+class ZeroTimeQueue(deque):
+    ''' This is a special queue intended for higher throughput. It does not hold the time
+    and is solely used as a FIFO queue.
+    The reason: many components schedule with t=0; the processing of the events with zero
+    time is boosted with this queue.
+    Another possibility in the future is to use thread - safe queue because processing
+    the equal-time (in this case zero-time) events can be done in parallel.
+    '''
+    pass
+
 
 class TimeQueue:
     ''' Maintains a list (queue) of objects (elements) associated with absolute time
