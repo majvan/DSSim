@@ -184,7 +184,7 @@ class Container(DSStatefulComponent, SignalMixin):
         self.tx_nempty = self.sim.producer(name=self.name + '.tx_nempty')
 
     def _available(self, num_items: int) -> bool:
-        return self.capacity is None or (len(self) + num_items <= self.capacity)
+        return self.capacity is None or (self.size + num_items <= self.capacity)
 
     def _fire_nempty(self) -> None:
         if self.tx_nempty.has_subscribers():
@@ -287,7 +287,7 @@ class Container(DSStatefulComponent, SignalMixin):
             else:
                 with self.sim.consume(self.tx_nempty, **policy_params):
                     # get any object first
-                    element = await self.sim.check_and_wait(timeout, cond=lambda e: len(self) > 0)  # wait while first element does not match the cond
+                    element = await self.sim.check_and_wait(timeout, cond=lambda e: self.size > 0)  # wait while first element does not match the cond
                     if element is not None:
                         retval = self.get_nowait()
         elif len(obj) > 0:
@@ -320,7 +320,7 @@ class Container(DSStatefulComponent, SignalMixin):
             else:
                 with self.sim.consume(self.tx_nempty, **policy_params):
                     # get any object first
-                    element = yield from self.sim.check_and_gwait(timeout, cond=lambda e: len(self) > 0)  # wait while first element does not match the cond
+                    element = yield from self.sim.check_and_gwait(timeout, cond=lambda e: self.size > 0)  # wait while first element does not match the cond
                     if element is not None:
                         retval = self.get_nowait()
         elif len(obj) > 0:
