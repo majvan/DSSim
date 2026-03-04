@@ -59,9 +59,9 @@ class IntegralLimiter(DSComponent):
             self.buffer = self.buffer[limited_num:]
             if not self.accumulated_report:
                 for event in events:
-                    self.tx.schedule_event(0, event)
+                    self.sim.schedule_event(0, self.tx, event)
             else:
-                self.tx.schedule_kw_event(0, num=limited_num)
+                self.sim.schedule_event(0, self.tx, {'num': limited_num})
 
 class Limiter(DSComponent):
     ''' Limiter which passes events with max. limited throughput.
@@ -113,7 +113,7 @@ class Limiter(DSComponent):
             while len(self.buffer) > 0:
                 if self.sim.time >= next_time:
                     event = self.buffer.pop(0)
-                    self.tx.schedule_event(0, event)
+                    self.sim.schedule_event(0, self.tx, event)
                     previous_time = self.sim.time
                     next_time = previous_time + self.report_period
                 wait_next = next_time - self.sim.time

@@ -35,4 +35,4 @@ class Delay(DSComponent):
 
     def _on_event(self, event: EventType) -> None:
         ''' Consumer which feeds the output after the programmed delay '''
-        self.tx.schedule_event(self.delay, event)
+        self.sim.schedule_event(self.delay, self.tx, event)
