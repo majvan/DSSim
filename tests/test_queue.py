@@ -405,7 +405,7 @@ class TestQueue(unittest.TestCase):
         result = q.put_nowait('item')
         self.assertIsNotNone(result)
         self.assertEqual(len(q), 1)
-        items = q.get_nowait()
+        items = q.get_n_nowait()
         self.assertEqual(items, ['item'])
         self.assertEqual(len(q), 0)
 
@@ -413,9 +413,9 @@ class TestQueue(unittest.TestCase):
         q = Queue(sim=self.sim)
         q.put_nowait('a', 'b', 'c')
         self.assertEqual(len(q), 3)
-        self.assertEqual(q.get_nowait(), ['a'])
-        self.assertEqual(q.get_nowait(), ['b'])
-        self.assertEqual(q.get_nowait(), ['c'])
+        self.assertEqual(q.get_n_nowait(), ['a'])
+        self.assertEqual(q.get_n_nowait(), ['b'])
+        self.assertEqual(q.get_n_nowait(), ['c'])
 
     def test_put_nowait_full_returns_none(self):
         q = Queue(capacity=2, sim=self.sim)
@@ -426,22 +426,22 @@ class TestQueue(unittest.TestCase):
 
     def test_get_nowait_empty_returns_none(self):
         q = Queue(sim=self.sim)
-        result = q.get_nowait()
+        result = q.get_n_nowait()
         self.assertIsNone(result)
 
     def test_get_nowait_amount(self):
         q = Queue(sim=self.sim)
         q.put_nowait('a', 'b', 'c')
-        items = q.get_nowait(amount=2)
+        items = q.get_n_nowait(amount=2)
         self.assertEqual(items, ['a', 'b'])
         self.assertEqual(len(q), 1)
 
     def test_get_nowait_cond_head(self):
         q = Queue(sim=self.sim)
         q.put_nowait('skip')
-        result = q.get_nowait(cond=lambda e: e != 'skip')
+        result = q.get_n_nowait(cond=lambda e: e != 'skip')
         self.assertIsNone(result)   # head doesn't pass cond
-        result = q.get_nowait(cond=lambda e: e == 'skip')
+        result = q.get_n_nowait(cond=lambda e: e == 'skip')
         self.assertEqual(result, ['skip'])
 
     # ---- fifo ordering -----------------------------------------------------
@@ -451,7 +451,7 @@ class TestQueue(unittest.TestCase):
         for i in range(5):
             q.put_nowait(i)
         for i in range(5):
-            self.assertEqual(q.get_nowait(), [i])
+            self.assertEqual(q.get_n_nowait(), [i])
 
     # ---- capacity ----------------------------------------------------------
 
@@ -538,7 +538,7 @@ class TestQueue(unittest.TestCase):
         results = []
 
         def consumer():
-            items = yield from q.gget()
+            items = yield from q.gget_n()
             results.append(('got', self.sim.time, items))
 
         def producer():
@@ -563,7 +563,7 @@ class TestQueue(unittest.TestCase):
 
         def consumer():
             yield from self.sim.gwait(5)
-            items = q.get_nowait()  # free up space
+            items = q.get_n_nowait()  # free up space
             results.append(('got', self.sim.time, items))
 
         q = Queue(capacity=1, sim=self.sim)
@@ -579,7 +579,7 @@ class TestQueue(unittest.TestCase):
         results = []
 
         def consumer():
-            items = yield from q.gget(cond=lambda e: e == 'wanted')
+            items = yield from q.gget_n(cond=lambda e: e == 'wanted')
             results.append(items)
 
         def producer():
@@ -606,7 +606,7 @@ class TestQueue(unittest.TestCase):
         results = []
 
         def consumer():
-            items = yield from q.gget(timeout=3)
+            items = yield from q.gget_n(timeout=3)
             results.append(items)
 
         q = Queue(sim=self.sim)
@@ -633,7 +633,7 @@ class TestQueue(unittest.TestCase):
         order = []
 
         def consumer(name):
-            yield from q.gget()
+            yield from q.gget_n()
             order.append((name, self.sim.time))
 
         def producer():
@@ -705,7 +705,7 @@ class TestQueue(unittest.TestCase):
 
         def actor():
             yield from self.sim.gwait(3)
-            q.get_nowait()
+            q.get_n_nowait()
 
         q = Queue(sim=self.sim)
         self.sim.schedule(0, watcher())
@@ -719,7 +719,7 @@ class TestQueue(unittest.TestCase):
         results = []
 
         async def consumer():
-            items = await q.get()
+            items = await q.get_n()
             results.append(('got', self.sim.time, items))
 
         async def producer():
@@ -747,9 +747,9 @@ class TestQueueLifo(unittest.TestCase):
         q.put_nowait('a')
         q.put_nowait('b')
         q.put_nowait('c')
-        self.assertEqual(q.get_nowait(), ['c'])
-        self.assertEqual(q.get_nowait(), ['b'])
-        self.assertEqual(q.get_nowait(), ['a'])
+        self.assertEqual(q.get_n_nowait(), ['c'])
+        self.assertEqual(q.get_n_nowait(), ['b'])
+        self.assertEqual(q.get_n_nowait(), ['a'])
 
     def test_buffer_is_dslifoqueue(self):
         q = Queue(policy=DSLifoQueue(), sim=self.sim)
@@ -765,7 +765,7 @@ class TestQueueLifo(unittest.TestCase):
         results = []
 
         def consumer():
-            items = yield from q.gget()
+            items = yield from q.gget_n()
             results.append(items)
 
         def producer():
@@ -778,6 +778,241 @@ class TestQueueLifo(unittest.TestCase):
         self.sim.schedule(0, producer())
         self.sim.run(10)
         self.assertEqual(results, [['second']])
+
+
+# ---------------------------------------------------------------------------
+# Single-item API: get_nowait / gget / get
+# ---------------------------------------------------------------------------
+
+class TestQueueSingleItemGet(unittest.TestCase):
+    '''
+    Queue.get_nowait() / .gget() / .get() return a single element (not
+    wrapped in a list), in contrast to get_n_nowait / gget_n / get_n which
+    always return a list.
+    '''
+
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    # ---- get_nowait --------------------------------------------------------
+
+    def test_get_nowait_returns_single_element(self):
+        q = Queue(sim=self.sim)
+        q.put_nowait('A')
+        result = q.get_nowait()
+        self.assertEqual(result, 'A')
+        self.assertNotIsInstance(result, list)
+        self.assertEqual(len(q), 0)
+
+    def test_get_nowait_returns_none_when_empty(self):
+        q = Queue(sim=self.sim)
+        result = q.get_nowait()
+        self.assertIsNone(result)
+
+    def test_get_nowait_fifo_order(self):
+        q = Queue(sim=self.sim)
+        q.put_nowait('first', 'second', 'third')
+        self.assertEqual(q.get_nowait(), 'first')
+        self.assertEqual(q.get_nowait(), 'second')
+        self.assertEqual(q.get_nowait(), 'third')
+
+    def test_get_nowait_with_passing_cond(self):
+        q = Queue(sim=self.sim)
+        q.put_nowait('match')
+        result = q.get_nowait(cond=lambda e: e == 'match')
+        self.assertEqual(result, 'match')
+
+    def test_get_nowait_with_failing_cond_returns_none(self):
+        q = Queue(sim=self.sim)
+        q.put_nowait('item')
+        result = q.get_nowait(cond=lambda e: e == 'other')
+        self.assertIsNone(result)
+        self.assertEqual(len(q), 1)  # item still in queue
+
+    def test_get_nowait_vs_get_n_nowait_return_types(self):
+        q = Queue(sim=self.sim)
+        q.put_nowait('a')
+        q.put_nowait('b')
+        single = q.get_nowait()
+        listed = q.get_n_nowait()
+        self.assertNotIsInstance(single, list)
+        self.assertIsInstance(listed, list)
+
+    # ---- gget ---------------------------------------------------------------
+
+    def test_gget_returns_single_element_immediately(self):
+        results = []
+
+        def consumer():
+            item = yield from q.gget()
+            results.append(item)
+
+        q = Queue(sim=self.sim)
+        q.put_nowait('hello')
+        self.sim.schedule(0, consumer())
+        self.sim.run(5)
+        self.assertEqual(results, ['hello'])
+        self.assertNotIsInstance(results[0], list)
+
+    def test_gget_blocks_until_item_available(self):
+        results = []
+
+        def consumer():
+            item = yield from q.gget()
+            results.append(('got', self.sim.time, item))
+
+        def producer():
+            yield from self.sim.gwait(5)
+            q.put_nowait('deferred')
+
+        q = Queue(sim=self.sim)
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(results, [('got', 5, 'deferred')])
+
+    def test_gget_timeout_returns_none(self):
+        results = []
+
+        def consumer():
+            item = yield from q.gget(timeout=3)
+            results.append(item)
+
+        q = Queue(sim=self.sim)
+        self.sim.schedule(0, consumer())
+        self.sim.run(10)
+        self.assertEqual(results, [None])
+
+    def test_gget_with_cond(self):
+        '''gget wakes only when head satisfies cond.'''
+        results = []
+
+        def consumer():
+            item = yield from q.gget(cond=lambda e: e == 'wanted')
+            results.append(item)
+
+        def producer():
+            yield from self.sim.gwait(2)
+            q.put_nowait('skip')
+            yield from self.sim.gwait(2)
+            # remove 'skip' first so 'wanted' becomes head
+            q.get_nowait()
+            q.put_nowait('wanted')
+
+        q = Queue(sim=self.sim)
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(results, ['wanted'])
+
+    def test_gget_vs_gget_n_different_return_types(self):
+        results_single = []
+        results_list = []
+
+        def single_consumer():
+            item = yield from q.gget()
+            results_single.append(item)
+
+        def list_consumer():
+            items = yield from q.gget_n()
+            results_list.append(items)
+
+        q = Queue(sim=self.sim)
+        q.put_nowait('x')
+        q.put_nowait('y')
+        self.sim.schedule(0, single_consumer())
+        self.sim.schedule(0, list_consumer())
+        self.sim.run(5)
+        self.assertNotIsInstance(results_single[0], list)
+        self.assertIsInstance(results_list[0], list)
+
+    def test_multiple_gget_consumers_each_get_one(self):
+        order = []
+
+        def consumer(name):
+            item = yield from q.gget()
+            order.append((name, self.sim.time, item))
+
+        def producer():
+            yield from self.sim.gwait(5)
+            q.put_nowait('i1')
+            q.put_nowait('i2')
+            q.put_nowait('i3')
+
+        q = Queue(sim=self.sim)
+        self.sim.schedule(0, consumer('c1'))
+        self.sim.schedule(0, consumer('c2'))
+        self.sim.schedule(0, consumer('c3'))
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(len(order), 3)
+        for _, t, _ in order:
+            self.assertEqual(t, 5)
+
+    # ---- async get ---------------------------------------------------------
+
+    def test_async_get_returns_single_element(self):
+        results = []
+
+        async def consumer():
+            item = await q.get()
+            results.append(item)
+
+        q = Queue(sim=self.sim)
+        q.put_nowait('async_item')
+        self.sim.schedule(0, consumer())
+        self.sim.run(5)
+        self.assertEqual(results, ['async_item'])
+        self.assertNotIsInstance(results[0], list)
+
+    def test_async_get_blocks_until_item_available(self):
+        results = []
+
+        async def consumer():
+            item = await q.get()
+            results.append(('got', self.sim.time, item))
+
+        async def producer():
+            await self.sim.wait(4)
+            q.put_nowait('late')
+
+        q = Queue(sim=self.sim)
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(results, [('got', 4, 'late')])
+
+    def test_async_get_timeout_returns_none(self):
+        results = []
+
+        async def consumer():
+            item = await q.get(timeout=2)
+            results.append(item)
+
+        q = Queue(sim=self.sim)
+        self.sim.schedule(0, consumer())
+        self.sim.run(10)
+        self.assertEqual(results, [None])
+
+    def test_async_get_with_cond(self):
+        results = []
+
+        async def consumer():
+            item = await q.get(cond=lambda e: isinstance(e, int))
+            results.append(item)
+
+        async def producer():
+            await self.sim.wait(2)
+            q.put_nowait('string')
+            await self.sim.wait(1)
+            q.get_nowait()        # remove 'string' so int becomes head
+            q.put_nowait(42)
+
+        q = Queue(sim=self.sim)
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(results, [42])
 
 
 if __name__ == '__main__':

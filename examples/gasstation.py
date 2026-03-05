@@ -47,7 +47,7 @@ class Car(DSProcessComponent):
             print(f'{sim.time} {self} calling truck for the fuel...')
             TankTruck(sim=self.sim)
         print(f'{sim.time} {self} going to tank {liters_required} liters...')
-        yield from self.gget(fuel_pump, liters_required)
+        yield from self.gget_n(fuel_pump, liters_required)
         print(f'{sim.time} {self} starting to tank {liters_required} liters...')
         yield from self.sim.gwait(int(liters_required / REFUELING_SPEED)) # int is not needed
         print(f'{sim.time} {self} filled tanking of {liters_required} liters and leaving.')
@@ -60,7 +60,7 @@ class TankTruck(DSProcessComponent):
         yield from self.sim.gwait(TANK_TRUCK_TIME)
         amount = fuel_pump.capacity - fuel_pump.amount
         print(f'{sim.time} {self} at station, {fuel_pump.amount}/{fuel_pump.capacity} capacity, adding {amount} fuel...')
-        yield from self.gput(fuel_pump, amount)
+        yield from self.gput_n(fuel_pump, amount)
         print(f'{sim.time} {self} leaving station after {amount} of new fuel, filled to {fuel_pump.amount}.')
         
 

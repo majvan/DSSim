@@ -43,8 +43,7 @@ class Customer(sim.Component):
 class Clerk(sim.Component):
     def process(self):
         while True:
-            customer_list = yield from waiting_line.gget()  # get from the queue if available
-            # customer = customer_list[0]
+            customer = yield from waiting_line.gget()  # get from the queue if available
             yield from self.gwait(30)
 
 

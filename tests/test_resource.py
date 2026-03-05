@@ -1,0 +1,839 @@
+# Copyright 2023- majvan (majvan@gmail.com)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+'''
+Tests for Resource, Mutex, and ResourceMixin components.
+'''
+import unittest
+from dssim import DSSimulation
+from dssim.components.resource import Resource, Mutex, ResourceMixin
+
+
+# ---------------------------------------------------------------------------
+# Nowait variants (no simulation required)
+# ---------------------------------------------------------------------------
+
+class TestResourceNowait(unittest.TestCase):
+
+    def setUp(self):
+        self.sim = DSSimulation()
+        self.r = Resource(amount=5, capacity=10, sim=self.sim)
+
+    # ---- get_nowait / get_n_nowait -----------------------------------------
+
+    def test_get_nowait_takes_one(self):
+        result = self.r.get_nowait()
+        self.assertEqual(result, 1)
+        self.assertEqual(self.r.amount, 4)
+
+    def test_get_nowait_fails_when_empty(self):
+        r = Resource(amount=0, capacity=5, sim=self.sim)
+        result = r.get_nowait()
+        self.assertEqual(result, 0)
+        self.assertEqual(r.amount, 0)
+
+    def test_get_n_nowait_takes_n(self):
+        result = self.r.get_n_nowait(3)
+        self.assertEqual(result, 3)
+        self.assertEqual(self.r.amount, 2)
+
+    def test_get_n_nowait_fails_when_insufficient(self):
+        result = self.r.get_n_nowait(6)
+        self.assertEqual(result, 0)
+        self.assertEqual(self.r.amount, 5)
+
+    def test_get_n_nowait_default_amount_is_one(self):
+        result = self.r.get_n_nowait()
+        self.assertEqual(result, 1)
+        self.assertEqual(self.r.amount, 4)
+
+    def test_get_n_nowait_exact_available(self):
+        result = self.r.get_n_nowait(5)
+        self.assertEqual(result, 5)
+        self.assertEqual(self.r.amount, 0)
+
+    # ---- put_nowait / put_n_nowait -----------------------------------------
+
+    def test_put_nowait_adds_one(self):
+        result = self.r.put_nowait()
+        self.assertEqual(result, 1)
+        self.assertEqual(self.r.amount, 6)
+
+    def test_put_nowait_fails_when_full(self):
+        r = Resource(amount=10, capacity=10, sim=self.sim)
+        result = r.put_nowait()
+        self.assertEqual(result, 0)
+        self.assertEqual(r.amount, 10)
+
+    def test_put_n_nowait_adds_n(self):
+        result = self.r.put_n_nowait(3)
+        self.assertEqual(result, 3)
+        self.assertEqual(self.r.amount, 8)
+
+    def test_put_n_nowait_fails_when_would_exceed_capacity(self):
+        result = self.r.put_n_nowait(6)
+        self.assertEqual(result, 0)
+        self.assertEqual(self.r.amount, 5)
+
+    def test_put_n_nowait_fills_exactly(self):
+        result = self.r.put_n_nowait(5)
+        self.assertEqual(result, 5)
+        self.assertEqual(self.r.amount, 10)
+
+    # ---- init validation ---------------------------------------------------
+
+    def test_init_amount_exceeds_capacity_raises(self):
+        with self.assertRaises(ValueError):
+            Resource(amount=10, capacity=5, sim=self.sim)
+
+    def test_infinite_capacity_default(self):
+        r = Resource(sim=self.sim)
+        self.assertEqual(r.amount, 0)
+        self.assertEqual(r.capacity, float('inf'))
+
+    def test_put_n_nowait_large_amount_infinite_capacity(self):
+        r = Resource(amount=0, sim=self.sim)
+        result = r.put_n_nowait(1_000_000)
+        self.assertEqual(result, 1_000_000)
+        self.assertEqual(r.amount, 1_000_000)
+
+
+# ---------------------------------------------------------------------------
+# Blocking get — generator variants
+# ---------------------------------------------------------------------------
+
+class TestResourceGget(unittest.TestCase):
+
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    def _make(self, amount=0, capacity=float('inf')):
+        return Resource(amount=amount, capacity=capacity, sim=self.sim)
+
+    def test_gget_takes_one_immediately(self):
+        r = self._make(amount=3)
+        results = []
+
+        def consumer():
+            result = yield from r.gget()
+            results.append(result)
+
+        self.sim.schedule(0, consumer())
+        self.sim.run(5)
+        self.assertEqual(results, [1])
+        self.assertEqual(r.amount, 2)
+
+    def test_gget_blocks_until_available(self):
+        r = self._make(amount=0)
+        results = []
+
+        def consumer():
+            result = yield from r.gget()
+            results.append(('got', self.sim.time, result))
+
+        def producer():
+            yield from self.sim.gwait(5)
+            r.put_n_nowait(1)
+
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(results, [('got', 5, 1)])
+        self.assertEqual(r.amount, 0)
+
+    def test_gget_timeout(self):
+        r = self._make(amount=0)
+        results = []
+
+        def consumer():
+            result = yield from r.gget(timeout=3)
+            results.append(result)
+
+        self.sim.schedule(0, consumer())
+        self.sim.run(10)
+        self.assertEqual(results, [0])
+
+    def test_gget_n_takes_n_immediately(self):
+        r = self._make(amount=5)
+        results = []
+
+        def consumer():
+            result = yield from r.gget_n(amount=3)
+            results.append(result)
+
+        self.sim.schedule(0, consumer())
+        self.sim.run(5)
+        self.assertEqual(results, [3])
+        self.assertEqual(r.amount, 2)
+
+    def test_gget_n_blocks_until_enough_available(self):
+        r = self._make(amount=2)
+        results = []
+
+        def consumer():
+            result = yield from r.gget_n(amount=5)
+            results.append(('got', self.sim.time, result))
+
+        def producer():
+            yield from self.sim.gwait(4)
+            r.put_n_nowait(3)   # now 5 available
+
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(results, [('got', 4, 5)])
+        self.assertEqual(r.amount, 0)
+
+    def test_gget_n_timeout(self):
+        r = self._make(amount=1)
+        results = []
+
+        def consumer():
+            result = yield from r.gget_n(timeout=3, amount=5)
+            results.append(result)
+
+        self.sim.schedule(0, consumer())
+        self.sim.run(10)
+        self.assertEqual(results, [0])
+        self.assertEqual(r.amount, 1)  # unchanged
+
+    def test_gget_n_default_amount_is_one(self):
+        r = self._make(amount=3)
+        results = []
+
+        def consumer():
+            result = yield from r.gget_n()
+            results.append(result)
+
+        self.sim.schedule(0, consumer())
+        self.sim.run(5)
+        self.assertEqual(results, [1])
+        self.assertEqual(r.amount, 2)
+
+    def test_multiple_gget_consumers_serialized(self):
+        r = self._make(amount=0)
+        order = []
+
+        def consumer(name):
+            result = yield from r.gget()
+            order.append((name, self.sim.time))
+
+        def producer():
+            yield from self.sim.gwait(5)
+            r.put_nowait()
+            r.put_nowait()
+            r.put_nowait()
+
+        self.sim.schedule(0, consumer('c1'))
+        self.sim.schedule(0, consumer('c2'))
+        self.sim.schedule(0, consumer('c3'))
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(len(order), 3)
+        for _, t in order:
+            self.assertEqual(t, 5)
+
+
+# ---------------------------------------------------------------------------
+# Blocking get — async variants
+# ---------------------------------------------------------------------------
+
+class TestResourceAsyncGet(unittest.TestCase):
+
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    def _make(self, amount=0, capacity=float('inf')):
+        return Resource(amount=amount, capacity=capacity, sim=self.sim)
+
+    def test_get_takes_one_immediately(self):
+        r = self._make(amount=3)
+        results = []
+
+        async def consumer():
+            result = await r.get()
+            results.append(result)
+
+        self.sim.schedule(0, consumer())
+        self.sim.run(5)
+        self.assertEqual(results, [1])
+        self.assertEqual(r.amount, 2)
+
+    def test_get_blocks_until_available(self):
+        r = self._make(amount=0)
+        results = []
+
+        async def consumer():
+            result = await r.get()
+            results.append(('got', self.sim.time, result))
+
+        async def producer():
+            await self.sim.wait(5)
+            r.put_n_nowait(1)
+
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(results, [('got', 5, 1)])
+
+    def test_get_timeout(self):
+        r = self._make(amount=0)
+        results = []
+
+        async def consumer():
+            result = await r.get(timeout=3)
+            results.append(result)
+
+        self.sim.schedule(0, consumer())
+        self.sim.run(10)
+        self.assertEqual(results, [0])
+
+    def test_get_n_takes_n_immediately(self):
+        r = self._make(amount=5)
+        results = []
+
+        async def consumer():
+            result = await r.get_n(amount=4)
+            results.append(result)
+
+        self.sim.schedule(0, consumer())
+        self.sim.run(5)
+        self.assertEqual(results, [4])
+        self.assertEqual(r.amount, 1)
+
+    def test_get_n_blocks_until_enough(self):
+        r = self._make(amount=2)
+        results = []
+
+        async def consumer():
+            result = await r.get_n(amount=5)
+            results.append(('got', self.sim.time, result))
+
+        async def producer():
+            await self.sim.wait(4)
+            r.put_n_nowait(3)
+
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(results, [('got', 4, 5)])
+
+    def test_get_n_timeout(self):
+        r = self._make(amount=1)
+        results = []
+
+        async def consumer():
+            result = await r.get_n(timeout=3, amount=5)
+            results.append(result)
+
+        self.sim.schedule(0, consumer())
+        self.sim.run(10)
+        self.assertEqual(results, [0])
+
+
+# ---------------------------------------------------------------------------
+# Blocking put — generator variants
+# ---------------------------------------------------------------------------
+
+class TestResourceGput(unittest.TestCase):
+
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    def _make(self, amount=0, capacity=10):
+        return Resource(amount=amount, capacity=capacity, sim=self.sim)
+
+    def test_gput_adds_one_immediately(self):
+        r = self._make(amount=5)
+        results = []
+
+        def producer():
+            result = yield from r.gput()
+            results.append(result)
+
+        self.sim.schedule(0, producer())
+        self.sim.run(5)
+        self.assertEqual(results, [1])
+        self.assertEqual(r.amount, 6)
+
+    def test_gput_blocks_when_full(self):
+        r = self._make(amount=10, capacity=10)
+        results = []
+
+        def producer():
+            result = yield from r.gput()
+            results.append(('put', self.sim.time, result))
+
+        def consumer():
+            yield from self.sim.gwait(5)
+            r.get_nowait()   # free space
+
+        self.sim.schedule(0, producer())
+        self.sim.schedule(0, consumer())
+        self.sim.run(20)
+        self.assertEqual(results, [('put', 5, 1)])
+        self.assertEqual(r.amount, 10)
+
+    def test_gput_timeout(self):
+        r = self._make(amount=10, capacity=10)
+        results = []
+
+        def producer():
+            result = yield from r.gput(timeout=3)
+            results.append(result)
+
+        self.sim.schedule(0, producer())
+        self.sim.run(10)
+        self.assertEqual(results, [0])
+        self.assertEqual(r.amount, 10)
+
+    def test_gput_n_adds_n_immediately(self):
+        r = self._make(amount=3)
+        results = []
+
+        def producer():
+            result = yield from r.gput_n(amount=4)
+            results.append(result)
+
+        self.sim.schedule(0, producer())
+        self.sim.run(5)
+        self.assertEqual(results, [4])
+        self.assertEqual(r.amount, 7)
+
+    def test_gput_n_blocks_until_space(self):
+        r = self._make(amount=8, capacity=10)
+        results = []
+
+        def producer():
+            result = yield from r.gput_n(amount=5)  # needs 5 free slots, only 2 available
+            results.append(('put', self.sim.time, result))
+
+        def consumer():
+            yield from self.sim.gwait(4)
+            r.get_n_nowait(3)   # free 3 more slots (5 total free)
+
+        self.sim.schedule(0, producer())
+        self.sim.schedule(0, consumer())
+        self.sim.run(20)
+        self.assertEqual(results, [('put', 4, 5)])
+        self.assertEqual(r.amount, 10)
+
+    def test_gput_n_timeout(self):
+        r = self._make(amount=9, capacity=10)
+        results = []
+
+        def producer():
+            result = yield from r.gput_n(timeout=3, amount=5)
+            results.append(result)
+
+        self.sim.schedule(0, producer())
+        self.sim.run(10)
+        self.assertEqual(results, [0])
+        self.assertEqual(r.amount, 9)
+
+
+# ---------------------------------------------------------------------------
+# Blocking put — async variants
+# ---------------------------------------------------------------------------
+
+class TestResourceAsyncPut(unittest.TestCase):
+
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    def _make(self, amount=0, capacity=10):
+        return Resource(amount=amount, capacity=capacity, sim=self.sim)
+
+    def test_put_adds_one_immediately(self):
+        r = self._make(amount=5)
+        results = []
+
+        async def producer():
+            result = await r.put()
+            results.append(result)
+
+        self.sim.schedule(0, producer())
+        self.sim.run(5)
+        self.assertEqual(results, [1])
+        self.assertEqual(r.amount, 6)
+
+    def test_put_blocks_when_full(self):
+        r = self._make(amount=10, capacity=10)
+        results = []
+
+        async def producer():
+            result = await r.put()
+            results.append(('put', self.sim.time, result))
+
+        async def consumer():
+            await self.sim.wait(5)
+            r.get_nowait()
+
+        self.sim.schedule(0, producer())
+        self.sim.schedule(0, consumer())
+        self.sim.run(20)
+        self.assertEqual(results, [('put', 5, 1)])
+
+    def test_put_timeout(self):
+        r = self._make(amount=10, capacity=10)
+        results = []
+
+        async def producer():
+            result = await r.put(timeout=3)
+            results.append(result)
+
+        self.sim.schedule(0, producer())
+        self.sim.run(10)
+        self.assertEqual(results, [0])
+
+    def test_put_n_adds_n_immediately(self):
+        r = self._make(amount=3)
+        results = []
+
+        async def producer():
+            result = await r.put_n(amount=4)
+            results.append(result)
+
+        self.sim.schedule(0, producer())
+        self.sim.run(5)
+        self.assertEqual(results, [4])
+        self.assertEqual(r.amount, 7)
+
+    def test_put_n_blocks_until_space(self):
+        r = self._make(amount=8, capacity=10)
+        results = []
+
+        async def producer():
+            result = await r.put_n(amount=5)
+            results.append(('put', self.sim.time, result))
+
+        async def consumer():
+            await self.sim.wait(4)
+            r.get_n_nowait(3)
+
+        self.sim.schedule(0, producer())
+        self.sim.schedule(0, consumer())
+        self.sim.run(20)
+        self.assertEqual(results, [('put', 4, 5)])
+
+    def test_put_n_timeout(self):
+        r = self._make(amount=9, capacity=10)
+        results = []
+
+        async def producer():
+            result = await r.put_n(timeout=3, amount=5)
+            results.append(result)
+
+        self.sim.schedule(0, producer())
+        self.sim.run(10)
+        self.assertEqual(results, [0])
+
+
+# ---------------------------------------------------------------------------
+# Interplay: get and put wake each other
+# ---------------------------------------------------------------------------
+
+class TestResourceInterplay(unittest.TestCase):
+
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    def test_gget_woken_by_gput(self):
+        r = Resource(amount=0, capacity=10, sim=self.sim)
+        log = []
+
+        def consumer():
+            result = yield from r.gget_n(amount=3)
+            log.append(('got', self.sim.time, result))
+
+        def producer():
+            yield from self.sim.gwait(5)
+            yield from r.gput_n(amount=3)
+            log.append(('put', self.sim.time))
+
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(log[0], ('put', 5))
+        self.assertEqual(log[1], ('got', 5, 3))
+
+    def test_gput_woken_by_gget(self):
+        r = Resource(amount=10, capacity=10, sim=self.sim)
+        log = []
+
+        def producer():
+            result = yield from r.gput_n(amount=5)
+            log.append(('put', self.sim.time, result))
+
+        def consumer():
+            yield from self.sim.gwait(5)
+            yield from r.gget_n(amount=5)
+            log.append(('got', self.sim.time))
+
+        self.sim.schedule(0, producer())
+        self.sim.schedule(0, consumer())
+        self.sim.run(20)
+        self.assertEqual(log[0], ('got', 5))
+        self.assertEqual(log[1], ('put', 5, 5))
+
+    def test_get_and_get_n_independent(self):
+        '''get (1 unit) and get_n (N units) can coexist; each gets only what it asked for.'''
+        r = Resource(amount=0, capacity=10, sim=self.sim)
+        log = []
+
+        def single():
+            result = yield from r.gget()
+            log.append(('single', self.sim.time, result))
+
+        def multi():
+            result = yield from r.gget_n(amount=3)
+            log.append(('multi', self.sim.time, result))
+
+        def producer():
+            yield from self.sim.gwait(5)
+            r.put_n_nowait(4)
+
+        self.sim.schedule(0, single())
+        self.sim.schedule(0, multi())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(len(log), 2)
+        totals = sum(entry[2] for entry in log)
+        self.assertEqual(totals, 4)
+        self.assertEqual(r.amount, 0)
+
+
+# ---------------------------------------------------------------------------
+# Mutex
+# ---------------------------------------------------------------------------
+
+class TestMutex(unittest.TestCase):
+
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    def _make(self):
+        return Mutex(sim=self.sim)
+
+    def test_initial_state_unlocked(self):
+        m = self._make()
+        self.assertFalse(m.locked())
+        self.assertEqual(m.amount, 1)
+
+    def test_lock_and_release(self):
+        m = self._make()
+        results = []
+
+        async def process():
+            retval = await m.lock()
+            results.append(('locked', retval))
+            await self.sim.wait(5)
+            m.release()
+            results.append(('released', self.sim.time))
+
+        self.sim.schedule(0, process())
+        self.sim.run(10)
+        self.assertEqual(results[0], ('locked', 1))
+        self.assertEqual(results[1], ('released', 5))
+        self.assertFalse(m.locked())
+
+    def test_second_lock_blocks(self):
+        m = self._make()
+        log = []
+
+        async def first():
+            await m.lock()
+            log.append(('first locked', self.sim.time))
+            await self.sim.wait(5)
+            m.release()
+
+        async def second():
+            await self.sim.wait(1)
+            await m.lock()
+            log.append(('second locked', self.sim.time))
+
+        self.sim.schedule(0, first())
+        self.sim.schedule(0, second())
+        self.sim.run(20)
+        self.assertEqual(log[0], ('first locked', 0))
+        self.assertEqual(log[1], ('second locked', 5))
+
+    def test_lock_timeout(self):
+        m = self._make()
+        results = []
+
+        async def holder():
+            await m.lock()
+            await self.sim.wait(10)
+            m.release()
+
+        async def waiter():
+            await self.sim.wait(1)
+            retval = await m.lock(timeout=3)
+            results.append(retval)
+
+        self.sim.schedule(0, holder())
+        self.sim.schedule(0, waiter())
+        self.sim.run(20)
+        self.assertEqual(results, [0])  # timed out
+
+    def test_release_when_not_locked_is_noop(self):
+        m = self._make()
+        self.assertFalse(m.locked())
+        m.release()   # should not raise or change state
+        self.assertFalse(m.locked())
+
+
+# ---------------------------------------------------------------------------
+# ResourceMixin
+# ---------------------------------------------------------------------------
+
+class TestResourceMixin(unittest.TestCase):
+    '''ResourceMixin delegates to the underlying Resource methods.
+    Tested using plain ResourceMixin() instances with standalone generators
+    and coroutines to avoid DSProcessComponent singleton name collisions.
+    '''
+
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    def _make_resource(self, amount=5, capacity=10):
+        return Resource(amount=amount, capacity=capacity, sim=self.sim)
+
+    def test_gget_takes_one(self):
+        r = self._make_resource(amount=3)
+        mixin = ResourceMixin()
+        results = []
+
+        def consumer():
+            result = yield from mixin.gget(r)
+            results.append(result)
+
+        self.sim.schedule(0, consumer())
+        self.sim.run(5)
+        self.assertEqual(results, [1])
+        self.assertEqual(r.amount, 2)
+
+    def test_gget_n_takes_n(self):
+        r = self._make_resource(amount=5)
+        mixin = ResourceMixin()
+        results = []
+
+        def consumer():
+            result = yield from mixin.gget_n(r, amount=3)
+            results.append(result)
+
+        self.sim.schedule(0, consumer())
+        self.sim.run(5)
+        self.assertEqual(results, [3])
+        self.assertEqual(r.amount, 2)
+
+    def test_gput_adds_one(self):
+        r = self._make_resource(amount=5)
+        mixin = ResourceMixin()
+        results = []
+
+        def producer():
+            result = yield from mixin.gput(r)
+            results.append(result)
+
+        self.sim.schedule(0, producer())
+        self.sim.run(5)
+        self.assertEqual(results, [1])
+        self.assertEqual(r.amount, 6)
+
+    def test_gput_n_adds_n(self):
+        r = self._make_resource(amount=2)
+        mixin = ResourceMixin()
+        results = []
+
+        def producer():
+            result = yield from mixin.gput_n(r, amount=4)
+            results.append(result)
+
+        self.sim.schedule(0, producer())
+        self.sim.run(5)
+        self.assertEqual(results, [4])
+        self.assertEqual(r.amount, 6)
+
+    def test_put_nowait_adds_one(self):
+        r = self._make_resource(amount=5)
+        mixin = ResourceMixin()
+        mixin.put_nowait(r)
+        self.assertEqual(r.amount, 6)
+
+    def test_put_n_nowait_adds_n(self):
+        r = self._make_resource(amount=2)
+        mixin = ResourceMixin()
+        mixin.put_n_nowait(r, 3)
+        self.assertEqual(r.amount, 5)
+
+    def test_async_get(self):
+        r = self._make_resource(amount=3)
+        mixin = ResourceMixin()
+        results = []
+
+        async def consumer():
+            result = await mixin.get(r)
+            results.append(result)
+
+        self.sim.schedule(0, consumer())
+        self.sim.run(5)
+        self.assertEqual(results, [1])
+        self.assertEqual(r.amount, 2)
+
+    def test_async_get_n(self):
+        r = self._make_resource(amount=5)
+        mixin = ResourceMixin()
+        results = []
+
+        async def consumer():
+            result = await mixin.get_n(r, amount=3)
+            results.append(result)
+
+        self.sim.schedule(0, consumer())
+        self.sim.run(5)
+        self.assertEqual(results, [3])
+        self.assertEqual(r.amount, 2)
+
+    def test_async_put(self):
+        r = self._make_resource(amount=5)
+        mixin = ResourceMixin()
+        results = []
+
+        async def producer():
+            result = await mixin.put(r)
+            results.append(result)
+
+        self.sim.schedule(0, producer())
+        self.sim.run(5)
+        self.assertEqual(results, [1])
+        self.assertEqual(r.amount, 6)
+
+    def test_async_put_n(self):
+        r = self._make_resource(amount=2)
+        mixin = ResourceMixin()
+        results = []
+
+        async def producer():
+            result = await mixin.put_n(r, amount=4)
+            results.append(result)
+
+        self.sim.schedule(0, producer())
+        self.sim.run(5)
+        self.assertEqual(results, [4])
+        self.assertEqual(r.amount, 6)
+
+
+if __name__ == '__main__':
+    unittest.main()

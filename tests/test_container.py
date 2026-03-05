@@ -85,28 +85,28 @@ class TestContainerNowait(unittest.TestCase):
     def test_get_nowait_any(self):
         c = self._make()
         c.put_nowait('A')
-        result = c.get_nowait()
+        result = c.get_n_nowait()
         self.assertEqual(result, ['A'])
         self.assertEqual(len(c), 0)
 
     def test_get_nowait_specific_present(self):
         c = self._make()
         c.put_nowait('A', 'B')
-        result = c.get_nowait('B')
+        result = c.get_n_nowait('B')
         self.assertEqual(result, ['B'])
         self.assertIn('A', list(c))
 
     def test_get_nowait_specific_missing(self):
         c = self._make()
         c.put_nowait('A')
-        result = c.get_nowait('Z')
+        result = c.get_n_nowait('Z')
         self.assertEqual(result, [])
         self.assertEqual(len(c), 1)  # 'A' still present
 
     def test_get_nowait_multiple_specific(self):
         c = self._make()
         c.put_nowait('A', 'B', 'C')
-        result = c.get_nowait('A', 'C')
+        result = c.get_n_nowait('A', 'C')
         self.assertIn('A', result)
         self.assertIn('C', result)
         self.assertEqual(len(result), 2)
@@ -115,7 +115,7 @@ class TestContainerNowait(unittest.TestCase):
     def test_get_nowait_duplicate_decrements_count(self):
         c = self._make()
         c.put_nowait('X', 'X')
-        result = c.get_nowait('X')
+        result = c.get_n_nowait('X')
         self.assertEqual(result, ['X'])
         self.assertEqual(len(c), 1)  # one 'X' remains
 
@@ -154,7 +154,7 @@ class TestContainerBlockingGet(unittest.TestCase):
         results = []
 
         def consumer():
-            retval = yield from c.gget()
+            retval = yield from c.gget_n()
             results.append(('got', self.sim.time, retval))
 
         def producer():
@@ -172,7 +172,7 @@ class TestContainerBlockingGet(unittest.TestCase):
         results = []
 
         def consumer():
-            retval = yield from c.gget()
+            retval = yield from c.gget_n()
             results.append(retval)
 
         c = self._make()
@@ -185,7 +185,7 @@ class TestContainerBlockingGet(unittest.TestCase):
         results = []
 
         def consumer():
-            retval = yield from c.gget(timeout=3)
+            retval = yield from c.gget_n(timeout=3)
             results.append(retval)
 
         c = self._make()
@@ -199,7 +199,7 @@ class TestContainerBlockingGet(unittest.TestCase):
         results = []
 
         def consumer():
-            retval = yield from c.gget(float('inf'), 'B')
+            retval = yield from c.gget_n(float('inf'), 'B')
             results.append(('got', self.sim.time, retval))
 
         def producer():
@@ -220,7 +220,7 @@ class TestContainerBlockingGet(unittest.TestCase):
         results = []
 
         def consumer():
-            retval = yield from c.gget(4, 'missing')
+            retval = yield from c.gget_n(4, 'missing')
             results.append(retval)
 
         c = self._make()
@@ -234,7 +234,7 @@ class TestContainerBlockingGet(unittest.TestCase):
         results = []
 
         def consumer():
-            retval = yield from c.gget(float('inf'), 'X', 'X', all_or_nothing=False)
+            retval = yield from c.gget_n(float('inf'), 'X', 'X', all_or_nothing=False)
             results.append(('got', self.sim.time, retval))
 
         def producer():
@@ -256,7 +256,7 @@ class TestContainerBlockingGet(unittest.TestCase):
         results = []
 
         async def consumer():
-            retval = await c.get()
+            retval = await c.get_n()
             results.append(('got', self.sim.time, retval))
 
         async def producer():
@@ -273,7 +273,7 @@ class TestContainerBlockingGet(unittest.TestCase):
         results = []
 
         async def consumer():
-            retval = await c.get(float('inf'), 'target')
+            retval = await c.get_n(float('inf'), 'target')
             results.append(retval)
 
         async def producer():
@@ -291,7 +291,7 @@ class TestContainerBlockingGet(unittest.TestCase):
         results = []
 
         async def consumer():
-            retval = await c.get(timeout=2)
+            retval = await c.get_n(timeout=2)
             results.append(retval)
 
         c = self._make()
@@ -385,7 +385,7 @@ class TestContainerSignalRouting(unittest.TestCase):
         results = []
 
         def consumer():
-            retval = yield from c.gget()
+            retval = yield from c.gget_n()
             results.append(('got', self.sim.time, retval))
 
         def producer():
@@ -403,7 +403,7 @@ class TestContainerSignalRouting(unittest.TestCase):
         results = []
 
         def consumer():
-            retval = yield from c.gget(float('inf'), 'special')
+            retval = yield from c.gget_n(float('inf'), 'special')
             results.append(('got', self.sim.time, retval))
 
         def producer():
@@ -421,11 +421,11 @@ class TestContainerSignalRouting(unittest.TestCase):
         results = []
 
         def any_consumer():
-            retval = yield from c.gget()
+            retval = yield from c.gget_n()
             results.append(('any', self.sim.time))
 
         def specific_consumer():
-            retval = yield from c.gget(float('inf'), 'B')
+            retval = yield from c.gget_n(float('inf'), 'B')
             results.append(('specific', self.sim.time))
 
         def producer():
@@ -476,7 +476,7 @@ class TestContainerSignalRouting(unittest.TestCase):
         results = []
 
         def consumer(name):
-            retval = yield from c.gget()
+            retval = yield from c.gget_n()
             results.append((name, self.sim.time, retval))
 
         def producer():
@@ -546,7 +546,7 @@ class TestContainerWaitMethods(unittest.TestCase):
 
         def actor():
             yield from self.sim.gwait(4)
-            c.get_nowait(obj)
+            c.get_n_nowait(obj)
 
         c = self._make()
         self.sim.schedule(0, watcher())
@@ -619,6 +619,159 @@ class TestContainerWaitMethods(unittest.TestCase):
         self.sim.run(5)
         self.assertEqual(results, [0])
 
+
+
+# ---------------------------------------------------------------------------
+# Single-item API: get_nowait / gget / get
+# ---------------------------------------------------------------------------
+
+class TestContainerSingleItemGet(unittest.TestCase):
+    '''
+    Container.get_nowait() / .gget() / .get() return a single element (not
+    wrapped in a list), in contrast to get_n_nowait / gget_n / get_n which
+    always return a list.
+    '''
+
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    def _make(self, capacity=None):
+        return Container(capacity=capacity, sim=self.sim)
+
+    # ---- get_nowait --------------------------------------------------------
+
+    def test_get_nowait_returns_single_element(self):
+        c = self._make()
+        c.put_nowait('A')
+        result = c.get_nowait()
+        self.assertEqual(result, 'A')
+        self.assertNotIsInstance(result, list)
+        self.assertEqual(len(c), 0)
+
+    def test_get_nowait_returns_none_when_empty(self):
+        c = self._make()
+        result = c.get_nowait()
+        self.assertIsNone(result)
+
+    def test_get_nowait_multiple_calls_fifo(self):
+        c = self._make()
+        c.put_nowait('A', 'B', 'C')
+        results = [c.get_nowait() for _ in range(3)]
+        # Container is an unordered set; just verify we got three distinct items
+        self.assertEqual(sorted(results), ['A', 'B', 'C'])
+        self.assertEqual(len(c), 0)
+
+    # ---- gget ---------------------------------------------------------------
+
+    def test_gget_returns_single_element_immediately(self):
+        results = []
+
+        def consumer():
+            item = yield from c.gget()
+            results.append(item)
+
+        c = self._make()
+        c.put_nowait('hello')
+        self.sim.schedule(0, consumer())
+        self.sim.run(5)
+        self.assertEqual(results, ['hello'])
+        self.assertNotIsInstance(results[0], list)
+
+    def test_gget_blocks_until_item_added(self):
+        results = []
+
+        def consumer():
+            item = yield from c.gget()
+            results.append(('got', self.sim.time, item))
+
+        def producer():
+            yield from self.sim.gwait(5)
+            c.put_nowait('deferred')
+
+        c = self._make()
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(results, [('got', 5, 'deferred')])
+
+    def test_gget_timeout_returns_none(self):
+        results = []
+
+        def consumer():
+            item = yield from c.gget(timeout=3)
+            results.append(item)
+
+        c = self._make()
+        self.sim.schedule(0, consumer())
+        self.sim.run(10)
+        self.assertEqual(results, [None])
+
+    def test_gget_vs_gget_n_different_return_types(self):
+        '''gget returns a bare element; gget_n wraps in list.'''
+        single_results = []
+        list_results = []
+
+        def single_consumer():
+            item = yield from c.gget()
+            single_results.append(item)
+
+        def list_consumer():
+            items = yield from c.gget_n()
+            list_results.append(items)
+
+        c = self._make()
+        c.put_nowait('x')
+        c.put_nowait('y')
+        self.sim.schedule(0, single_consumer())
+        self.sim.schedule(0, list_consumer())
+        self.sim.run(5)
+        self.assertNotIsInstance(single_results[0], list)
+        self.assertIsInstance(list_results[0], list)
+
+    # ---- async get ---------------------------------------------------------
+
+    def test_async_get_returns_single_element(self):
+        results = []
+
+        async def consumer():
+            item = await c.get()
+            results.append(item)
+
+        c = self._make()
+        c.put_nowait('async_item')
+        self.sim.schedule(0, consumer())
+        self.sim.run(5)
+        self.assertEqual(results, ['async_item'])
+        self.assertNotIsInstance(results[0], list)
+
+    def test_async_get_blocks_until_item_added(self):
+        results = []
+
+        async def consumer():
+            item = await c.get()
+            results.append(('got', self.sim.time, item))
+
+        async def producer():
+            await self.sim.wait(4)
+            c.put_nowait('late')
+
+        c = self._make()
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(results, [('got', 4, 'late')])
+
+    def test_async_get_timeout_returns_none(self):
+        results = []
+
+        async def consumer():
+            item = await c.get(timeout=2)
+            results.append(item)
+
+        c = self._make()
+        self.sim.schedule(0, consumer())
+        self.sim.run(10)
+        self.assertEqual(results, [None])
 
 
 if __name__ == '__main__':

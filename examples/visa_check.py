@@ -74,7 +74,7 @@ class VisaCheck(DSComponent):
             if event is None:
                 print(f'\033[0;31m{sim.time:<5} {self}: No person in the queue, closing.\033[0m')
                 return
-            person = event[0]['person']
+            person = event['person']
             person.abort_waiting()  # abort his waiting process
             busy = randint(2, 6) if person.info == 'EU' else randint (5, 15)  # persons without EU visa take longer
 

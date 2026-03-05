@@ -283,7 +283,7 @@ class Container(DSStatefulComponent, SignalMixin):
             self._fire_changed()
         return retval
 
-    async def get(self, timeout: TimeType = float('inf'), *obj: EventType, all_or_nothing: bool = True, **policy_params: Any) -> Optional[List[EventType]]:
+    async def get_n(self, timeout: TimeType = float('inf'), *obj: EventType, all_or_nothing: bool = True, **policy_params: Any) -> Optional[List[EventType]]:
         ''' Get requested objects from container.
         @param: all_or_nothing if True, it blocks till all the objects will be in the container and returns them (or timeout)
                                if False, it continuosly grabs the requested objects when available until all collected; it returns collected items
@@ -294,13 +294,13 @@ class Container(DSStatefulComponent, SignalMixin):
                 with self.sim.consume(self.tx_changed, **policy_params):
                     element = await self.sim.check_and_wait(timeout, cond=lambda e: all(el in self.container.keys() for el in obj))  # wait while first element does not match the cond
                     if element is not None:
-                        retval = self.get_nowait(*obj)
+                        retval = self.get_n_nowait(*obj)
             else:
                 with self.sim.consume(self.tx_nempty, **policy_params):
                     # get any object first
                     element = await self.sim.check_and_wait(timeout, cond=lambda e: self.size > 0)  # wait while first element does not match the cond
                     if element is not None:
-                        retval = self.get_nowait()
+                        retval = self.get_n_nowait()
         elif len(obj) > 0:
             retval = []
             abs_timeout = self.sim.to_abs_time(timeout)
@@ -309,14 +309,25 @@ class Container(DSStatefulComponent, SignalMixin):
                     element = await self.sim.check_and_wait(timeout, cond=lambda e: any(el in self.container.keys() for el in obj))
                 if element is None:
                     break
-                retval += self.get_nowait(*obj)
+                retval += self.get_n_nowait(*obj)
                 if len(retval) == len(obj):
                     break
         else:
             retval = []
         return retval
 
-    def gget(self, timeout: TimeType = float('inf'), *obj: EventType, all_or_nothing: bool = True, **policy_params: Any) -> Generator[EventType, Optional[List[EventType]], Optional[List[EventType]]]:
+    async def get(self, timeout: TimeType = float('inf'), **policy_params: Any) -> Optional[List[EventType]]:
+        ''' Simplified version of get_n => gets any first object '''
+        with self.sim.consume(self.tx_nempty, **policy_params):
+            retval = await self.sim.check_and_wait(timeout, cond=lambda e: self.size > 0)
+            if retval is not None:
+                el = next(iter(self.container.keys()))
+                retval = self._pop_element(el)
+                self.size -= 1
+                self._fire_changed()
+        return retval
+
+    def gget_n(self, timeout: TimeType = float('inf'), *obj: EventType, all_or_nothing: bool = True, **policy_params: Any) -> Generator[EventType, Optional[List[EventType]], Optional[List[EventType]]]:
         ''' Get requested objects from container.
         @param: all_or_nothing if True, it blocks till all the objects will be in the container and returns them (or timeout)
                                if False, it continuosly grabs the requested objects when available until all collected; it returns collected items
@@ -327,13 +338,13 @@ class Container(DSStatefulComponent, SignalMixin):
                 with self.sim.consume(self.tx_changed, **policy_params):
                     element = yield from self.sim.check_and_gwait(timeout, cond=lambda e: all(el in self.container.keys() for el in obj))  # wait while first element does not match the cond
                     if element is not None:
-                        retval = self.get_nowait(*obj)
+                        retval = self.get_n_nowait(*obj)
             else:
                 with self.sim.consume(self.tx_nempty, **policy_params):
                     # get any object first
                     element = yield from self.sim.check_and_gwait(timeout, cond=lambda e: self.size > 0)  # wait while first element does not match the cond
                     if element is not None:
-                        retval = self.get_nowait()
+                        retval = self.get_n_nowait()
         elif len(obj) > 0:
             retval = []
             abs_timeout = self.sim.to_abs_time(timeout)
@@ -342,11 +353,22 @@ class Container(DSStatefulComponent, SignalMixin):
                     element = yield from self.sim.check_and_gwait(timeout, cond=lambda e: any(el in self.container.keys() for el in obj))
                 if element is None:
                     break
-                retval += self.get_nowait(*obj)
+                retval += self.get_n_nowait(*obj)
                 if len(retval) == len(obj):
                     break
         else:
             retval = []
+        return retval
+
+    def gget(self, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, Optional[EventType], Optional[EventType]]:
+        ''' Simplified version of gget_n => gets any first object; return the object '''
+        with self.sim.consume(self.tx_nempty, **policy_params):
+            retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e: self.size > 0)
+            if retval is not None:
+                el = next(iter(self.container.keys()))
+                retval = self._pop_element(el)
+                self.size -= 1
+                self._fire_changed()
         return retval
 
     def _get_tx_endpoint(self, cond):
@@ -479,7 +501,7 @@ class Queue(DSStatefulComponent, SignalMixin):
 
     # ---- get side ----------------------------------------------------------
 
-    def get_nowait(self, amount: int = 1, cond: CondType = AlwaysTrue) -> Optional[List[EventType]]:
+    def get_n_nowait(self, amount: int = 1, cond: CondType = AlwaysTrue) -> Optional[List[EventType]]:
         '''Get item(s) from buffer immediately.
 
         Returns a list of *amount* items when available and *cond* passes for
@@ -492,7 +514,16 @@ class Queue(DSStatefulComponent, SignalMixin):
             return retval
         return None
 
-    async def get(self, timeout: TimeType = float('inf'), amount: int =1, cond: CondType = AlwaysTrue, **policy_params: Any) -> Optional[List[EventType]]:
+    def get_nowait(self, cond: CondType = AlwaysTrue) -> Optional[List[EventType]]:
+        '''A version of get_n_nowait which does not return a list, but rather one element.'''
+        if len(self._buffer) >= 1 and cond(self._buffer.peek()):
+            retval = self._buffer.dequeue()
+            self._fire_nfull()
+            self._fire_changed()
+            return retval
+        return None
+
+    async def get_n(self, timeout: TimeType = float('inf'), amount: int =1, cond: CondType = AlwaysTrue, **policy_params: Any) -> Optional[List[EventType]]:
         '''Get item(s) from buffer, waiting up to *timeout* if not available.'''
         tx = self._get_tx_endpoint(cond)
         if cond is AlwaysTrue:
@@ -508,7 +539,23 @@ class Queue(DSStatefulComponent, SignalMixin):
         self._fire_changed()
         return retval
 
-    def gget(self, timeout: TimeType = float('inf'), amount: int = 1, cond: CondType = AlwaysTrue, **policy_params: Any) -> Generator[EventType, Optional[List[EventType]], Optional[List[EventType]]]:
+    async def get(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, **policy_params: Any) -> Optional[List[EventType]]:
+        '''A version of get_n which does not return a list, but rather one element.'''
+        tx = self._get_tx_endpoint(cond)
+        if cond is AlwaysTrue:
+            check = lambda _: len(self._buffer) >= 1
+        else:
+            check = lambda _: len(self._buffer) >= 1 and cond(self._buffer.peek())
+        with self.sim.consume(tx, **policy_params):
+            element = await self.sim.check_and_wait(timeout, cond=check)
+        if element is None:
+            return None
+        retval = self._buffer.dequeue()
+        self._fire_nfull()
+        self._fire_changed()
+        return retval
+
+    def gget_n(self, timeout: TimeType = float('inf'), amount: int = 1, cond: CondType = AlwaysTrue, **policy_params: Any) -> Generator[EventType, Optional[List[EventType]], Optional[List[EventType]]]:
         '''Get item(s) from buffer (generator version), waiting up to *timeout* if not available.'''
         tx = self._get_tx_endpoint(cond)
         if cond is AlwaysTrue:
@@ -520,6 +567,22 @@ class Queue(DSStatefulComponent, SignalMixin):
         if element is None:
             return None
         retval = [self._buffer.dequeue() for _ in range(amount)]
+        self._fire_nfull()
+        self._fire_changed()
+        return retval
+
+    def gget(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, **policy_params: Any) -> Generator[EventType, Optional[EventType], Optional[EventType]]:
+        '''A version of gget_n which does not return a list, but rather one element.'''
+        tx = self._get_tx_endpoint(cond)
+        if cond is AlwaysTrue:
+            check = lambda _: len(self._buffer) >= 1
+        else:
+            check = lambda _: len(self._buffer) >= 1 and cond(self._buffer.peek())
+        with self.sim.consume(tx, **policy_params):
+            element = yield from self.sim.check_and_gwait(timeout, cond=check)
+        if element is None:
+            return None
+        retval = self._buffer.dequeue()
         self._fire_nfull()
         self._fire_changed()
         return retval
@@ -626,36 +689,20 @@ class ContainerMixin:
 
     async def pop(self: Any, container: Union[Queue, Container], timeout: TimeType = float('inf'), **policy_params: Any) -> Optional[EventType]:
         try:
-            elements = await container.get(timeout, **policy_params)
-            if elements is None:
-                retval = None
-            else:
-                assert len(elements) == 1
-                retval = elements[0]
+            retval = await container.get(timeout, **policy_params)
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
 
     def gpop(self: Any, container: Union[Queue, Container], timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         try:
-            elements = yield from container.gget(timeout, **policy_params)
-            if elements is None:
-                retval = None
-            else:
-                assert len(elements) == 1
-                retval = elements[0]
+            retval = yield from container.gget(timeout, **policy_params)
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
 
     def pop_nowait(self: Any, container: Union[Queue, Container]) -> EventType:
-        elements = container.get_nowait()
-        if elements is None:
-            retval = None
-        else:
-            assert len(elements) == 1
-            retval = elements[0]
-        return retval
+        return container.get_nowait()
 
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types

@@ -43,7 +43,12 @@ class Resource(DSStatefulComponent):
         self.amount = amount
         self.capacity = capacity
 
-    def put_nowait(self, amount: NumericType) -> NumericType:
+    def put_nowait(self) -> NumericType:
+        ''' Put 1 unit into the resource pool immediately. '''
+        return self.put_n_nowait(1)
+
+    def put_n_nowait(self, amount: NumericType) -> NumericType:
+        ''' Put amount units into the resource pool immediately. '''
         if self.amount + amount > self.capacity:
             retval: NumericType = 0
         else:
@@ -52,8 +57,12 @@ class Resource(DSStatefulComponent):
             retval = amount
         return retval
 
-    async def put(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
-        ''' Put amount into the resource pool.  '''
+    async def put(self, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+        ''' Put 1 unit into the resource pool, waiting if at capacity. '''
+        return await self.put_n(timeout, 1, **policy_params)
+
+    async def put_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
+        ''' Put amount units into the resource pool, waiting if at capacity. '''
         with self.sim.consume(self.tx_changed, **policy_params):
             obj = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
         if obj is None:
@@ -64,8 +73,12 @@ class Resource(DSStatefulComponent):
             retval = amount
         return retval
 
-    def gput(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
-        ''' Put amount into the resource pool.  '''
+    def gput(self, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        ''' Put 1 unit into the resource pool (generator version), waiting if at capacity. '''
+        return (yield from self.gput_n(timeout, 1, **policy_params))
+
+    def gput_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        ''' Put amount units into the resource pool (generator version), waiting if at capacity. '''
         with self.sim.consume(self.tx_changed, **policy_params):
             obj = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
         if obj is None:
@@ -76,7 +89,12 @@ class Resource(DSStatefulComponent):
             retval = amount
         return retval
 
-    def get_nowait(self, amount: NumericType = 1):
+    def get_nowait(self) -> NumericType:
+        ''' Get 1 unit from the resource pool immediately. '''
+        return self.get_n_nowait(1)
+
+    def get_n_nowait(self, amount: NumericType = 1) -> NumericType:
+        ''' Get amount units from the resource pool immediately. '''
         if amount > self.amount:
             retval: NumericType = 0
         else:
@@ -85,8 +103,12 @@ class Resource(DSStatefulComponent):
             retval = amount
         return retval
 
-    async def get(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
-        ''' Get resource. If the resource has not enough amount, wait to have enough requested amount. '''
+    async def get(self, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+        ''' Get 1 unit from the resource pool, waiting if not available. '''
+        return await self.get_n(timeout, 1, **policy_params)
+
+    async def get_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
+        ''' Get amount units from the resource pool, waiting if not available. '''
         with self.sim.consume(self.tx_changed, **policy_params):
             obj = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount >= amount)
         if obj is None:
@@ -97,8 +119,12 @@ class Resource(DSStatefulComponent):
             retval = amount
         return retval
 
-    def gget(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
-        ''' Get resource. If the resource has not enough amount, wait to have enough requested amount. '''
+    def gget(self, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        ''' Get 1 unit from the resource pool (generator version), waiting if not available. '''
+        return (yield from self.gget_n(timeout, 1, **policy_params))
+
+    def gget_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        ''' Get amount units from the resource pool (generator version), waiting if not available. '''
         with self.sim.consume(self.tx_changed, **policy_params):
             obj = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount >= amount)
         if obj is None:
@@ -133,7 +159,7 @@ class Mutex(Resource):
 
     def release(self):
         if self.amount == 0:
-            return self.put_nowait(1)
+            return self.put_nowait()
 
     async def __aenter__(self):
         if self.context_manager_timeout is None:
@@ -159,25 +185,35 @@ class Mutex(Resource):
 
 # In the following, self is in fact of type DSProcessComponent, but PyLance makes troubles with variable types
 class ResourceMixin:
-    async def get(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
-        retval = await resource.get(timeout, amount, **policy_params)
-        return retval
-            
-    def gget(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
-        retval = yield from resource.gget(timeout, amount, **policy_params)
-        return retval
-            
-    async def put(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
-        retval = await resource.put(timeout, amount, **policy_params)
-        return retval
+    async def get(self: Any, resource: Resource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+        return await resource.get(timeout, **policy_params)
 
-    def gput(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
-        retval = yield from resource.gput(timeout, amount, **policy_params)
-        return retval
-    
-    def put_nowait(self: Any, resource: Resource, amount: NumericType = 1) -> NumericType:
-        retval = resource.put_nowait(amount)
-        return retval
+    def gget(self: Any, resource: Resource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        return (yield from resource.gget(timeout, **policy_params))
+
+    async def get_n(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+        return await resource.get_n(timeout, amount, **policy_params)
+
+    def gget_n(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        return (yield from resource.gget_n(timeout, amount, **policy_params))
+
+    async def put(self: Any, resource: Resource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+        return await resource.put(timeout, **policy_params)
+
+    def gput(self: Any, resource: Resource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        return (yield from resource.gput(timeout, **policy_params))
+
+    async def put_n(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+        return await resource.put_n(timeout, amount, **policy_params)
+
+    def gput_n(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        return (yield from resource.gput_n(timeout, amount, **policy_params))
+
+    def put_nowait(self: Any, resource: Resource) -> NumericType:
+        return resource.put_nowait()
+
+    def put_n_nowait(self: Any, resource: Resource, amount: NumericType = 1) -> NumericType:
+        return resource.put_n_nowait(amount)
 
 
 
