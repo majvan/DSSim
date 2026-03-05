@@ -70,11 +70,11 @@ class VisaCheck(DSComponent):
             except Exception as e:
                 pass
             print(f'{self.sim.time:<5} {self}: Waiting for a person; first one is {first_person}')
-            event = yield from self.queue.gget(cond=lambda e:e['person'].info in self.info, timeout=self.max_waiting_time)
+            event = yield from self.queue.gget1(cond=lambda e:e['person'].info in self.info, timeout=self.max_waiting_time)
             if event is None:
                 print(f'\033[0;31m{sim.time:<5} {self}: No person in the queue, closing.\033[0m')
                 return
-            person = event[0]['person']
+            person = event['person']
             person.abort_waiting()  # abort his waiting process
             busy = randint(2, 6) if person.info == 'EU' else randint (5, 15)  # persons without EU visa take longer
 
