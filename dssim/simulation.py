@@ -19,7 +19,9 @@ import sys
 import inspect
 from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Optional, overload, TYPE_CHECKING
 from dssim.timequeue import TimeQueue, ZeroTimeQueue
-from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, CondType, StackedCond, DSComponentSingleton, AlwaysFalse
+from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, CondType, StackedCond, DSComponentSingleton, AlwaysFalse, ISubscriber
+
+
 from dssim.pubsub import DSConsumer, DSCallback, void_consumer, SimPubsubMixin
 from dssim.future import DSFuture, SimFutureMixin
 from dssim.process import DSProcessType, DSProcess, SimProcessMixin
@@ -135,7 +137,7 @@ class DSSimulation(DSComponentSingleton,
             self.schedule_event(time, None, process)
         return process
 
-    def send_object(self, consumer: DSConsumer, event: EventType) -> EventType:
+    def send_object(self, consumer: ISubscriber, event: EventType) -> EventType:
         ''' Send an event object to a consumer. Return value from the consumer. '''
 
         retval: EventType = False
@@ -187,21 +189,21 @@ class DSSimulation(DSComponentSingleton,
         retval = self.send_object(consumer, event)
         return retval
 
-    def signal(self, process: DSConsumer, event: EventType, time: TimeType = 0) -> EventType:
+    def signal(self, process: ISubscriber, event: EventType, time: TimeType = 0) -> EventType:
         ''' Schedules an event object into timequeue. Finally the target process will be signalled. '''
         time = self._compute_time(time)
         consumer = process if process is not None else self._parent_process  # schedule to a process or to itself
         self.time_queue.add_element(time, (consumer, event))
         return event
 
-    def schedule_event(self, time: TimeType, event: EventType, consumer: Optional[DSConsumer] = None) -> EventType:
+    def schedule_event(self, time: TimeType, event: EventType, consumer: Optional[ISubscriber] = None) -> EventType:
         ''' Schedules an event object into timequeue. Finally the target process will be signalled. '''
         time = self._compute_time(time)
         consumer = consumer or self._parent_process  # schedule to a process or to itself
         self.time_queue.add_element(time, (consumer, event))
         return event
 
-    def schedule_event_now(self, event: EventType, consumer: Optional[DSConsumer] = None) -> SchedulableType:
+    def schedule_event_now(self, event: EventType, consumer: Optional[ISubscriber] = None) -> SchedulableType:
         ''' Schedules an event object onto a special queue for fast processing. '''
         consumer = consumer or self._parent_process  # schedule to a process or to itself
         self.now_queue.append((consumer, event))

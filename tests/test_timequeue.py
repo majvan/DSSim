@@ -15,8 +15,7 @@
 Tests for timequeue module
 '''
 import unittest
-from dssim.timequeue import TimeQueue, ZeroTimeQueue
-from dssim.pubsub import void_consumer
+from dssim.timequeue import TimeQueue, ZeroTimeQueue, _void_subscriber
 
 class TestTimeQueue(unittest.TestCase):
     ''' Test the time queue class behavior '''
@@ -43,7 +42,7 @@ class TestTimeQueue(unittest.TestCase):
         self.assertEqual((time, element), (0.123, 'An element'))
         self.assertEqual(self._get_len(), (0, 0, 0))
         time, element = self.tq.get0()
-        self.assertEqual((time, element), (float("inf"), (void_consumer, None)))
+        self.assertEqual((time, element), (float("inf"), (_void_subscriber, None)))
 
     def test2_insert(self):
         ''' Test inserting an event '''

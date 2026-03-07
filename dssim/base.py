@@ -15,7 +15,7 @@
 The base classes / intefaces / mixin for dssim framework.
 '''
 from __future__ import annotations
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from typing import Any, Tuple, Callable, Union, Optional, Generator, TYPE_CHECKING
 
 
@@ -40,6 +40,12 @@ class DSEvent:
 
 EventType = Union[None, dict, Exception, DSEvent, Any,]
 EventRetType = Optional[bool]
+
+
+class ISubscriber(ABC):
+    ''' Minimal interface for objects that receive simulation events. '''
+    @abstractmethod
+    def send(self, event: EventType) -> EventRetType: ...
 
 
 class ICondition:

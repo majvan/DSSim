@@ -22,7 +22,7 @@ Consumer: an object which takes signal from producer and then stops
 from abc import abstractmethod
 from enum import IntEnum
 from typing import List, Dict, Any, Type, Generator, Callable, Tuple, Iterator, TYPE_CHECKING
-from dssim.base import TimeType, CondType, StackedCond, DSComponent, DSEvent, EventType, EventRetType, SignalMixin, AlwaysTrue, AlwaysFalse
+from dssim.base import TimeType, CondType, StackedCond, DSComponent, DSEvent, EventType, EventRetType, SignalMixin, AlwaysTrue, AlwaysFalse, ISubscriber
 
 
 if TYPE_CHECKING:
@@ -58,7 +58,7 @@ def TrackEvent(fcn):
     return api
 
 
-class DSConsumer(DSComponent):
+class DSConsumer(DSComponent, ISubscriber):
     def __init__(self, *args, **kwargs):
         super().__init__(self, *args, **kwargs)
         self.create_metadata(**kwargs)

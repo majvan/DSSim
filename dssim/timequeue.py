@@ -18,15 +18,19 @@ The queue class also maintains current absolute time.
 '''
 from typing import List, Tuple, Union, Callable, TYPE_CHECKING
 from bisect import bisect_right
-from dssim.base import EventType
-from dssim.pubsub import void_consumer
+from dssim.base import EventType, ISubscriber
 from collections import deque
 
-if TYPE_CHECKING:
-    from dssim.pubsub import DSConsumer
-
 TimeType = float
-ElementType = Tuple["DSConsumer", Union[EventType, "DSConsumer"]]
+ElementType = Tuple[ISubscriber, Union[EventType, ISubscriber]]
+
+
+class _VoidSubscriber:
+    ''' Sentinel subscriber returned by get0() when the queue is empty. '''
+    def send(self, event: EventType) -> None:
+        raise RuntimeError('A void subscriber is never expected to be called.')
+
+_void_subscriber = _VoidSubscriber()
 
 
 class ZeroTimeQueue(deque):
@@ -65,7 +69,7 @@ class TimeQueue:
         # If there is nothing in the queue, report virtual None object in the inifinite time.
         # Note: another solution would be to add this virtual element into the queue. In that
         # case the bisect function would take a little more time when adding an element.
-        return float("inf"), (void_consumer, None)
+        return float("inf"), (_void_subscriber, None)
 
     def pop(self) -> Tuple[TimeType, ElementType]:
         ''' Pop the first element from the queue and return it to the caller. '''
