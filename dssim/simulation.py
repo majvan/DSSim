@@ -235,32 +235,6 @@ class DSSimulation(DSComponentSingleton,
                 self.time_queue.delete_val((self._parent_process, None))
         return event
 
-    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
-        ''' Wait for an event from producer for max. timeout time. The criteria which events to be
-        accepted is given by cond. An accepted event returns from the wait function. An event which
-        causes cond to be False is ignored and the function is waiting.
-        '''
-        retval = yield from self._parent_process.gwait(timeout, cond, val)
-        return retval
-
-    def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
-        # This function can be used to run a pre-check for such conditions, which are
-        # invariant to the passed event, for instance to check for a state of an object
-        # so if the state matches, it returns immediately
-        # Otherwise it jumps to the waiting process.
-        conds = self._parent_process.meta.cond
-        # Set the condition object (lambda / object / ...) in the process metadata
-        conds.push(cond)
-        try:
-            signaled, event = conds.check(self._TestObject())
-            if not signaled:
-                event = yield from self._gwait_for_event(timeout, val)
-            else:
-                event = conds.cond_value()
-        finally:
-            conds.pop()
-        return event
-
     async def _wait_for_event(self, timeout: TimeType, val: EventRetType = None) -> EventType:
         # Re-compute abs/relative time to abs for the timeout
         time = self._compute_time(timeout)
@@ -285,32 +259,6 @@ class DSSimulation(DSComponentSingleton,
             if event is not None and time != float('inf'):
                 # If we terminated before timeout and the timeout event is on time queue- remove it
                 self.time_queue.delete_val((self._parent_process, None))
-        return event
-
-    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> EventType:
-        ''' Wait for an event from producer for max. timeout time. The criteria which events to be
-        accepted is given by cond. An accepted event returns from the wait function. An event which
-        causes cond to be False is ignored and the function is waiting.
-        '''
-        retval = await self._parent_process.wait(timeout, cond, val)
-        return retval
-
-    async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> EventType:
-        # This function can be used to run a pre-check for such conditions, which are
-        # invariant to the passed event, for instance to check for a state of an object
-        # so if the state matches, it returns immediately
-        # Otherwise it jumps to the waiting process.
-        conds = self._parent_process.meta.cond
-        # Set the condition object (lambda / object / ...) in the process metadata
-        conds.push(cond)
-        try:
-            signaled, event = conds.check(self._TestObject())
-            if not signaled:
-                event = await self._wait_for_event(timeout, val)
-            else:
-                event = conds.cond_value()
-        finally:
-            conds.pop()
         return event
 
     def cleanup(self, consumer: Optional[DSConsumer] = None) -> None:

@@ -169,6 +169,34 @@ class DSProcess(DSFuture, SignalMixin):
             event = cond.cond_value()
         return event
 
+    def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+        ''' Pre-check cond before waiting; return immediately if already satisfied. '''
+        conds = self.meta.cond  # capture ref: sim.cleanup() replaces self.meta.cond
+        conds.push(cond)
+        try:
+            signaled, event = conds.check(self.sim._TestObject())
+            if not signaled:
+                event = yield from self.sim._gwait_for_event(timeout, val)
+            else:
+                event = conds.cond_value()
+        finally:
+            conds.pop()
+        return event
+
+    async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> EventType:
+        ''' Async variant of check_and_gwait. '''
+        conds = self.meta.cond  # capture ref: sim.cleanup() replaces self.meta.cond
+        conds.push(cond)
+        try:
+            signaled, event = conds.check(self.sim._TestObject())
+            if not signaled:
+                event = await self.sim._wait_for_event(timeout, val)
+            else:
+                event = conds.cond_value()
+        finally:
+            conds.pop()
+        return event
+
     def schedule(self: DSProcessType, time: Optional[TimeType] = 0) -> DSProcess:
         ''' This api is to schedule the process '''
         if not self._scheduled:
@@ -235,6 +263,30 @@ class SimProcessMixin:
         if sim is not self:
             raise ValueError('The parameter sim in process() method should be set to the same simulation instance.')
         return DSProcess(*args, **kwargs, sim=sim)
+
+    def gwait(self: Any, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+        ''' Wait for an event from producer for max. timeout time. The criteria which events to be
+        accepted is given by cond. An accepted event returns from the wait function. An event which
+        causes cond to be False is ignored and the function is waiting.
+        '''
+        retval = yield from self._parent_process.gwait(timeout, cond, val)
+        return retval
+
+    def check_and_gwait(self: Any, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+        retval = yield from self._parent_process.check_and_gwait(timeout, cond, val)
+        return retval
+
+    async def wait(self: Any, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> EventType:
+        ''' Wait for an event from producer for max. timeout time. The criteria which events to be
+        accepted is given by cond. An accepted event returns from the wait function. An event which
+        causes cond to be False is ignored and the function is waiting.
+        '''
+        retval = await self._parent_process.wait(timeout, cond, val)
+        return retval
+
+    async def check_and_wait(self: Any, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> EventType:
+        retval = await self._parent_process.check_and_wait(timeout, cond, val)
+        return retval
 
     def observe_pre(self: Any, *components: Union[DSFuture, DSProducer], **policy_params: Any) -> DSSubscriberContextManager:
         return DSSubscriberContextManager(self.pid, DSProducer.Phase.PRE, components, **policy_params)
