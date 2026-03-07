@@ -106,6 +106,69 @@ class DSProcess(DSFuture, SignalMixin):
         self.value = self.generator.send(event)
         return self.value
 
+    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+        ''' Wait for an event for max. timeout time, accepting only events where cond is True.
+        When cond is a DSFuture (or DSProcess), automatically subscribes to its finish endpoint
+        so the caller wakes up when the future completes.
+        '''
+        if isinstance(cond, DSFuture):
+            if cond.finished():
+                if cond.exc is not None:
+                    raise cond.exc
+                return cond
+            with self.sim.observe_pre(cond):
+                conds = self.meta.cond  # capture ref: sim.cleanup() replaces self.meta.cond
+                conds.push(cond)
+                try:
+                    event = yield from self.sim._gwait_for_event(timeout, val)
+                finally:
+                    conds.pop()
+            if cond.exc is not None:
+                raise cond.exc
+            if hasattr(cond, 'cond_value'):
+                return cond.cond_value()
+            return event
+        conds = self.meta.cond  # capture ref: sim.cleanup() replaces self.meta.cond, so finally must use the original
+        conds.push(cond)
+        try:
+            event = yield from self.sim._gwait_for_event(timeout, val)
+        finally:
+            conds.pop()
+        if hasattr(cond, 'cond_value'):
+            event = cond.cond_value()
+        return event
+
+    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> EventType:
+        ''' Async variant of gwait.
+        When cond is a DSFuture (or DSProcess), automatically subscribes to its finish endpoint.
+        '''
+        if isinstance(cond, DSFuture):
+            if cond.finished():
+                if cond.exc is not None:
+                    raise cond.exc
+                return cond
+            with self.sim.observe_pre(cond):
+                conds = self.meta.cond  # capture ref: sim.cleanup() replaces self.meta.cond
+                conds.push(cond)
+                try:
+                    event = await self.sim._wait_for_event(timeout, val)
+                finally:
+                    conds.pop()
+            if cond.exc is not None:
+                raise cond.exc
+            if hasattr(cond, 'cond_value'):
+                return cond.cond_value()
+            return event
+        conds = self.meta.cond  # capture ref: sim.cleanup() replaces self.meta.cond, so finally must use the original
+        conds.push(cond)
+        try:
+            event = await self.sim._wait_for_event(timeout, val)
+        finally:
+            conds.pop()
+        if hasattr(cond, 'cond_value'):
+            event = cond.cond_value()
+        return event
+
     def schedule(self: DSProcessType, time: Optional[TimeType] = 0) -> DSProcess:
         ''' This api is to schedule the process '''
         if not self._scheduled:

@@ -34,12 +34,13 @@ class Customer(DSProcessComponent):
 
 class Clerk(DSProcessComponent):
     def process(self, i):
-        while True:
-            if len(waitingline) == 0:
-                msg = yield from signaler.gwait(cond=lambda e:True)  # create a consumer and wait for any signal from the producer
-            customer = waitingline.pop()
-            print(f"{self.sim.time} Customer in process with clerk {i}")
-            yield from self.gwait(30)
+        with self.sim.consume(signaler):
+            while True:
+                if len(waitingline) == 0:
+                    msg = yield from self.sim.gwait()  # wait for any signal (which we get by consuming the signaler)
+                customer = waitingline.pop()
+                print(f"{self.sim.time} Customer in process with clerk {i}")
+                yield from self.gwait(30)
 
 
 sim = DSSimulation() 

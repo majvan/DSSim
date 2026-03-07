@@ -83,60 +83,28 @@ class TestDSFuture(unittest.TestCase):
         finish = fut.finished()
         self.assertTrue(finish)
 
-    def test5_future_gwait(self):
-        def wait_for_future(fut, timeout):
-            yield from fut.gwait(timeout)
-            return 'done'
+    def test5_future_await_already_finished(self):
         sim = MagicMock()
         fut = DSFuture(sim=sim)
         fut.finish('hello')
-        process = wait_for_future(fut, 10)
+        process = fut.__await__()
         try:
-            retval = next(process)  # future finished => no wait
-            self.assertTrue(False)  # this shoould not be here
+            next(process)  # future already finished => no wait, should stop immediately
+            self.assertTrue(False)  # should not be here
         except StopIteration as e:
             retval = e.value
-        self.assertTrue(retval == 'done')
+        self.assertIsNone(retval)  # already finished: gwait skipped, retval stays None
         sim.gwait.assert_not_called()
 
-        fut = DSFuture(sim=sim)
-        process = wait_for_future(fut, 10)
-        sim.gwait.assert_not_called()
-        try:
-            retval = process.send(None)  # sim.wait is not now a generator, it is a mocked method => StopIteration is called
-            self.assertTrue(False)  # this shoould not be here
-        except StopIteration as e:
-            retval = e.value
-        sim.gwait.assert_called_once_with(10, cond=fut)
-        self.assertTrue(retval == 'done')
-
-    def test6_future_wait(self):
-        async def wait_for_future(fut, timeout):
-            await fut.wait(timeout)
-            return 'done'
+    def test6_future_await_not_finished(self):
         sim = MagicMock()
         fut = DSFuture(sim=sim)
-        fut.finish('hello')
-        process = wait_for_future(fut, 10)
+        process = fut.__await__()
+        sim.gwait.assert_not_called()
         try:
-            retval = process.send(None)  # future finished => no wait
-            self.assertTrue(False)  # this shoould not be here
+            process.send(None)  # sim.gwait is a MagicMock (not a generator) => StopIteration raised
+            self.assertTrue(False)  # should not be here
         except StopIteration as e:
             retval = e.value
-        self.assertTrue(retval == 'done')
-        sim.gwait.assert_not_called()
-
-        sim = MagicMock()
-        fut = DSFuture(sim=sim)
-        process = wait_for_future(fut, 10)
-        sim.wait.assert_not_called()
-        # Unfortunately, the following cannot be easily tested:
-        # It is impossible to await MagicMock. AsyncMock could be used,
-        # but it is impossible to have a context manager with AsyncMock.
-        # try:
-        #     retval = process.send(None)  
-        #     self.assertTrue(False)  # this shoould not be here
-        # except StopIteration as e:
-        #     retval = e.value
-        # sim.wait.assert_called_once_with(10, cond=fut)
-        # self.assertTrue(retval == 'done')
+        sim.gwait.assert_called_once_with(cond=fut)
+        self.assertIsNone(retval)

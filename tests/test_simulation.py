@@ -62,8 +62,8 @@ class TestDSSchedulable(unittest.TestCase):
             data = yield data
 
     @DSSchedulable
-    def __waiting_for_join(self, process):
-        yield from process.wait()
+    def __waiting_for_join(self, process, sim):
+        yield from sim.gwait(cond=process)
         yield "After process finished"
 
 
@@ -178,25 +178,20 @@ class TestDSSchedulable(unittest.TestCase):
 
     def test8_waiting_process(self):
         sim = DSSimulation()
-        process = DSProcess(self.__generator(), sim=sim)
-        process.wait = MagicMock()
-        process.wait.return_value = iter(['Wait called',])
-        process_waiting = DSProcess(self.__waiting_for_join(process), sim=DSSimulation())
-        retval = next(process)
-        self.assertEqual(retval, 'First return')
-        self.assertEqual(process.value, 'First return')
-        sim._parent_process = process_waiting
-        retval = next(process_waiting)
-        self.assertEqual(process.value, 'First return')  # process not changed
-        self.assertEqual(process_waiting.value, 'Wait called')
-        retval = next(process)
-        self.assertEqual(process.value, 'Second return')
-        self.assertEqual(process_waiting.value, 'Wait called')
-        with self.assertRaises(StopIteration):
-            retval = next(process)
-        # self.assertEqual(process.value, 'Success')  # This will not work as the process.value is set only with simulation run
-        retval = next(process_waiting)
-        self.assertEqual(process_waiting.value, 'After process finished')
+        events = []
+
+        def target():
+            yield from sim.gwait(5)
+            events.append('target_done')
+
+        def waiter(t):
+            yield from sim.gwait(cond=t)
+            events.append('waiter_done')
+
+        t = DSProcess(target(), sim=sim).schedule(0)
+        w = DSProcess(waiter(t), sim=sim).schedule(0)
+        sim.run(10)
+        self.assertEqual(events, ['target_done', 'waiter_done'])
 
 
 class TestException(unittest.TestCase):
