@@ -16,7 +16,7 @@ This file implements future class (see the paradigm in async programming).
 '''
 from typing import Any, Set, Optional, Generator, TYPE_CHECKING
 from contextlib import contextmanager
-from dssim.base import TimeType, EventType
+from dssim.base import EventType
 from dssim.base import SignalMixin, DSAbortException
 from dssim.pubsub import ConsumerMetadata, DSConsumer, DSProducer, TrackEvent
 
@@ -58,26 +58,12 @@ class DSFuture(DSConsumer, SignalMixin):
         except Exception as e:
             self.fail(e)
 
-    def gwait(self, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
-        retval = None
-        if not self.finished():
-            with self.sim.observe_pre(self, **policy_params):
-                retval = yield from self.sim.gwait(timeout, cond=self)
-        if self.exc is not None:
-            raise self.exc
-        return retval
-
-    async def wait(self, timeout: TimeType = float('inf'), **policy_params: Any) -> EventType:
-        retval = None
-        if not self.finished():
-            with self.sim.observe_pre(self, **policy_params):
-                retval = await self.sim.wait(timeout, cond=self)
-        if self.exc is not None:
-            raise self.exc
-        return retval
-
     def __await__(self) -> Generator[EventType, EventType, EventType]:
-        retval = yield from self.gwait()
+        retval = None
+        if not self.finished():
+            retval = yield from self.sim.gwait(cond=self)
+        if self.exc is not None:
+            raise self.exc
         return retval
 
     def finish(self, value: EventType) -> EventType:

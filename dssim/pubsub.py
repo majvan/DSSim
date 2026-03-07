@@ -336,16 +336,6 @@ class DSProducer(DSConsumer, SignalMixin):
         '''
         return self._subscriber_count > 0
 
-    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
-        with self.sim.consume(self, **policy_params):
-            retval = yield from self.sim.gwait(timeout, cond, val)
-        return retval
-
-    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True, **policy_params: Any) -> EventType:
-        with self.sim.consume(self, **policy_params):
-            retval = await self.sim.wait(timeout, cond, val)
-        return retval
-
 
 class DSTransformation(DSProducer):
     ''' A producer which takes a signal, transforms / wraps it to another signal and

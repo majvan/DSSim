@@ -240,24 +240,8 @@ class DSSimulation(DSComponentSingleton,
         accepted is given by cond. An accepted event returns from the wait function. An event which
         causes cond to be False is ignored and the function is waiting.
         '''
-
-        # Get from simulation the current process ID. The current process ID is the ID of
-        # the process which is parent - the most highest one in the yield stack structure.
-        # With such process the scheduler on timeout will kick the parent process,
-        # not a locally yield-ing subprocess.
-        # The reason why it is important is that if scheduler kicked the subprocess's
-        # _wait_for_event method, the return from the subprocess would not defer here, but rather
-        # just ended and disappeared in scheduler. But we need that the scheduler is said to plan
-        # another timeout for this process.
-        conds = self._parent_process.meta.cond
-        conds.push(cond)
-        try:
-            event = yield from self._gwait_for_event(timeout, val)
-        finally:
-            conds.pop()
-        if hasattr(cond, 'cond_value'):
-            event = cond.cond_value()
-        return event
+        retval = yield from self._parent_process.gwait(timeout, cond, val)
+        return retval
 
     def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
         # This function can be used to run a pre-check for such conditions, which are
@@ -308,24 +292,8 @@ class DSSimulation(DSComponentSingleton,
         accepted is given by cond. An accepted event returns from the wait function. An event which
         causes cond to be False is ignored and the function is waiting.
         '''
-
-        # Get from simulation the current process ID. The current process ID is the ID of
-        # the process which is parent - the most highest one in the yield stack structure.
-        # With such process the scheduler on timeout will kick the parent process,
-        # not a locally yield-ing subprocess.
-        # The reason why it is important is that if scheduler kicked the subprocess's
-        # _wait_for_event method, the return from the subprocess would not defer here, but rather
-        # just ended and disappeared in scheduler. But we need that the scheduler is said to plan
-        # another timeout for this process.
-        conds = self._parent_process.meta.cond
-        conds.push(cond)
-        try:
-            event = await self._wait_for_event(timeout, val)
-        finally:
-            conds.pop()
-        if hasattr(cond, 'cond_value'):
-            event = cond.cond_value()
-        return event
+        retval = await self._parent_process.wait(timeout, cond, val)
+        return retval
 
     async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> EventType:
         # This function can be used to run a pre-check for such conditions, which are

@@ -135,9 +135,9 @@ def demo_filtering():
 
     time = sim.time
     # The following timeout events from particular filters will not be forwarded to this process unless we subscribe for it.
-    # The c.gwait() will subscribe for these events
+    # sim.gwait(cond=c) will subscribe for these events via the DSFuture branch
     c = f(sim.gwait(2), signal_timeout=True, sim=sim) & f(sim.gwait(6), signal_timeout=True, sim=sim) | f(sim.gwait(4), signal_timeout=True, sim=sim) & f(sim.gwait(5), signal_timeout=True, sim=sim)
-    ret = yield from c.gwait()
+    ret = yield from sim.gwait(cond=c)
     assert sim.time == time + 5  # wait for (2 and 6) or (1 and 5) => signal at 1 then 5 makes this true
     assert tuple(ret.values()) == (None, None)
 

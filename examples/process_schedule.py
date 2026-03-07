@@ -64,11 +64,11 @@ class MyComponent(DSComponent):
     def dummy_gjoin(self, name):
         print(self.sim.time, self.taskDummy, '0 run with', name)
         print(self.sim.time, self.taskDummy, '0 waiting for', self.taskA, 'to finish...')
-        yield from self.taskA.gwait()
+        yield from self.sim.gwait(cond=self.taskA)
         print(self.sim.time, self.taskDummy, '1 waiting for', self.taskB, 'to finish...')
-        yield from self.taskB.gwait()
+        yield from self.sim.gwait(cond=self.taskB)
         print(self.sim.time, self.taskDummy, '2 waiting for', self.taskC, 'to finish...')
-        yield from self.taskC.gwait()
+        yield from self.sim.gwait(cond=self.taskC)
         print(self.sim.time, self.taskDummy, '3 all tasks finished')
 
     async def dummy_join(self, name):
@@ -76,9 +76,9 @@ class MyComponent(DSComponent):
         print(self.sim.time, self.taskDummy, '0 waiting for', self.taskA, 'to finish...')
         await self.taskA
         print(self.sim.time, self.taskDummy, '1 waiting for', self.taskB, 'to finish...')
-        await self.taskB.wait()
+        await self.sim.wait(cond=self.taskB)
         print(self.sim.time, self.taskDummy, '2 waiting for', self.taskC, 'to finish...')
-        await self.taskC.wait()
+        await self.sim.wait(cond=self.taskC)
         print(self.sim.time, self.taskDummy, '3 all tasks finished')
 
     async def dummy(self, name):
@@ -87,10 +87,10 @@ class MyComponent(DSComponent):
         await self.taskA
         assert self.sim.time == 17
         print(self.sim.time, self.taskDummy, '1 waiting for', self.taskB, 'to finish...')
-        await self.taskB.wait()
+        await self.sim.wait(cond=self.taskB)
         assert self.sim.time == 18
         print(self.sim.time, self.taskDummy, '2 waiting for', self.taskC, 'to finish...')
-        await self.taskC.wait()
+        await self.sim.wait(cond=self.taskC)
         assert self.sim.time == 18
         print(self.sim.time, self.taskDummy, '3 all tasks finished')
 
