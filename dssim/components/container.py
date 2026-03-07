@@ -16,7 +16,8 @@ The file implements container and queue components.
 '''
 from collections import deque
 from typing import Any, List, Dict, Iterator, Union, Optional, Generator, TYPE_CHECKING
-from dssim.base import NumericType, TimeType, EventType, CondType, SignalMixin, DSAbortException, AlwaysTrue
+from dssim.base import NumericType, TimeType, EventType, SignalMixin
+from dssim.pubsub_base import CondType, DSAbortException, AlwaysTrue
 from dssim.components.base import DSStatefulComponent
 from dssim.pubsub import DSProducer
 

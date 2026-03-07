@@ -16,7 +16,8 @@
 Simple controllable bottleneck components
 '''
 from typing import Any, List
-from dssim.base import EventType, DSComponent, AlwaysTrue
+from dssim.base import EventType, DSComponent
+from dssim.pubsub_base import AlwaysTrue
 from dssim.pubsub import DSCallback, DSProducer
 from dssim.process import DSProcess
 

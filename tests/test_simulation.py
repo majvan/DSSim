@@ -21,7 +21,7 @@ from dssim import DSAbsTime, DSSimulation, DSAbortException
 from dssim import DSFuture, DSSchedulable, DSProcess
 from dssim.process import DSSubscriberContextManager, DSTimeoutContext, DSTimeoutContextError
 from dssim import DSProducer
-from dssim.base import StackedCond
+from dssim.pubsub_base import StackedCond
 
 class SomeObj:
     pass

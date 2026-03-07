@@ -18,7 +18,8 @@ Compared to queue, resource works with non-integer amounts but it does not conta
 in the pool, just an abstract pool level information (e.g. amount of water in a tank).
 '''
 from typing import Dict, Any, TYPE_CHECKING
-from dssim.base import TimeType, EventType, CondType
+from dssim.base import TimeType, EventType
+from dssim.pubsub_base import CondType
 from dssim.components.base import DSStatefulComponent
 
 

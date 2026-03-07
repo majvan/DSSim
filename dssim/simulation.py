@@ -19,7 +19,8 @@ import sys
 import inspect
 from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Optional, overload, TYPE_CHECKING
 from dssim.timequeue import TimeQueue, ZeroTimeQueue
-from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, CondType, StackedCond, DSComponentSingleton, AlwaysFalse, ISubscriber
+from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, DSComponentSingleton, ISubscriber
+from dssim.pubsub_base import StackedCond
 
 
 from dssim.pubsub import DSConsumer, DSCallback, void_consumer, SimPubsubMixin

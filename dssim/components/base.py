@@ -15,7 +15,8 @@
 The provides basic classes for the components.
 '''
 from typing import Any, Optional, Generator
-from dssim.base import TimeType, CondType, EventType, DSComponent
+from dssim.base import TimeType, EventType, DSComponent
+from dssim.pubsub_base import CondType
 from dssim.pubsub import DSProducer
 
 

@@ -20,8 +20,8 @@ from typing import List, Set, Any, Dict, Tuple, Union, Optional, Callable, Itera
 import inspect
 import copy
 from enum import Enum
-from dssim.base import CondType, EventType, ICondition, CallableConditionMixin
-from dssim.pubsub import ConsumerMetadata
+from dssim.base import EventType
+from dssim.pubsub_base import CondType, ICondition, CallableConditionMixin, ConsumerMetadata
 from dssim.future import DSFuture
 from dssim.process import DSProcess
 

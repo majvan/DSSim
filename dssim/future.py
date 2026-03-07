@@ -16,9 +16,9 @@ This file implements future class (see the paradigm in async programming).
 '''
 from typing import Any, Set, Optional, Generator, TYPE_CHECKING
 from contextlib import contextmanager
-from dssim.base import EventType
-from dssim.base import SignalMixin, DSAbortException
-from dssim.pubsub import ConsumerMetadata, DSConsumer, DSProducer, TrackEvent
+from dssim.base import EventType, SignalMixin
+from dssim.pubsub_base import DSAbortException, ConsumerMetadata
+from dssim.pubsub import DSConsumer, DSProducer, TrackEvent
 
 
 if TYPE_CHECKING:

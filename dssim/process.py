@@ -22,9 +22,9 @@ from types import TracebackType
 from contextlib import contextmanager
 from functools import wraps
 import inspect
-from dssim.base import TimeType, EventType, EventRetType, CondType, AlwaysFalse, AlwaysTrue
-from dssim.base import DSAbortException, DSTransferableCondition, SignalMixin
-from dssim.pubsub import ConsumerMetadata, DSConsumer, TrackEvent, DSProducer
+from dssim.base import TimeType, EventType, EventRetType, SignalMixin
+from dssim.pubsub_base import CondType, AlwaysFalse, AlwaysTrue, DSAbortException, DSTransferableCondition, ConsumerMetadata
+from dssim.pubsub import DSConsumer, TrackEvent, DSProducer
 from dssim.future import DSFuture
 
 
