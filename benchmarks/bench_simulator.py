@@ -5,13 +5,13 @@ Benchmark: DSSim simulator core throughput
 Four scenarios
 --------------
 1. timed-callbacks : N events at strictly increasing timestamps dispatched to
-                     one DSCallback; stresses schedule_event + time_queue pop/dispatch
-2. now-burst       : one callback emits N zero-time events via schedule_event_now;
-                     a second callback consumes them — stresses now_queue append + drain
-3. now-chain       : a callback reschedules itself via schedule_event_now N times;
+                     one generator; stresses schedule_event + time_queue pop/dispatch
+2. now-burst       : one generator emits N zero-time events via schedule_event_now;
+                     a second generator consumes them — stresses now_queue append + drain
+3. now-chain       : a generator reschedules itself via schedule_event_now N times;
                      stresses zero-time dispatch with dynamic event generation
-4. process-wakeup  : a DSProcess does N gwait wakeups driven by N zero-time events;
-                     stresses process condition checks + send path in the loop
+4. generator-wakeup: a generator yields N times, woken by N zero-time events from a
+                     producer generator; stresses coroutine send path in the loop
 
 Metrics per scenario
 --------------------
@@ -56,22 +56,24 @@ def report(label, n, min_t, mean_t, stdev_t, total_t):
 # ===========================================================================
 # DSSim
 # ===========================================================================
-from dssim import DSCallback, DSSimulation
+from dssim import DSSimulation
 
 
 def dssim_timed_callbacks(n):
     '''
     Schedules N events at strictly increasing timestamps, all dispatched to
-    one DSCallback.  Stresses schedule_event + time_queue pop/dispatch.
+    one generator.  Stresses schedule_event + time_queue pop/dispatch.
     '''
     sim = DSSimulation()
     handled = [0]
 
-    def sink(event):
-        handled[0] += 1
-        return True
+    def sink():
+        while True:
+            yield
+            handled[0] += 1
 
-    consumer = DSCallback(sink, sim=sim)
+    consumer = sink()
+    sim.schedule(0, consumer)
     for i in range(n):
         sim.schedule_event(i + 1, i, consumer)
     sim.run()
@@ -80,24 +82,26 @@ def dssim_timed_callbacks(n):
 
 def dssim_now_burst(n):
     '''
-    One scheduled callback emits N zero-time events via schedule_event_now;
-    a second callback consumes them.  Stresses now_queue append + drain.
+    One scheduled generator emits N zero-time events via schedule_event_now;
+    a second generator consumes them.  Stresses now_queue append + drain.
     '''
     sim = DSSimulation()
     handled = [0]
 
-    def sink(event):
-        handled[0] += 1
-        return True
+    def sink():
+        while True:
+            yield
+            handled[0] += 1
 
-    sink_cb = DSCallback(sink, sim=sim)
-
-    def burst(event):
+    def burst(sink_cb):
+        yield  # wait for trigger
         for _ in range(n):
             sim.schedule_event_now(None, sink_cb)
-        return True
 
-    burst_cb = DSCallback(burst, sim=sim)
+    sink_cb = sink()
+    sim.schedule(0, sink_cb)
+    burst_cb = burst(sink_cb)
+    sim.schedule(0, burst_cb)
     sim.schedule_event(0, None, burst_cb)
     sim.run()
     assert handled[0] == n, f'now-burst: expected {n}, got {handled[0]}'
@@ -105,49 +109,53 @@ def dssim_now_burst(n):
 
 def dssim_now_chain(n):
     '''
-    One callback reschedules itself via schedule_event_now until N iterations.
+    One generator reschedules itself via schedule_event_now until N iterations.
     Stresses zero-time dispatch with dynamic event generation.
     '''
     sim = DSSimulation()
     fired = [0]
+    chain_cb = [None]
 
-    def chain(event):
-        fired[0] += 1
-        if fired[0] < n:
-            sim.schedule_event_now(None, chain_cb)
-        return True
+    def chain():
+        while True:
+            yield
+            fired[0] += 1
+            if fired[0] < n:
+                sim.schedule_event_now(None, chain_cb[0])
 
-    chain_cb = DSCallback(chain, sim=sim)
-    sim.schedule_event(0, None, chain_cb)
+    chain_cb[0] = chain()
+    sim.schedule(0, chain_cb[0])
+    sim.schedule_event(0, None, chain_cb[0])
     sim.run()
     assert fired[0] == n, f'now-chain: expected {n}, got {fired[0]}'
 
 
-def dssim_process_wakeup(n):
+def dssim_generator_wakeup(n):
     '''
-    A DSProcess does N gwait wakeups; a callback emits N zero-time events to
-    that process.  Stresses process condition checks + send path in the loop.
+    A generator yields N times; a producer generator schedules N zero-time
+    events to it.  Stresses coroutine send path in the simulation loop.
     '''
     sim = DSSimulation()
     received = [0]
+    waiter_ref = [None]
 
     def waiter():
-        cond = lambda _event: True
         for _ in range(n):
-            yield from sim.gwait(cond=cond)
+            yield
             received[0] += 1
 
-    process = sim.process(waiter()).schedule(0)
-
-    def producer(event):
+    def producer():
+        yield  # wait for start trigger
         for i in range(n):
-            sim.schedule_event_now(i, process)
-        return True
+            sim.schedule_event_now(i, waiter_ref[0])
 
-    producer_cb = DSCallback(producer, sim=sim)
-    sim.schedule_event(0, None, producer_cb)
+    waiter_ref[0] = waiter()
+    sim.schedule(0, waiter_ref[0])
+    producer_gen = producer()
+    sim.schedule(0, producer_gen)
+    sim.schedule_event(0, None, producer_gen)
     sim.run()
-    assert received[0] == n, f'process-wakeup: expected {n}, got {received[0]}'
+    assert received[0] == n, f'generator-wakeup: expected {n}, got {received[0]}'
 
 
 # ===========================================================================
@@ -247,7 +255,7 @@ if __name__ == '__main__':
     print(f'Parameters: N={N_EVENTS:,}  repeats={REPEATS}\n')
 
     # ---- scenario 1 --------------------------------------------------------
-    print(f'=== Scenario 1: timed-callbacks  (1 callback, N={N_EVENTS:,}) ===')
+    print(f'=== Scenario 1: timed-callbacks  (1 generator, N={N_EVENTS:,}) ===')
     report('DSSim', N_EVENTS, *bench(dssim_timed_callbacks, N_EVENTS))
     report('SimPy', N_EVENTS, *bench(simpy_timed_callbacks, N_EVENTS))
 
@@ -257,13 +265,13 @@ if __name__ == '__main__':
     report('SimPy', N_EVENTS, *bench(simpy_now_burst, N_EVENTS))
 
     # ---- scenario 3 --------------------------------------------------------
-    print(f'\n=== Scenario 3: now-chain  (self-rescheduling callback, N={N_EVENTS:,}) ===')
+    print(f'\n=== Scenario 3: now-chain  (self-rescheduling generator, N={N_EVENTS:,}) ===')
     report('DSSim', N_EVENTS, *bench(dssim_now_chain, N_EVENTS))
     report('SimPy', N_EVENTS, *bench(simpy_now_chain, N_EVENTS))
 
     # ---- scenario 4 --------------------------------------------------------
-    print(f'\n=== Scenario 4: process-wakeup  (1 process + 1 producer, N={N_EVENTS:,}) ===')
-    report('DSSim', N_EVENTS, *bench(dssim_process_wakeup, N_EVENTS))
+    print(f'\n=== Scenario 4: generator-wakeup  (1 waiter + 1 producer, N={N_EVENTS:,}) ===')
+    report('DSSim', N_EVENTS, *bench(dssim_generator_wakeup, N_EVENTS))
     report('SimPy', N_EVENTS, *bench(simpy_process_wakeup, N_EVENTS))
 
     print()
