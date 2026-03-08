@@ -25,7 +25,7 @@ class TestTimeQueue(unittest.TestCase):
         self.tq = TimeQueue()
 
     def _get_len(self):
-        return len(self.tq), len(self.tq.timequeue), len(self.tq.timequeue)
+        return len(self.tq), len(self.tq._queue), len(self.tq._queue)
 
     def test0_init(self):
         ''' Assert initialization behavior '''
@@ -35,8 +35,8 @@ class TestTimeQueue(unittest.TestCase):
         ''' Test adding an event '''
         self.tq.add_element(0.123, 'An element')
         self.assertEqual(self._get_len(), (1, 1, 1))
-        self.assertEqual(self.tq.timequeue[0], 0.123)
-        self.assertEqual(self.tq.elementqueue[0], 'An element')
+        self.assertEqual(self.tq._queue[0][0], 0.123)
+        self.assertEqual(self.tq._queue[0][1], 'An element')
         time, element = self.tq.get0()
         self.assertEqual((time, element), (0.123, 'An element'))
         time, element = self.tq.pop()
