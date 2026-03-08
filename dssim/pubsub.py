@@ -23,7 +23,7 @@ from abc import abstractmethod
 from enum import IntEnum
 from typing import List, Dict, Any, Type, Generator, Callable, Tuple, Iterator, TYPE_CHECKING
 from dssim.base import TimeType, DSComponent, DSEvent, EventType, SignalMixin, ISubscriber
-from dssim.pubsub_base import CondType, AlwaysTrue, ConsumerMetadata
+from dssim.pubsub_base import CondType, AlwaysTrue, ConsumerMetadata, StackedCond
 
 
 if TYPE_CHECKING:
@@ -67,6 +67,9 @@ class DSConsumer(DSComponent, ISubscriber):
 
     def get_cond(self):
         return self.meta.cond
+
+    def reset_cond(self) -> None:
+        self.meta.cond = StackedCond()
 
     def try_send(self, event: EventType) -> EventType:
         ''' Send an event to this consumer if its condition is met. Returns False if not accepted. '''

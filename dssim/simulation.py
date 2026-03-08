@@ -20,10 +20,7 @@ import inspect
 from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Optional, overload, TYPE_CHECKING
 from dssim.timequeue import TimeQueue, ZeroTimeQueue
 from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, DSComponentSingleton, ISubscriber
-from dssim.pubsub_base import StackedCond
-
-
-from dssim.pubsub import DSConsumer, DSCallback, void_consumer, SimPubsubMixin
+from dssim.pubsub import DSCallback, void_consumer, SimPubsubMixin
 from dssim.future import DSFuture, SimFutureMixin
 from dssim.process import DSProcessType, DSProcess, SimProcessMixin
 from dssim.components.container import SimContainerMixin, SimQueueMixin
@@ -41,7 +38,7 @@ class _Awaitable:
         return retval
 
 
-SchedulableType = Union[DSFuture, ISubscriber, Generator, Coroutine, Callable, DSCallback]
+SchedulableType = Union[DSFuture, ISubscriber, Generator, Coroutine, Callable]
 
 
 class DSSimulation(DSComponentSingleton,
@@ -247,15 +244,15 @@ class DSSimulation(DSComponentSingleton,
                 self.time_queue.delete_val((self._parent_process, None))
         return event
 
-    def cleanup(self, consumer: Optional[DSConsumer] = None) -> None:
-        consumer = consumer or self.pid 
+    def cleanup(self, consumer: ISubscriber = None) -> None:
+        consumer = consumer or self.pid
         # The consumer has finished.
         # We make a cleanup of a waitable condition. There is still waitable condition kept
         # for the consumer. Since the process has finished, it will never need it, however
         # there may be events for the process planned.
-        # Remove the condition
-        meta = consumer.meta
-        meta.cond = StackedCond()
+        # Reset the condition if the consumer supports it
+        if hasattr(consumer, 'reset_cond'):
+            consumer.reset_cond()
         # Remove all the events for this consumer
         self.now_queue = ZeroTimeQueue(item for item in self.now_queue if item[0] is not consumer)
         self.time_queue.delete_cond(lambda e: e[0] is consumer)
