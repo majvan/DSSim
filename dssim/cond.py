@@ -125,7 +125,7 @@ class DSFilter(DSFuture, ICondition, CallableConditionMixin):
                     # intentionally discarded — same semantics as before.
                     self.cond._starter.send(None)
                 else:
-                    self.sim.try_send(self.cond, event)
+                    self.cond.try_send(event)
             if self.cond.finished():
                 if self.cond.exc is not None:
                     pass

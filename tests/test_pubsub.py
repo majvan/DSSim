@@ -105,6 +105,48 @@ class TestCallback(unittest.TestCase):
         my_consumer_fcn.send.assert_not_called()
         my_consumer_fcn.reset_mock()
 
+class SomeObj2:
+    pass
+
+
+class TestConsumer(unittest.TestCase):
+    ''' Tests for DSConsumer.try_send '''
+
+    def test0_try_send_checks_cond_before_dispatch(self):
+        ''' try_send must check condition first; if rejected, send_object must not be called '''
+        from unittest.mock import MagicMock
+        sim = DSSimulation()
+        sim.send_object = Mock()
+        consumer = DSCallback(lambda e: True, sim=sim)
+        consumer.meta = SomeObj2()
+        consumer.meta.cond = MagicMock()
+        consumer.meta.cond.check = Mock(return_value=(False, 'abc'))
+        consumer.try_send(None)
+        consumer.meta.cond.check.assert_called_once()
+        sim.send_object.assert_not_called()
+
+    def test1_try_send_dispatches_after_cond_passes(self):
+        ''' try_send must call send_object with the event returned by cond.check '''
+        from unittest.mock import MagicMock
+        call_order = []
+        sim = DSSimulation()
+        def called_check_condition(*args, **kwargs):
+            call_order.append(call('check_condition', *args, **kwargs))
+            return (True, 'abc')
+        def called_send_object(*args, **kwargs):
+            call_order.append(call('send_object', *args, **kwargs))
+            return True
+        consumer = DSCallback(lambda e: True, sim=sim)
+        consumer.meta = SomeObj2()
+        consumer.meta.cond = MagicMock()
+        consumer.meta.cond.check = Mock(side_effect=called_check_condition)
+        sim.send_object = Mock(side_effect=called_send_object)
+        consumer.try_send(None)
+        consumer.meta.cond.check.assert_called_once()
+        sim.send_object.assert_called_once()
+        self.assertEqual(call_order, [call('check_condition', None), call('send_object', consumer, 'abc')])
+
+
 class TestSubscriber(unittest.TestCase):
     ''' TODO: test registratrion, deregistration, event data path when registered '''
     pass
@@ -124,6 +166,21 @@ class TestProducer(unittest.TestCase):
         self.sim.schedule = Mock(return_value=1000) # new process id retval
         self.sim.schedule_event = Mock()
         self.sim.names = {}
+
+    def _make_recorder(self, consumer_retval_pairs):
+        '''Mock try_send on each consumer to record calls into a shared Mock.
+        Replaces the old sim.try_send mock pattern now that try_send lives on DSConsumer.
+        Returns the shared Mock so assert_has_calls / assert_not_called etc. still work.
+        '''
+        m = Mock()
+        for consumer, retval in consumer_retval_pairs:
+            def make_ts(c=consumer, rv=retval):
+                def ts(event):
+                    m(c, event)
+                    return rv
+                return ts
+            consumer.try_send = make_ts()
+        return m
 
     def test0_producer_add(self):
         p = DSProducer(sim=self.sim)
@@ -262,58 +319,58 @@ class TestProducer(unittest.TestCase):
         self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
 
     def test2_producer_signal_act_retval(self):
-        self.sim.try_send = Mock(return_value=False)
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
+        self.sim.try_send = self._make_recorder([(c0, False), (c1, False)])
         p.add_subscriber(c0)
         p.add_subscriber(c1)
         p.send(1)
         self.sim.try_send.assert_has_calls([call(c0, 1), call(c1, 1)])
-        notify_fcn = Mock(return_value=True)       
         p = DSProducer(sim=self.sim)
-        c0 = DSCallback(notify_fcn, sim=self.sim)
-        c1 = DSCallback(notify_fcn, sim=self.sim)
+        c0 = DSCallback(None, sim=self.sim)
+        c1 = DSCallback(None, sim=self.sim)
+        self.sim.try_send = self._make_recorder([(c0, True), (c1, True)])
         p.add_subscriber(c0)
         p.add_subscriber(c1)
         p.send(2)
         self.sim.try_send.assert_has_calls([call(c0, 2),])
 
     def test3_producer_signal_act(self):
-        self.sim.try_send = Mock(return_value=True)
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
+        self.sim.try_send = self._make_recorder([(c0, True), (c1, True)])
         p.add_subscriber(c0)
         p.add_subscriber(c1)
         p.send(1)
         self.sim.try_send.assert_called_once_with(c0, 1)
 
-        self.sim.try_send.reset_mock()
+        self.sim.try_send = self._make_recorder([(c0, True), (c1, True)])
         p.add_subscriber(subscriber=c0)  # 2 times a subscriber
         p.send(2)
         self.sim.try_send.assert_called_once_with(c0, 2)
 
     def test4_producer_signal_pre(self):
-        self.sim.try_send = Mock(return_value=True)
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
+        self.sim.try_send = self._make_recorder([(c0, True), (c1, True)])
         p.add_subscriber(c0, phase=DSProducer.Phase.PRE)
         p.add_subscriber(c1, phase=DSProducer.Phase.PRE)
         p.send(1)
         self.sim.try_send.assert_has_calls([call(c0, 1), call(c1, 1)])
 
-        self.sim.try_send.reset_mock()
+        self.sim.try_send = self._make_recorder([(c0, True), (c1, True)])
         p.add_subscriber(c0, phase=DSProducer.Phase.PRE)  # 2 times a subscriber
         p.send(2)
         self.sim.try_send.assert_has_calls([call(c0, 2), call(c1, 2)])
 
     def test5_producer_signal_post_plus(self):
-        self.sim.try_send = Mock(return_value=True)
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
+        self.sim.try_send = self._make_recorder([(c0, True), (c1, True)])
         p.add_subscriber(c0, phase=DSProducer.Phase.POST_HIT)
         p.add_subscriber(c1, phase=DSProducer.Phase.POST_HIT)
         p.send(1)
@@ -322,28 +379,29 @@ class TestProducer(unittest.TestCase):
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
+        self.sim.try_send = self._make_recorder([(c0, True), (c1, True)])
         p.add_subscriber(c0, phase=DSProducer.Phase.POST_HIT)
         p.add_subscriber(c1, phase=DSProducer.Phase.POST_HIT)
         p.add_subscriber(c0)  # add consumer
         p.send(1)
         self.sim.try_send.assert_has_calls([call(c0, 1), call(c0, {'consumer': c0, 'event': 1}), call(c1, {'consumer': c0, 'event': 1})])
 
-        self.sim.try_send.reset_mock()
+        self.sim.try_send = self._make_recorder([(c0, True), (c1, True)])
         p.add_subscriber(c0, phase=DSProducer.Phase.POST_HIT)  # 2 times a subscriber
         p.send(2)
         self.sim.try_send.assert_has_calls([call(c0, 2), call(c0, {'consumer': c0, 'event': 2}), call(c1, {'consumer': c0, 'event': 2})])
 
     def test6_producer_signal_post_minus(self):
-        self.sim.try_send = Mock(return_value=True)
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
+        self.sim.try_send = self._make_recorder([(c0, True), (c1, True)])
         p.add_subscriber(c0, phase=DSProducer.Phase.POST_MISS)
         p.add_subscriber(c1, phase=DSProducer.Phase.POST_MISS)
         p.send(1)
         self.sim.try_send.assert_has_calls([call(c0, 1), call(c1, 1)])
 
-        self.sim.try_send.reset_mock()
+        self.sim.try_send = self._make_recorder([(c0, True), (c1, True)])
         p.add_subscriber(c0, phase=DSProducer.Phase.POST_MISS)  # 2 times a subscriber
         p.send(2)
         self.sim.try_send.assert_has_calls([call(c0, 2), call(c1, 2)])
@@ -352,8 +410,7 @@ class TestProducer(unittest.TestCase):
     def test7_producer_signal_same(self):
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
-        self.sim.try_send = Mock(return_value=False)
-        tests = ( 
+        tests = (
             (DSProducer.Phase.PRE, 'c0c1', True, True),
             (DSProducer.Phase.PRE, 'c1c0', True, True),
             (DSProducer.Phase.CONSUME, 'c0c1', True, True),
@@ -364,7 +421,7 @@ class TestProducer(unittest.TestCase):
             (DSProducer.Phase.POST_MISS, 'c1c0', True, True),
         )
         for phase, order, c0_called, c1_called in tests:
-            self.sim.try_send.reset_mock()
+            self.sim.try_send = self._make_recorder([(c0, False), (c1, False)])
             p = DSProducer(sim=self.sim)
             if order == 'c0c1':
                 p.add_subscriber(phase=phase, subscriber=c0)
@@ -384,9 +441,8 @@ class TestProducer(unittest.TestCase):
     def test8_producer_signal_combi_nonconsume(self):
         c0 = DSCallback(lambda e: True, sim=self.sim)
         c1 = DSCallback(lambda e: True, sim=self.sim)
-        self.sim.try_send = Mock(return_value=False)
 
-        tests = ( 
+        tests = (
             (DSProducer.Phase.PRE, DSProducer.Phase.CONSUME, call(c0, 'Hi'), call(c1, 'Hi')),
             (DSProducer.Phase.CONSUME, DSProducer.Phase.PRE, call(c0, 'Hi'), call(c1, 'Hi')),
             (DSProducer.Phase.PRE, DSProducer.Phase.POST_HIT, call(c0, 'Hi'), None),
@@ -401,7 +457,7 @@ class TestProducer(unittest.TestCase):
             (DSProducer.Phase.POST_MISS, DSProducer.Phase.POST_HIT, call(c0, 'Hi'), None),
         )
         for c0_phase, c1_phase, c0_called, c1_called in tests:
-            self.sim.try_send.reset_mock()
+            self.sim.try_send = self._make_recorder([(c0, False), (c1, False)])
             p = DSProducer(sim=self.sim)
             p.add_subscriber(phase=c0_phase, subscriber=c0)
             p.add_subscriber(phase=c1_phase, subscriber=c1)
@@ -417,9 +473,8 @@ class TestProducer(unittest.TestCase):
     def test9_producer_signal_combi_consume(self):
         c0 = DSCallback(lambda e: True, sim=self.sim)
         c1 = DSCallback(lambda e: True, sim=self.sim)
-        self.sim.try_send = Mock(return_value=True)
 
-        tests = ( 
+        tests = (
             (DSProducer.Phase.PRE, DSProducer.Phase.CONSUME, call(c0, 'Hi'), call(c1, 'Hi')),
             (DSProducer.Phase.CONSUME, DSProducer.Phase.PRE, call(c0, 'Hi'), call(c1, 'Hi')),
             (DSProducer.Phase.PRE, DSProducer.Phase.POST_HIT, call(c0, 'Hi'), None),
@@ -434,7 +489,7 @@ class TestProducer(unittest.TestCase):
             (DSProducer.Phase.POST_MISS, DSProducer.Phase.POST_HIT, call(c0, 'Hi'), None),
         )
         for c0_phase, c1_phase, c0_called, c1_called in tests:
-            self.sim.try_send.reset_mock()
+            self.sim.try_send = self._make_recorder([(c0, True), (c1, True)])
             p = DSProducer(sim=self.sim)
             p.add_subscriber(phase=c0_phase, subscriber=c0)
             p.add_subscriber(phase=c1_phase, subscriber=c1)

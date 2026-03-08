@@ -52,7 +52,7 @@ class DSFuture(DSConsumer, SignalMixin):
         if exc is None:
             exc = DSAbortException(self)
         try:
-            self.sim.try_send(self, exc)
+            self.try_send(exc)
         except StopIteration as e:
             self.finish(e)
         except Exception as e:

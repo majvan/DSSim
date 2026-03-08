@@ -40,7 +40,7 @@ class _Awaitable:
         return retval
 
 
-SchedulableType = Union[DSFuture, Generator, Coroutine, Callable, DSCallback]
+SchedulableType = Union[DSFuture, ISubscriber, Generator, Coroutine, Callable, DSCallback]
 
 
 class DSSimulation(DSComponentSingleton,
@@ -86,14 +86,14 @@ class DSSimulation(DSComponentSingleton,
     def time(self) -> NumericType: return self._simtime
 
     @property
-    def pid(self) -> DSConsumer: return self._parent_process
+    def pid(self) -> ISubscriber: return self._parent_process
 
     def _restart(self) -> None:
         self.time_queue = TimeQueue()
         self.now_queue = ZeroTimeQueue()
         self.num_events: int = 0
         # By default, we use fake consumer. It will be rewritten on the first 
-        self._parent_process: DSConsumer = void_consumer
+        self._parent_process: ISubscriber = void_consumer
 
     def _compute_time(self, time: TimeType) -> NumericType:
         ''' Recomputes a rel/abs time to absolute time value '''
@@ -123,10 +123,10 @@ class DSSimulation(DSComponentSingleton,
 
     def schedule(self, time: TimeType, schedulable: SchedulableType) -> SchedulableType:
         ''' Schedules the start of a (new) process. '''
-        if isinstance(schedulable, DSConsumer):
-            process = schedulable
-        elif inspect.iscoroutine(schedulable) or inspect.isgenerator(schedulable):
+        if inspect.iscoroutine(schedulable) or inspect.isgenerator(schedulable):
             process = DSProcess(schedulable, sim=self)
+        elif isinstance(schedulable, ISubscriber):
+            process = schedulable
         elif callable(schedulable):
             process = DSCallback(schedulable, sim=self)
         else:
@@ -173,20 +173,6 @@ class DSSimulation(DSComponentSingleton,
             raise
         finally:
             self._parent_process = pid
-        return retval
-
-    def try_send(self, consumer: DSConsumer, event: EventType) -> EventType:
-        ''' Send an event object to a consumer process. Convert event from parameters to object. '''
-
-        # We will be sending signal (event) to a consumer, which has some condition set
-        # upon waiting for a pattern event.
-        # The idea is that the consumer will get the event only if the condition is met-
-        # an early check.
-        conds = consumer.get_cond()
-        signaled, event = conds.check(event)
-        if not signaled:
-            return False  # not signalled
-        retval = self.send_object(consumer, event)
         return retval
 
     def signal(self, process: ISubscriber, event: EventType, time: TimeType = 0) -> EventType:
@@ -292,14 +278,14 @@ class DSSimulation(DSComponentSingleton,
             self.num_events += 1
             self._simtime = tevent
             self.time_queue.pop()
-            self.try_send(consumer, event_obj)
+            consumer.try_send(event_obj)
             while self.now_queue:
                 (consumer, event_obj) = self.now_queue.popleft()
                 # check for the future as well in the now_queue
                 if event_obj == future:
                     return self.time, self.num_events
                 self.num_events += 1
-                self.try_send(consumer, event_obj)
+                consumer.try_send(event_obj)
         else:
             retval_time = self.time
             self._simtime = ftime

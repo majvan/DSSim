@@ -72,6 +72,14 @@ class DSConsumer(DSComponent, ISubscriber):
     def get_cond(self):
         return self.meta.cond
 
+    def try_send(self, event: EventType) -> EventType:
+        ''' Send an event to this consumer if its condition is met. Returns False if not accepted. '''
+        conds = self.get_cond()
+        signaled, event = conds.check(event)
+        if not signaled:
+            return False
+        return self.sim.send_object(self, event)
+
     @TrackEvent
     @abstractmethod
     def send(self, event):
@@ -303,25 +311,25 @@ class DSProducer(DSConsumer, SignalMixin):
         # Emit the signal to all pre-observers
         for subscriber, refs in pre:
             if refs:
-                self.sim.try_send(subscriber, event)
+                subscriber.try_send(event)
 
         # Emit the signal to all consumers and stop with the first one
         # which accepted the signal
         for consumer, refs in consume:
-            if refs and self.sim.try_send(consumer, event):
+            if refs and consumer.try_send(event):
                 # The event was consumed.
                 consume.rewind()  # this will rewind for round robin
                 # Notify all the post-observers about consumed event.
                 for subscriber, prefs in post_hit:
                     # The post-observers will receive a dict with two objects
                     if prefs:
-                        self.sim.try_send(subscriber, {'consumer': consumer, 'event': event})
+                        subscriber.try_send({'consumer': consumer, 'event': event})
                 break
         else:
             # Emit the missed signal to all post-observers
             for subscriber, refs in post_miss:
                 if refs:
-                    self.sim.try_send(subscriber, event)
+                    subscriber.try_send(event)
 
         # cleanup- remove items with zero references
         # We do not cleanup in remove_subscriber, because remove_subscriber could

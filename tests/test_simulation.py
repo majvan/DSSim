@@ -86,7 +86,7 @@ class TestDSSchedulable(unittest.TestCase):
 
         process = DSProcess(self.__fcn(), sim=sim).schedule(0)
         process.get_cond().push(lambda e:True)
-        retval = sim.try_send(process, None)
+        retval = process.try_send(None)
         self.assertEqual(retval, 'Success')
         self.assertEqual(process.value, 'Success')
 
@@ -109,7 +109,7 @@ class TestDSSchedulable(unittest.TestCase):
         retval = next(process)
         self.assertEqual(retval, 'Second return')
         process.get_cond().push(lambda e:True)
-        retval = sim.try_send(process, None)
+        retval = process.try_send(None)
         self.assertEqual(retval, 'Success')
         self.assertEqual(process.value, 'Success')
 
@@ -204,14 +204,14 @@ class TestException(unittest.TestCase):
     def __first_cyclic(self, sim):
         process2 = yield 'Kick-on first'
         yield
-        sim.try_send(process2, 'Signal from first process')
+        process2.try_send('Signal from first process')
         yield 'After signalling first'
         return 'Done first'
 
     def __second_cyclic(self, sim):
         process1 = yield 'Kick-on second'
         yield
-        sim.try_send(process1, 'Signal from second process')
+        process1.try_send('Signal from second process')
         yield 'After signalling second'
         return 'Done second'
 
@@ -225,7 +225,7 @@ class TestException(unittest.TestCase):
         process.get_cond().push(lambda e:True)  # Accept all events
         exc_to_check = None
         try:
-            retval = sim.try_send(process, 'My data')
+            retval = process.try_send('My data')
             # we should not get here, exception is expected
             self.assertTrue(1 == 2)
         except ZeroDivisionError as exc:
@@ -239,10 +239,10 @@ class TestException(unittest.TestCase):
         process2 = DSProcess(self.__second_cyclic(sim), name="Second cyclic", sim=sim).schedule(0)
         sim.send_object(process2, None)  # initialize via send_object so _started is set correctly
         process2.meta.cond.push(lambda e:True)  # accept any event
-        sim.try_send(process1, process2)  # Inform processes about the other process
-        sim.try_send(process2, process1)
+        process1.try_send(process2)  # Inform processes about the other process
+        process2.try_send(process1)
         try:
-            sim.try_send(process1, 'My data')
+            process1.try_send('My data')
             # we should not get here, exception is expected
             self.assertTrue(1 == 2)
         except ValueError as exc:
@@ -272,7 +272,7 @@ class TestConditionChecking(unittest.TestCase):
         waitable._starter.send(None)  # kick the process
         cond.push.assert_has_calls([call(None), call('condition'),])
         try:
-            retval = sim.try_send(waitable, 'something')
+            retval = waitable.try_send('something')
         except StopIteration as e:
             retval = e.value
         self.assertTrue(retval == 'return event')  # this is what was sent to the process
@@ -336,41 +336,10 @@ class TestConditionChecking(unittest.TestCase):
         p.meta = SomeObj()
         p.meta.cond = MagicMock()
         p.meta.cond.check = Mock(return_value=(True, 'abc'))
-        retval = sim.try_send(p, 'test')
+        retval = p.try_send('test')
         p.meta.cond.check.assert_called_once()
         self.assertEqual(retval, True)
     
-    def test4_early_check(self):
-        ''' Test if signal calls first check_condition and then send_object '''
-        sim = DSSimulation()
-        sim.send_object = Mock()
-        consumer = Mock()
-        consumer.meta = SomeObj()
-        consumer.meta.cond = MagicMock()
-        consumer.meta.cond.check = Mock(return_value=(False, 'abc'))
-        consumer.get_cond = lambda: consumer.meta.cond
-        sim.try_send(consumer, None)
-        consumer.meta.cond.check.assert_called_once()
-        sim.send_object.assert_not_called()
-
-        call_order = []
-        sim = DSSimulation()
-        def called_check_condition(*args, **kwargs):
-            call_order.append(call('check_condition', *args, **kwargs))
-            return (True, 'abc')
-        def called_send_object(*args, **kwargs):
-            call_order.append(call('send_object', *args, **kwargs))
-            return True
-        consumer = Mock()
-        consumer.meta = SomeObj()
-        consumer.meta.cond = MagicMock()
-        consumer.meta.cond.check = Mock(side_effect=called_check_condition)  # it will allow to accept the event
-        consumer.get_cond = lambda: consumer.meta.cond
-        sim.send_object = Mock(side_effect=called_send_object)
-        sim.try_send(consumer, None)
-        consumer.meta.cond.check.assert_called_once()
-        sim.send_object.assert_called_once()
-        self.assertEqual(call_order, [call('check_condition', None), call('send_object', consumer, 'abc')])
 
     def test6_gwait_return(self):
         def my_process():
@@ -403,11 +372,11 @@ class TestConditionChecking(unittest.TestCase):
         p = DSProcess(my_process(), sim=self.sim)
         p = self.sim.schedule(0, p)
         p.get_cond().push(lambda e:True)
-        retval = self.sim.try_send(p, None)
+        retval = p.try_send(None)
         self.assertTrue(retval == 1)
-        retval = self.sim.try_send(p, None)
+        retval = p.try_send(None)
         self.assertTrue(retval == 2)
-        retval = self.sim.try_send(p, None)
+        retval = p.try_send(None)
         self.assertTrue(retval == 3)
 
     def test7_wait_return(self):
@@ -444,11 +413,11 @@ class TestConditionChecking(unittest.TestCase):
         p = DSProcess(my_process(), sim=self.sim)
         p = self.sim.schedule(0, p)
         p.get_cond().push(lambda e:True)
-        retval = self.sim.try_send(p, None)
+        retval = p.try_send(None)
         self.assertTrue(retval == 1)
-        retval = self.sim.try_send(p, None)
+        retval = p.try_send(None)
         self.assertTrue(retval == 2)
-        retval = self.sim.try_send(p, None)
+        retval = p.try_send(None)
         self.assertTrue(retval == 3)
 
 
@@ -860,29 +829,30 @@ class TestSim(unittest.TestCase):
 
     def test8_run_producer(self):
         self.sim = DSSimulation()
-        producer = Mock()
-        producer.meta.cond.check = lambda e:(True, e)  # Accept any event
-        producer.send = Mock()
-        producer.get_cond = lambda: producer.meta.cond
-        self.sim.schedule_event(1, 3, producer)
-        self.sim.schedule_event(2, 2, producer)
-        self.sim.schedule_event(3, 1, producer)
+        consumer = Mock()
+        consumer.meta.cond.check = lambda e:(True, e)  # Accept any event
+        consumer.send = Mock()
+        consumer.get_cond = lambda: consumer.meta.cond
+        consumer.try_send = lambda e: consumer.send(e)
+        self.sim.schedule_event(1, 3, consumer)
+        self.sim.schedule_event(2, 2, consumer)
+        self.sim.schedule_event(3, 1, consumer)
         retval = self.sim.run()
         self.assertEqual(retval, (3, 3))
         calls = [call(3), call(2), call(1),]
-        producer.send.assert_has_calls(calls)
+        consumer.send.assert_has_calls(calls)
         num_events = len(self.sim.time_queue)
         self.assertEqual(num_events, 0)
-        producer.send.reset_mock()
+        consumer.send.reset_mock()
 
         self.sim.restart()
-        self.sim.schedule_event(1, 3, producer)
-        self.sim.schedule_event(2, 2, producer)
-        self.sim.schedule_event(3, 1, producer)
+        self.sim.schedule_event(1, 3, consumer)
+        self.sim.schedule_event(2, 2, consumer)
+        self.sim.schedule_event(3, 1, consumer)
         retval = self.sim.run(2.5)
         self.assertEqual(retval, (2, 2))
         calls = [call(3), call(2),]
-        producer.send.assert_has_calls(calls)
+        consumer.send.assert_has_calls(calls)
         num_events = len(self.sim.time_queue)
         self.assertEqual(num_events, 1)
 

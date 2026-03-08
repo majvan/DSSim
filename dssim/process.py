@@ -24,7 +24,7 @@ from functools import wraps
 import inspect
 from dssim.base import TimeType, EventType, EventRetType, CondType, AlwaysFalse, AlwaysTrue
 from dssim.base import DSAbortException, DSTransferableCondition, SignalMixin
-from dssim.pubsub import ConsumerMetadata, TrackEvent, DSProducer
+from dssim.pubsub import ConsumerMetadata, DSConsumer, TrackEvent, DSProducer
 from dssim.future import DSFuture
 
 
@@ -48,18 +48,14 @@ class DSProcess(DSFuture, SignalMixin):
     This class "extends" generator / coroutine for additional info.
     The best practise is to use DSProcess instead of generators.
     '''
-    class _Starter:
+    class _Starter(DSConsumer):
         ''' One-shot bootstrap consumer for DSProcess.
         Scheduled in place of the process itself so DSProcess.send() can be
         branch-free: no "first call?" check on every event delivered to the process.
         '''
         def __init__(self, process: 'DSProcess') -> None:
             self._process = process
-            self.meta = ConsumerMetadata()
-            self.meta.cond.push(AlwaysTrue)
-
-        def get_cond(self) -> 'StackedCond':
-            return self.meta.cond
+            super().__init__(sim=process.sim, cond=AlwaysTrue)
 
         def send(self, event: EventType) -> EventRetType:
             p = self._process
