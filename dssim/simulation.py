@@ -138,8 +138,6 @@ class DSSimulation(DSComponentSingleton,
     def send_object(self, consumer: ISubscriber, event: EventType) -> EventType:
         ''' Send an event object to a consumer. Return value from the consumer. '''
 
-        retval: EventType = False
-
         # We want to kick from this process to another process (see below). However, after
         # returning back to this process, we want to renew our process ID back to be used.
         # We do that by remembering the pid here and restoring at the end.
@@ -257,6 +255,19 @@ class DSSimulation(DSComponentSingleton,
         self.now_queue = ZeroTimeQueue(item for item in self.now_queue if item[0] is not consumer)
         self.time_queue.delete_cond(lambda e: e[0] is consumer)
 
+    def _try_send_object(self, subscriber: ISubscriber, event: EventType) -> EventType:
+        '''Condition-aware dispatch used by run().
+
+        Unlike DSConsumer.try_send(), this path keeps dispatch ownership in DSSimulation
+        and still supports plain ISubscriber implementations that only expose send().
+        '''
+        if hasattr(subscriber, 'get_cond'):
+            conds = subscriber.get_cond()
+            signaled, event = conds.check(event)
+            if not signaled:
+                return False
+        return self.send_object(subscriber, event)
+
     def run(self, up_to: TimeType = float('inf'), future: EventType = object()) -> Tuple[float, int]:
         ''' This is the simulation machine. In a loop it takes first event and process it.
         The loop ends when the queue is empty or when the simulation time is over.
@@ -264,7 +275,7 @@ class DSSimulation(DSComponentSingleton,
         ftime = up_to.to_number() if isinstance(up_to, DSAbsTime) else up_to
         while len(self.time_queue) > 0:
             # Get the first event on the queue
-            tevent, (consumer, event_obj) = self.time_queue.get0()
+            tevent, (subscriber, event_obj) = self.time_queue.get0()
             if tevent >= ftime:
                 retval_time = self.time
                 self._simtime = ftime
@@ -276,14 +287,14 @@ class DSSimulation(DSComponentSingleton,
             self.num_events += 1
             self._simtime = tevent
             self.time_queue.pop()
-            consumer.try_send(event_obj)
+            self._try_send_object(subscriber, event_obj)
             while self.now_queue:
-                (consumer, event_obj) = self.now_queue.popleft()
+                (subscriber, event_obj) = self.now_queue.popleft()
                 # check for the future as well in the now_queue
                 if event_obj == future:
                     return self.time, self.num_events
                 self.num_events += 1
-                consumer.try_send(event_obj)
+                self._try_send_object(subscriber, event_obj)
         else:
             retval_time = self.time
             self._simtime = ftime
@@ -363,4 +374,3 @@ def print_cyclic_signal_exception(exc: Exception) -> None:
                print(f'  To:    {to_process}')
            print(f'  Event: {event}')
     print()
-

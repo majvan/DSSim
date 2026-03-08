@@ -856,6 +856,35 @@ class TestSim(unittest.TestCase):
         num_events = len(self.sim.time_queue)
         self.assertEqual(num_events, 1)
 
+    def test8a_run_dispatches_without_consumer_try_send(self):
+        ''' run() dispatches via simulation send_object path, not consumer.try_send. '''
+        self.sim = DSSimulation()
+        consumer = Mock()
+        consumer.meta.cond.check = lambda e: (True, e)
+        consumer.get_cond = lambda: consumer.meta.cond
+        consumer.send = Mock()
+        consumer.try_send = Mock(side_effect=AssertionError('run() should not call consumer.try_send'))
+        self.sim.schedule_event(1, 'hello', consumer)
+        retval = self.sim.run()
+        self.assertEqual(retval, (1, 1))
+        consumer.send.assert_called_once_with('hello')
+        consumer.try_send.assert_not_called()
+
+    def test8b_run_still_checks_condition_before_send(self):
+        ''' run() must preserve condition gating semantics for consumers. '''
+        self.sim = DSSimulation()
+        consumer = Mock()
+        consumer.meta.cond.check = Mock(return_value=(False, 'ignored'))
+        consumer.get_cond = lambda: consumer.meta.cond
+        consumer.send = Mock()
+        consumer.try_send = Mock(side_effect=AssertionError('run() should not call consumer.try_send'))
+        self.sim.schedule_event(1, 'hello', consumer)
+        retval = self.sim.run()
+        self.assertEqual(retval, (1, 1))
+        consumer.meta.cond.check.assert_called_once_with('hello')
+        consumer.send.assert_not_called()
+        consumer.try_send.assert_not_called()
+
     def test9_waiting(self):
         self.sim = DSSimulation()
         # the following process will create events for the time queue process
