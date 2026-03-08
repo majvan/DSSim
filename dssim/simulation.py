@@ -52,9 +52,6 @@ class DSSimulation(DSComponentSingleton,
                    SimStateMixin):
     ''' The simulation is a which schedules the nearest (in time) events. '''
 
-    class _TestObject:
-        ''' An artificial object to be used for check_and_wait- see description of the method '''
-        pass
 
     def __init__(self, name: str = 'dssim', single_instance: bool = True) -> None:
         ''' The simulation holds the list of producers which share the same time queue.

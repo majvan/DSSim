@@ -39,6 +39,9 @@ DSProcessType = TypeVar('DSProcessType', bound='DSProcess')
 # position — so user-pushed conditions between schedule() and start are safe.
 _StartProcess = object()
 
+# An artificial object to be used for check_and_wait- see description of the method
+_TestObject = object()
+
 
 class DSProcess(DSFuture, SignalMixin):
     ''' Typical task used in the simulations.
@@ -174,7 +177,7 @@ class DSProcess(DSFuture, SignalMixin):
         conds = self.meta.cond  # capture ref: sim.cleanup() replaces self.meta.cond
         conds.push(cond)
         try:
-            signaled, event = conds.check(self.sim._TestObject())
+            signaled, event = conds.check(_TestObject)
             if not signaled:
                 event = yield from self.sim._gwait_for_event(timeout, val)
             else:
@@ -188,7 +191,7 @@ class DSProcess(DSFuture, SignalMixin):
         conds = self.meta.cond  # capture ref: sim.cleanup() replaces self.meta.cond
         conds.push(cond)
         try:
-            signaled, event = conds.check(self.sim._TestObject())
+            signaled, event = conds.check(_TestObject)
             if not signaled:
                 event = await self.sim._wait_for_event(timeout, val)
             else:
