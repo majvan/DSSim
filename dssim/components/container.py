@@ -182,6 +182,7 @@ class Container(DSStatefulComponent, SignalMixin):
         # putters and complex-condition getters subscribe to tx_changed.
         # self.tx_changed already defined
         self.tx_nempty = self.sim.producer(name=self.name + '.tx_nempty')
+        self.LAMBDA1 = lambda _: self.size >= 1
 
     def _available(self, num_items: int) -> bool:
         return self.capacity is None or (self.size + num_items <= self.capacity)
@@ -319,7 +320,7 @@ class Container(DSStatefulComponent, SignalMixin):
     async def get(self, timeout: TimeType = float('inf'), **policy_params: Any) -> Optional[List[EventType]]:
         ''' Simplified version of get_n => gets any first object '''
         with self.sim.consume(self.tx_nempty, **policy_params):
-            retval = await self.sim.check_and_wait(timeout, cond=lambda e: self.size > 0)
+            retval = await self.sim.check_and_wait(timeout, cond=self.LAMBDA1)
             if retval is not None:
                 el = next(iter(self.container.keys()))
                 retval = self._pop_element(el)
@@ -363,7 +364,7 @@ class Container(DSStatefulComponent, SignalMixin):
     def gget(self, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, Optional[EventType], Optional[EventType]]:
         ''' Simplified version of gget_n => gets any first object; return the object '''
         with self.sim.consume(self.tx_nempty, **policy_params):
-            retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e: self.size > 0)
+            retval = yield from self.sim.check_and_gwait(timeout, cond=self.LAMBDA1)
             if retval is not None:
                 el = next(iter(self.container.keys()))
                 retval = self._pop_element(el)
@@ -441,6 +442,7 @@ class Queue(DSStatefulComponent, SignalMixin):
         # self.tx_changed already defined by DSStatefulComponent (accepts change_ep=)
         self.tx_nempty = nempty_ep if nempty_ep is not None else self.sim.producer(name=self.name + '.tx_nempty')
         self.tx_nfull  = nfull_ep  if nfull_ep  is not None else self.sim.producer(name=self.name + '.tx_nfull')
+        self.LAMBDA1 = lambda _: len(self._buffer) >= 1
 
     # ---- send (SignalMixin interface) ---------------------------------------
 
@@ -543,7 +545,7 @@ class Queue(DSStatefulComponent, SignalMixin):
         '''A version of get_n which does not return a list, but rather one element.'''
         tx = self._get_tx_endpoint(cond)
         if cond is AlwaysTrue:
-            check = lambda _: len(self._buffer) >= 1
+            check = self.LAMBDA1
         else:
             check = lambda _: len(self._buffer) >= 1 and cond(self._buffer.peek())
         with self.sim.consume(tx, **policy_params):
@@ -575,7 +577,7 @@ class Queue(DSStatefulComponent, SignalMixin):
         '''A version of gget_n which does not return a list, but rather one element.'''
         tx = self._get_tx_endpoint(cond)
         if cond is AlwaysTrue:
-            check = lambda _: len(self._buffer) >= 1
+            check = self.LAMBDA1
         else:
             check = lambda _: len(self._buffer) >= 1 and cond(self._buffer.peek())
         with self.sim.consume(tx, **policy_params):
