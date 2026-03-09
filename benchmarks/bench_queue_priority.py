@@ -263,6 +263,105 @@ def simpy_bounded(n):
 
 
 # ===========================================================================
+# salabim 23
+# ===========================================================================
+import salabim as _salabim
+_salabim.yieldless(False)
+
+
+# Salabim requires items stored in a Store to be sim.Component subclasses.
+# Creating one Component per priority item is part of salabim's design; it
+# adds allocation overhead not present in DSSim or SimPy.
+
+class _SalabimItem(_salabim.Component):
+    '''Lightweight data-carrying component used as a Store item.'''
+    def setup(self, val):
+        self.val = val
+
+
+# --- Scenario 1 : fill-drain -----------------------------------------------
+
+def salabim_fill_drain(n):
+    '''
+    Inserts N items directly via enter_sorted (no sim loop required), then
+    drains them via store.pop().  Closest equivalent to DSSim put_nowait +
+    get_nowait; no env.run() call.  N Component allocations are unavoidable
+    since salabim Stores hold Component subclasses.
+    '''
+    env = _salabim.Environment(trace=False)
+    store = _salabim.Store(env=env)
+    drained = 0
+
+    for i in range(n):
+        item = _SalabimItem(val=i, env=env)
+        item.enter_sorted(store, priority=(n - i))   # worst-case order
+
+    while store:
+        store.pop()
+        drained += 1
+
+    assert drained == n, f'salabim fill-drain: {drained} != {n}'
+
+
+# --- Scenario 2 : burst ----------------------------------------------------
+
+def salabim_burst(n):
+    '''
+    Producer and consumer run as concurrent components.  Equivalent to
+    DSSim burst-gput scenario and SimPy burst.
+    '''
+    env = _salabim.Environment(trace=False)
+    store = _salabim.Store(env=env)
+    received = [0]
+
+    class Producer(_salabim.Component):
+        def process(self):
+            for i in range(n):
+                item = _SalabimItem(val=i, env=env)
+                yield self.to_store(store, item, priority=(n - i))
+
+    class Consumer(_salabim.Component):
+        def process(self):
+            for _ in range(n):
+                yield self.from_store(store)
+                received[0] += 1
+
+    Producer(env=env)
+    Consumer(env=env)
+    env.run()
+    assert received[0] == n, f'salabim burst: {received[0]} != {n}'
+
+
+# --- Scenario 3 : bounded (capacity = 1) -----------------------------------
+
+def salabim_bounded(n):
+    '''
+    Store capacity = 1 forces strict put / get alternation.  Every to_store
+    blocks until the consumer takes the current item.
+    '''
+    env = _salabim.Environment(trace=False)
+    store = _salabim.Store(capacity=1, env=env)
+    received = [0]
+
+    class Producer(_salabim.Component):
+        def process(self):
+            for i in range(n):
+                item = _SalabimItem(val=i, env=env)
+                yield self.to_store(store, item, priority=i)
+
+    class Consumer(_salabim.Component):
+        def process(self):
+            for _ in range(n):
+                yield self.from_store(store)
+                received[0] += 1
+
+    Producer(env=env)
+    Consumer(env=env)
+    env.run()
+    assert received[0] == n, f'salabim bounded: {received[0]} != {n}'
+
+
+# ===========================================================================
 # main
 # ===========================================================================
 if __name__ == '__main__':
@@ -271,25 +370,29 @@ if __name__ == '__main__':
 
     # ---- scenario 1 --------------------------------------------------------
     print(f'=== Scenario 1: fill-drain  (N={N_EVENTS:,}) ===')
-    print(f'  DSSim uses put_nowait+get_nowait (no simulation loop);'
-          f' SimPy has no nowait path.')
-    report('DSSim  put_nowait + get_nowait',
+    print(f'  DSSim/salabim use a nowait path; SimPy always goes through event machinery.')
+    report('DSSim    put_nowait + get_nowait',
            N_EVENTS, *bench(dssim_fill_drain, N_EVENTS))
-    report('SimPy  put        + get       ',
+    report('SimPy    put        + get       ',
            N_EVENTS, *bench(simpy_fill_drain, N_EVENTS))
+    report('salabim  enter_sorted + pop     ',
+           N_EVENTS, *bench(salabim_fill_drain, N_EVENTS))
 
     # ---- scenario 2 --------------------------------------------------------
     print(f'\n=== Scenario 2: burst  (unlimited capacity, N={N_EVENTS:,}) ===')
-    report('DSSim  put_nowait (pre-fill) + gget',
+    report('DSSim    put_nowait (pre-fill) + gget',
            N_EVENTS, *bench(dssim_burst_nowait_put, N_EVENTS))
-    report('DSSim  gput                 + gget',
+    report('DSSim    gput                  + gget',
            N_EVENTS, *bench(dssim_burst_gput, N_EVENTS))
-    report('SimPy  put                  + get ',
+    report('SimPy    put                   + get ',
            N_EVENTS, *bench(simpy_burst, N_EVENTS))
+    report('salabim  to_store              + from_store',
+           N_EVENTS, *bench(salabim_burst, N_EVENTS))
 
     # ---- scenario 3 --------------------------------------------------------
     print(f'\n=== Scenario 3: bounded  (capacity=1, alternating put/get, N={N_EVENTS:,}) ===')
-    report('DSSim  gput + gget', N_EVENTS, *bench(dssim_bounded, N_EVENTS))
-    report('SimPy  put  + get ', N_EVENTS, *bench(simpy_bounded, N_EVENTS))
+    report('DSSim    gput + gget      ', N_EVENTS, *bench(dssim_bounded, N_EVENTS))
+    report('SimPy    put  + get       ', N_EVENTS, *bench(simpy_bounded, N_EVENTS))
+    report('salabim  to_store + from_store', N_EVENTS, *bench(salabim_bounded, N_EVENTS))
 
     print()
