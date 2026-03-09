@@ -21,13 +21,29 @@ from functools import wraps
 from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Optional, Iterator, TYPE_CHECKING
 from dssim.timequeue import TimeQueue, ZeroTimeQueue
 from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, DSComponentSingleton, ISubscriber, IFuture
-from dssim.pubsub import void_consumer, SimPubsubMixin
+from dssim.pubsub import SimPubsubMixin
 from dssim.future import SimFutureMixin
 from dssim.process import SimProcessMixin
 from dssim.components.container import SimContainerMixin, SimQueueMixin
 from dssim.components.resource import SimResourceMixin
 from dssim.components.state import SimStateMixin
 from dssim.cond import SimFilterMixin
+
+
+class VoidSubscriber(ISubscriber):
+    ''' A void subscriber which should never be called.
+
+    If seen in the debugger, it typically means that the current consumer
+    does not run within any process.  The singleton instance is used as a
+    safe non-null default for _parent_process.
+    '''
+    def __init__(self, name: str = 'Default void subscriber') -> None:
+        self.name = name
+
+    def send(self, event: EventType) -> None:  # noqa: ARG002
+        raise RuntimeError('A void subscriber is never expected to be called.')
+
+void_subscriber = VoidSubscriber()
 
 
 class _Awaitable:
@@ -132,7 +148,7 @@ class DSSimulation(DSComponentSingleton,
         self.now_queue = ZeroTimeQueue()
         self.num_events: int = 0
         # By default, we use fake consumer. It will be rewritten on the first 
-        self._parent_process: ISubscriber = void_consumer
+        self._parent_process: ISubscriber = void_subscriber
 
     def _compute_time(self, time: TimeType) -> NumericType:
         ''' Recomputes a rel/abs time to absolute time value '''

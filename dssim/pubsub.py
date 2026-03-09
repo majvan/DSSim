@@ -115,27 +115,6 @@ class DSKWCallback(DSCallback):
         return retval
     
 
-class VoidConsumer(DSConsumer):
-    ''' A void consumer which should never be called.
-    
-    If seen this consumer in the debugger, it typically means that
-    current consumer does not run within any process. Typically,
-    a callback is a type of consumer which does not have a parent
-    process assigned.
-
-    This void consumer is not assigned to a simulation instance.
-    The singleton instance of this consumer is used to satisfy
-    not-null consumer type requirements in some default functions
-    to simplify the code.
-    '''
-    def __init__(self, *args, name: str = 'Default void source / consumer', **kwargs) -> None:
-        self.name = name
-
-    def send(self, event: EventType) -> None:
-        raise RuntimeError('A void consumer is never expected to be called.')
-
-void_consumer = VoidConsumer()
-
 
 class NotifierPolicy:
     needs_cleanup: bool = False  # overridden to True by dec() in subclasses that defer removal
