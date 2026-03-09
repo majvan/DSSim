@@ -208,7 +208,7 @@ class DSSimulation(DSComponentSingleton,
 
     def _gwait_for_event(self, timeout: TimeType, val: EventRetType = None) -> Generator[EventType, EventType, EventType]:
         # Re-compute abs/relative time to abs for the timeout
-        time = self._compute_time(timeout)
+        time = float('inf') if timeout == float('inf') else self._compute_time(timeout)
         # Schedule the timeout to the time queue. The condition is only for higher performance
         if time != float('inf'):
             self.time_queue.add_element(time, (self._parent_process, None))
@@ -234,7 +234,7 @@ class DSSimulation(DSComponentSingleton,
 
     async def _wait_for_event(self, timeout: TimeType, val: EventRetType = None) -> EventType:
         # Re-compute abs/relative time to abs for the timeout
-        time = self._compute_time(timeout)
+        time = float('inf') if timeout == float('inf') else self._compute_time(timeout)
         # Schedule the timeout to the time queue. The condition is only for higher performance
         if time != float('inf'):
             self.time_queue.add_element(time, (self._parent_process, None))
