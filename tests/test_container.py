@@ -35,75 +35,75 @@ class TestContainerNowait(unittest.TestCase):
 
     # ---- init state --------------------------------------------------------
 
-    def test_init_empty(self):
+    def test1_init_empty(self):
         c = self._make()
         self.assertEqual(len(c), 0)
 
-    def test_tx_nempty_producer_exists(self):
+    def test2_tx_nempty_producer_exists(self):
         c = self._make()
         self.assertIsNotNone(c.tx_nempty)
 
     # ---- put_nowait --------------------------------------------------------
 
-    def test_put_nowait_single(self):
+    def test3_put_nowait_single(self):
         c = self._make()
         result = c.put_nowait('A')
         self.assertIsNotNone(result)
         self.assertEqual(len(c), 1)
 
-    def test_put_nowait_multiple(self):
+    def test4_put_nowait_multiple(self):
         c = self._make()
         result = c.put_nowait('A', 'B', 'C')
         self.assertIsNotNone(result)
         self.assertEqual(len(c), 3)
 
-    def test_put_nowait_duplicate_objects(self):
+    def test5_put_nowait_duplicate_objects(self):
         c = self._make()
         c.put_nowait('X', 'X', 'X')
         self.assertEqual(len(c), 3)
 
-    def test_put_nowait_at_capacity_fails(self):
+    def test6_put_nowait_at_capacity_fails(self):
         c = self._make(capacity=2)
         c.put_nowait('A', 'B')
         result = c.put_nowait('C')
         self.assertIsNone(result)
         self.assertEqual(len(c), 2)
 
-    def test_put_nowait_below_capacity_succeeds(self):
+    def test7_put_nowait_below_capacity_succeeds(self):
         c = self._make(capacity=3)
         c.put_nowait('A')
         self.assertIsNotNone(c.put_nowait('B', 'C'))
         self.assertEqual(len(c), 3)
 
-    def test_put_nowait_no_capacity_is_unbounded(self):
+    def test8_put_nowait_no_capacity_is_unbounded(self):
         c = self._make()
         for i in range(500):
             self.assertIsNotNone(c.put_nowait(object()))
 
     # ---- get_nowait --------------------------------------------------------
 
-    def test_get_nowait_any(self):
+    def test9_get_nowait_any(self):
         c = self._make()
         c.put_nowait('A')
         result = c.get_n_nowait()
         self.assertEqual(result, ['A'])
         self.assertEqual(len(c), 0)
 
-    def test_get_nowait_specific_present(self):
+    def test10_get_nowait_specific_present(self):
         c = self._make()
         c.put_nowait('A', 'B')
         result = c.get_n_nowait('B')
         self.assertEqual(result, ['B'])
         self.assertIn('A', list(c))
 
-    def test_get_nowait_specific_missing(self):
+    def test11_get_nowait_specific_missing(self):
         c = self._make()
         c.put_nowait('A')
         result = c.get_n_nowait('Z')
         self.assertEqual(result, [])
         self.assertEqual(len(c), 1)  # 'A' still present
 
-    def test_get_nowait_multiple_specific(self):
+    def test12_get_nowait_multiple_specific(self):
         c = self._make()
         c.put_nowait('A', 'B', 'C')
         result = c.get_n_nowait('A', 'C')
@@ -112,7 +112,7 @@ class TestContainerNowait(unittest.TestCase):
         self.assertEqual(len(result), 2)
         self.assertEqual(len(c), 1)
 
-    def test_get_nowait_duplicate_decrements_count(self):
+    def test13_get_nowait_duplicate_decrements_count(self):
         c = self._make()
         c.put_nowait('X', 'X')
         result = c.get_n_nowait('X')
@@ -121,7 +121,7 @@ class TestContainerNowait(unittest.TestCase):
 
     # ---- remove ------------------------------------------------------------
 
-    def test_remove_reduces_size(self):
+    def test14_remove_reduces_size(self):
         c = self._make()
         c.put_nowait('A', 'B')
         c.remove('A')
@@ -129,7 +129,7 @@ class TestContainerNowait(unittest.TestCase):
 
     # ---- iteration ---------------------------------------------------------
 
-    def test_iter_includes_duplicates(self):
+    def test15_iter_includes_duplicates(self):
         c = self._make()
         c.put_nowait('X', 'X', 'Y')
         elements = list(c)
@@ -150,7 +150,7 @@ class TestContainerBlockingGet(unittest.TestCase):
 
     # ---- gget any object ---------------------------------------------------
 
-    def test_gget_any_blocks_until_item_added(self):
+    def test1_gget_any_blocks_until_item_added(self):
         results = []
 
         def consumer():
@@ -168,7 +168,7 @@ class TestContainerBlockingGet(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0], ('got', 5, ['hello']))
 
-    def test_gget_any_gets_item_already_present(self):
+    def test2_gget_any_gets_item_already_present(self):
         results = []
 
         def consumer():
@@ -181,7 +181,7 @@ class TestContainerBlockingGet(unittest.TestCase):
         self.sim.run(5)
         self.assertEqual(results, [['immediate']])
 
-    def test_gget_any_timeout(self):
+    def test3_gget_any_timeout(self):
         results = []
 
         def consumer():
@@ -195,7 +195,7 @@ class TestContainerBlockingGet(unittest.TestCase):
 
     # ---- gget specific object ----------------------------------------------
 
-    def test_gget_specific_blocks_until_object_added(self):
+    def test4_gget_specific_blocks_until_object_added(self):
         results = []
 
         def consumer():
@@ -216,7 +216,7 @@ class TestContainerBlockingGet(unittest.TestCase):
         self.assertEqual(results[0][1], 6)   # wakes at t=6 when 'B' is added
         self.assertIn('B', results[0][2])
 
-    def test_gget_specific_timeout(self):
+    def test5_gget_specific_timeout(self):
         results = []
 
         def consumer():
@@ -229,7 +229,7 @@ class TestContainerBlockingGet(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [None])
 
-    def test_gget_all_or_nothing_false(self):
+    def test6_gget_all_or_nothing_false(self):
         '''all_or_nothing=False: collects matching objects as they arrive.'''
         results = []
 
@@ -252,7 +252,7 @@ class TestContainerBlockingGet(unittest.TestCase):
 
     # ---- async get ---------------------------------------------------------
 
-    def test_async_get_any(self):
+    def test7_async_get_any(self):
         results = []
 
         async def consumer():
@@ -269,7 +269,7 @@ class TestContainerBlockingGet(unittest.TestCase):
         self.sim.run(20)
         self.assertEqual(results, [('got', 4, ['async_item'])])
 
-    def test_async_get_specific(self):
+    def test8_async_get_specific(self):
         results = []
 
         async def consumer():
@@ -287,7 +287,7 @@ class TestContainerBlockingGet(unittest.TestCase):
         self.assertIsNotNone(results[0])
         self.assertIn('target', results[0])
 
-    def test_async_get_timeout(self):
+    def test9_async_get_timeout(self):
         results = []
 
         async def consumer():
@@ -312,7 +312,7 @@ class TestContainerBlockingPut(unittest.TestCase):
     def _make(self, capacity=None):
         return Container(capacity=capacity, sim=self.sim)
 
-    def test_gput_blocks_until_space_available(self):
+    def test1_gput_blocks_until_space_available(self):
         results = []
 
         def producer():
@@ -331,7 +331,7 @@ class TestContainerBlockingPut(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0][1], 5)
 
-    def test_gput_timeout(self):
+    def test2_gput_timeout(self):
         results = []
 
         def producer():
@@ -344,7 +344,7 @@ class TestContainerBlockingPut(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [None])
 
-    def test_async_put_blocks_until_space(self):
+    def test3_async_put_blocks_until_space(self):
         results = []
 
         async def producer():
@@ -380,7 +380,7 @@ class TestContainerSignalRouting(unittest.TestCase):
     def _make(self, capacity=None):
         return Container(capacity=capacity, sim=self.sim)
 
-    def test_any_getter_woken_by_put_nowait(self):
+    def test1_any_getter_woken_by_put_nowait(self):
         '''put_nowait fires tx_nempty and wakes a waiting any-object getter.'''
         results = []
 
@@ -398,7 +398,7 @@ class TestContainerSignalRouting(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [('got', 3, ['item'])])
 
-    def test_specific_getter_woken_by_put_nowait(self):
+    def test2_specific_getter_woken_by_put_nowait(self):
         '''put_nowait fires tx_changed and wakes a waiting specific-object getter.'''
         results = []
 
@@ -416,7 +416,7 @@ class TestContainerSignalRouting(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [('got', 4, ['special'])])
 
-    def test_both_getter_types_coexist(self):
+    def test3_both_getter_types_coexist(self):
         '''An any-getter and a specific-getter can both be satisfied independently.'''
         results = []
 
@@ -443,7 +443,7 @@ class TestContainerSignalRouting(unittest.TestCase):
         for _, t in results:
             self.assertEqual(t, 5)
 
-    def test_putter_woken_by_get_nowait(self):
+    def test4_putter_woken_by_get_nowait(self):
         '''get_nowait fires tx_changed and wakes a blocked putter.'''
         results = []
 
@@ -462,7 +462,7 @@ class TestContainerSignalRouting(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [('put', 3)])
 
-    def test_no_spurious_signal_when_no_getters(self):
+    def test5_no_spurious_signal_when_no_getters(self):
         '''put_nowait with no waiters does not schedule unnecessary events.
         Verified indirectly: simulation stays idle after run with no consumers.'''
         c = self._make()
@@ -471,7 +471,7 @@ class TestContainerSignalRouting(unittest.TestCase):
         c.put_nowait('Y')
         self.assertEqual(len(c), 2)
 
-    def test_multiple_any_getters_each_get_one_item(self):
+    def test6_multiple_any_getters_each_get_one_item(self):
         '''Multiple any-getters each wake up and consume one item.'''
         results = []
 
@@ -515,7 +515,7 @@ class TestContainerWaitMethods(unittest.TestCase):
 
     # ---- gwait -------------------------------------------------------------
 
-    def test_gwait_woken_by_put_nowait(self):
+    def test1_gwait_woken_by_put_nowait(self):
         '''gwait on container wakes when item is added.'''
         results = []
 
@@ -533,7 +533,7 @@ class TestContainerWaitMethods(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [3])
 
-    def test_gwait_woken_by_get_nowait(self):
+    def test2_gwait_woken_by_get_nowait(self):
         '''gwait on container wakes when item is removed.'''
         results = []
 
@@ -554,7 +554,7 @@ class TestContainerWaitMethods(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [4])
 
-    def test_gwait_timeout(self):
+    def test3_gwait_timeout(self):
         '''gwait returns None on timeout without crashing.'''
         results = []
 
@@ -569,7 +569,7 @@ class TestContainerWaitMethods(unittest.TestCase):
 
     # ---- check_and_gwait ---------------------------------------------------
 
-    def test_check_and_gwait_returns_immediately_when_cond_true(self):
+    def test4_check_and_gwait_returns_immediately_when_cond_true(self):
         '''check_and_gwait returns right away if condition already holds.'''
         results = []
 
@@ -585,7 +585,7 @@ class TestContainerWaitMethods(unittest.TestCase):
 
     # ---- async wait --------------------------------------------------------
 
-    def test_wait_woken_by_put_nowait(self):
+    def test5_wait_woken_by_put_nowait(self):
         '''async wait() wakes when item is added.'''
         results = []
 
@@ -605,7 +605,7 @@ class TestContainerWaitMethods(unittest.TestCase):
 
     # ---- async check_and_wait ----------------------------------------------
 
-    def test_check_and_wait_returns_immediately_when_cond_true(self):
+    def test6_check_and_wait_returns_immediately_when_cond_true(self):
         '''async check_and_wait returns immediately if condition already holds.'''
         results = []
 
@@ -640,7 +640,7 @@ class TestContainerSingleItemGet(unittest.TestCase):
 
     # ---- get_nowait --------------------------------------------------------
 
-    def test_get_nowait_returns_single_element(self):
+    def test1_get_nowait_returns_single_element(self):
         c = self._make()
         c.put_nowait('A')
         result = c.get_nowait()
@@ -648,12 +648,12 @@ class TestContainerSingleItemGet(unittest.TestCase):
         self.assertNotIsInstance(result, list)
         self.assertEqual(len(c), 0)
 
-    def test_get_nowait_returns_none_when_empty(self):
+    def test2_get_nowait_returns_none_when_empty(self):
         c = self._make()
         result = c.get_nowait()
         self.assertIsNone(result)
 
-    def test_get_nowait_multiple_calls_fifo(self):
+    def test3_get_nowait_multiple_calls_fifo(self):
         c = self._make()
         c.put_nowait('A', 'B', 'C')
         results = [c.get_nowait() for _ in range(3)]
@@ -663,7 +663,7 @@ class TestContainerSingleItemGet(unittest.TestCase):
 
     # ---- gget ---------------------------------------------------------------
 
-    def test_gget_returns_single_element_immediately(self):
+    def test4_gget_returns_single_element_immediately(self):
         results = []
 
         def consumer():
@@ -677,7 +677,7 @@ class TestContainerSingleItemGet(unittest.TestCase):
         self.assertEqual(results, ['hello'])
         self.assertNotIsInstance(results[0], list)
 
-    def test_gget_blocks_until_item_added(self):
+    def test5_gget_blocks_until_item_added(self):
         results = []
 
         def consumer():
@@ -694,7 +694,7 @@ class TestContainerSingleItemGet(unittest.TestCase):
         self.sim.run(20)
         self.assertEqual(results, [('got', 5, 'deferred')])
 
-    def test_gget_timeout_returns_none(self):
+    def test6_gget_timeout_returns_none(self):
         results = []
 
         def consumer():
@@ -706,7 +706,7 @@ class TestContainerSingleItemGet(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [None])
 
-    def test_gget_vs_gget_n_different_return_types(self):
+    def test7_gget_vs_gget_n_different_return_types(self):
         '''gget returns a bare element; gget_n wraps in list.'''
         single_results = []
         list_results = []
@@ -730,7 +730,7 @@ class TestContainerSingleItemGet(unittest.TestCase):
 
     # ---- async get ---------------------------------------------------------
 
-    def test_async_get_returns_single_element(self):
+    def test8_async_get_returns_single_element(self):
         results = []
 
         async def consumer():
@@ -744,7 +744,7 @@ class TestContainerSingleItemGet(unittest.TestCase):
         self.assertEqual(results, ['async_item'])
         self.assertNotIsInstance(results[0], list)
 
-    def test_async_get_blocks_until_item_added(self):
+    def test9_async_get_blocks_until_item_added(self):
         results = []
 
         async def consumer():
@@ -761,7 +761,7 @@ class TestContainerSingleItemGet(unittest.TestCase):
         self.sim.run(20)
         self.assertEqual(results, [('got', 4, 'late')])
 
-    def test_async_get_timeout_returns_none(self):
+    def test10_async_get_timeout_returns_none(self):
         results = []
 
         async def consumer():

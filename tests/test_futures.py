@@ -34,13 +34,13 @@ class FutureMock(Mock):
 
 class TestDSFuture(unittest.TestCase):
 
-    def test0_future_eps(self):
+    def test1_future_eps(self):
         sim = DSSimulation()
         fut = DSFuture(sim=sim)
         endpoints = fut.get_future_eps()
         self.assertEqual(endpoints, {fut._finish_tx})
     
-    def test1_future_finish(self):
+    def test2_future_finish(self):
         sim = DSSimulation()
         fut = DSFuture(sim=sim)
         finish = fut.finished()
@@ -51,7 +51,7 @@ class TestDSFuture(unittest.TestCase):
         finish = fut.finished()
         self.assertTrue(finish)
 
-    def test2_future_fail(self):
+    def test3_future_fail(self):
         sim = DSSimulation()
         fut = DSFuture(sim=sim)
         finish = fut.finished()
@@ -62,7 +62,7 @@ class TestDSFuture(unittest.TestCase):
         finish = fut.finished()
         self.assertTrue(finish)
 
-    def test3_future_send(self):
+    def test4_future_send(self):
         sim = DSSimulation()
         fut = DSFuture(sim=sim)
         finish = fut.finished()
@@ -73,7 +73,7 @@ class TestDSFuture(unittest.TestCase):
         finish = fut.finished()
         self.assertTrue(finish)
 
-    def test4_future_abort(self):
+    def test5_future_abort(self):
         sim = DSSimulation()
         fut = DSFuture(sim=sim)
         finish = fut.finished()
@@ -83,7 +83,7 @@ class TestDSFuture(unittest.TestCase):
         finish = fut.finished()
         self.assertTrue(finish)
 
-    def test5_future_await_already_finished(self):
+    def test6_future_await_already_finished(self):
         sim = MagicMock()
         fut = DSFuture(sim=sim)
         fut.finish('hello')
@@ -96,7 +96,7 @@ class TestDSFuture(unittest.TestCase):
         self.assertIsNone(retval)  # already finished: gwait skipped, retval stays None
         sim.gwait.assert_not_called()
 
-    def test6_future_await_not_finished(self):
+    def test7_future_await_not_finished(self):
         sim = MagicMock()
         fut = DSFuture(sim=sim)
         process = fut.__await__()

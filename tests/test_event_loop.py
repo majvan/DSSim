@@ -23,7 +23,7 @@ async def process(sim):
 class TestEventLoop(unittest.TestCase):
     ''' Test the time queue class behavior '''
 
-    def test0_loop(self):
+    def test1_loop(self):
         sim = DSAsyncSimulation()
         p = process(sim)
         sim.schedule(0, p)

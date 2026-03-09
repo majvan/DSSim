@@ -37,7 +37,7 @@ __all__ = ['TestPubSub']
 class TestCallback(unittest.TestCase):
     ''' Test the DSCallback '''
 
-    def test0_fcn(self):
+    def test1_fcn(self):
         my_consumer_fcn = Mock()
         c = DSCallback(my_consumer_fcn, sim=SomeObj())
         c.send({'data': 1})
@@ -47,7 +47,7 @@ class TestCallback(unittest.TestCase):
         my_consumer_fcn.assert_called_once_with({'data': 0})
         my_consumer_fcn.reset_mock()
 
-    def test1_kw_fcn(self):
+    def test2_kw_fcn(self):
         my_consumer_fcn = Mock()
         c = DSKWCallback(my_consumer_fcn, sim=SomeObj())
         c.send({'data': 1})
@@ -57,7 +57,7 @@ class TestCallback(unittest.TestCase):
         my_consumer_fcn.assert_called_once_with(data=0)
         my_consumer_fcn.reset_mock()
 
-    def test2_method(self):
+    def test3_method(self):
         class ObjWithCallback:
             def cb(self, *args, **kwargs):
                 self.args = args
@@ -71,7 +71,7 @@ class TestCallback(unittest.TestCase):
         self.assertEqual(obj.args, ({'data': 0},))
         self.assertEqual(obj.kwargs, {})
 
-    def test3_kw_method(self):
+    def test4_kw_method(self):
         class ObjWithCallback:
             def cb(self, data):
                 self.args = []
@@ -85,7 +85,7 @@ class TestCallback(unittest.TestCase):
         self.assertEqual(obj.args, [])
         self.assertEqual(obj.kwargs, {'data': 0})
 
-    def test4_consumer_with_filter(self):
+    def test5_consumer_with_filter(self):
         my_consumer_fcn = Mock()
         c = DSCallback(my_consumer_fcn, cond=lambda e:e['data'] > 0, sim=SomeObj())
         c.send({'data': 1})
@@ -95,7 +95,7 @@ class TestCallback(unittest.TestCase):
         my_consumer_fcn.send.assert_not_called()
         my_consumer_fcn.reset_mock()
 
-    def test5_kw_consumer_with_filter(self):
+    def test6_kw_consumer_with_filter(self):
         my_consumer_fcn = Mock()
         c = DSKWCallback(my_consumer_fcn, cond=lambda e:e['data'] > 0, sim=SomeObj())
         c.send({'data': 1})
@@ -112,7 +112,7 @@ class SomeObj2:
 class TestConsumer(unittest.TestCase):
     ''' Tests for DSConsumer.try_send '''
 
-    def test0_try_send_checks_cond_before_dispatch(self):
+    def test1_try_send_checks_cond_before_dispatch(self):
         ''' try_send must check condition first; if rejected, send_object must not be called '''
         from unittest.mock import MagicMock
         sim = DSSimulation()
@@ -125,7 +125,7 @@ class TestConsumer(unittest.TestCase):
         consumer.meta.cond.check.assert_called_once()
         sim.send_object.assert_not_called()
 
-    def test1_try_send_dispatches_after_cond_passes(self):
+    def test2_try_send_dispatches_after_cond_passes(self):
         ''' try_send must call send_object with the event returned by cond.check '''
         from unittest.mock import MagicMock
         call_order = []
@@ -182,7 +182,7 @@ class TestProducer(unittest.TestCase):
             consumer.try_send = make_ts()
         return m
 
-    def test0_producer_add(self):
+    def test1_producer_add(self):
         p = DSProducer(sim=self.sim)
         process = self.__my_process_consumer()
         c0 = DSProcess(process, start=True, sim=self.sim)
@@ -235,7 +235,7 @@ class TestProducer(unittest.TestCase):
         self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {c2: 2, c1: 1})
         self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {c0: 1})
 
-    def test1_producer_remove(self):
+    def test2_producer_remove(self):
         p = DSProducer(sim=DSSimulation())
         c0 = Mock()
         c0.send = Mock(return_value=False)
@@ -318,7 +318,7 @@ class TestProducer(unittest.TestCase):
         self.assertEqual(p.subs[DSProducer.Phase.POST_HIT].d, {})
         self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
 
-    def test2_producer_signal_act_retval(self):
+    def test3_producer_signal_act_retval(self):
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
@@ -336,7 +336,7 @@ class TestProducer(unittest.TestCase):
         p.send(2)
         self.sim.try_send.assert_has_calls([call(c0, 2),])
 
-    def test3_producer_signal_act(self):
+    def test4_producer_signal_act(self):
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
@@ -351,7 +351,7 @@ class TestProducer(unittest.TestCase):
         p.send(2)
         self.sim.try_send.assert_called_once_with(c0, 2)
 
-    def test4_producer_signal_pre(self):
+    def test5_producer_signal_pre(self):
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
@@ -366,7 +366,7 @@ class TestProducer(unittest.TestCase):
         p.send(2)
         self.sim.try_send.assert_has_calls([call(c0, 2), call(c1, 2)])
 
-    def test5_producer_signal_post_plus(self):
+    def test6_producer_signal_post_plus(self):
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
@@ -391,7 +391,7 @@ class TestProducer(unittest.TestCase):
         p.send(2)
         self.sim.try_send.assert_has_calls([call(c0, 2), call(c0, {'consumer': c0, 'event': 2}), call(c1, {'consumer': c0, 'event': 2})])
 
-    def test6_producer_signal_post_minus(self):
+    def test7_producer_signal_post_minus(self):
         p = DSProducer(sim=self.sim)
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
@@ -407,7 +407,7 @@ class TestProducer(unittest.TestCase):
         self.sim.try_send.assert_has_calls([call(c0, 2), call(c1, 2)])
 
 
-    def test7_producer_signal_same(self):
+    def test8_producer_signal_same(self):
         c0 = DSCallback(None, sim=self.sim)
         c1 = DSCallback(None, sim=self.sim)
         tests = (
@@ -438,7 +438,7 @@ class TestProducer(unittest.TestCase):
             self.sim.try_send.assert_has_calls(calls, any_order=True)
 
 
-    def test8_producer_signal_combi_nonconsume(self):
+    def test9_producer_signal_combi_nonconsume(self):
         c0 = DSCallback(lambda e: True, sim=self.sim)
         c1 = DSCallback(lambda e: True, sim=self.sim)
 
@@ -470,7 +470,7 @@ class TestProducer(unittest.TestCase):
             self.sim.try_send.assert_has_calls(calls, any_order=True)
 
 
-    def test9_producer_signal_combi_consume(self):
+    def test10_producer_signal_combi_consume(self):
         c0 = DSCallback(lambda e: True, sim=self.sim)
         c1 = DSCallback(lambda e: True, sim=self.sim)
 
@@ -502,7 +502,7 @@ class TestProducer(unittest.TestCase):
             self.sim.try_send.assert_has_calls(calls, any_order=True)
 
 
-    def test10_producer_add_subscriber_in_send_hook(self):
+    def test11_producer_add_subscriber_in_send_hook(self):
         ''' Test the behavior of signal function when send handler adds a subscriber '''
         self.sim = DSSimulation()
         p = DSProducer(sim=self.sim)
@@ -522,7 +522,7 @@ class TestProducer(unittest.TestCase):
         self.assertEqual(p.subs[DSProducer.Phase.POST_MISS].d, {})
 
 
-    def test11_producer_remove_subscriber_in_send_hook(self):
+    def test12_producer_remove_subscriber_in_send_hook(self):
         ''' Test the behavior of signal function when send handler removes a subscriber '''
         self.sim = DSSimulation()
         p = DSProducer(sim=self.sim)
@@ -543,7 +543,7 @@ class TestProducer(unittest.TestCase):
 
 class TestNotifierDict(unittest.TestCase):
 
-    def test0_inc_dec(self):
+    def test1_inc_dec(self):
         n = NotifierDict()
         self.assertTrue(n.d == {})
         self.assertFalse(n.needs_cleanup)
@@ -560,7 +560,7 @@ class TestNotifierDict(unittest.TestCase):
         self.assertEqual(n.d, {'b': 2})
         self.assertFalse(n.needs_cleanup)
 
-    def test1_iter_change(self):
+    def test2_iter_change(self):
         n = NotifierDict()
         n.inc('a')
         count = 0
@@ -570,7 +570,7 @@ class TestNotifierDict(unittest.TestCase):
             count += 1
         self.assertTrue(count == 1)
 
-    def test2_cleanup(self):
+    def test3_cleanup(self):
         n = NotifierDict()
         self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.d, {})
@@ -594,7 +594,7 @@ class TestNotifierDict(unittest.TestCase):
         self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.d, {})
 
-    def test3_iter(self):
+    def test4_iter(self):
         n = NotifierDict()
         n.d = {'c': 1, 'a': 2, 'b': 4}
         it = iter(n)
@@ -607,7 +607,7 @@ class TestNotifierDict(unittest.TestCase):
         with self.assertRaises(StopIteration):
             el = next(it)
 
-    def test3_rewind(self):
+    def test5_rewind(self):
         n = NotifierDict()
         n.d = {'c': 1, 'a': 2, 'b': 4}
         it = iter(n)
@@ -626,7 +626,7 @@ class TestNotifierDict(unittest.TestCase):
         
 class TestNotifierRoundRobin(unittest.TestCase):
 
-    def test0_inc_dec(self):
+    def test1_inc_dec(self):
         n = NotifierRoundRobin()
         self.assertTrue(n.queue == [])
         self.assertFalse(n.needs_cleanup)
@@ -643,7 +643,7 @@ class TestNotifierRoundRobin(unittest.TestCase):
         self.assertEqual(n.queue, [('a', 0), ('b', 2)])
         self.assertTrue(n.needs_cleanup)
 
-    def test1_iter_change(self):
+    def test2_iter_change(self):
         n = NotifierRoundRobin()
         n.inc('a')
         count = 0
@@ -653,7 +653,7 @@ class TestNotifierRoundRobin(unittest.TestCase):
             count += 1
         self.assertTrue(count == 1)
 
-    def test2_cleanup(self):
+    def test3_cleanup(self):
         n = NotifierRoundRobin()
         self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.queue, [])
@@ -677,7 +677,7 @@ class TestNotifierRoundRobin(unittest.TestCase):
         self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.queue, [])
 
-    def test3_iter(self):
+    def test4_iter(self):
         n = NotifierRoundRobin()
         n.queue = [NotifierRoundRobinItem('c', 1), NotifierRoundRobinItem('a', 2), NotifierRoundRobinItem('b', 4)]
         it = iter(n)
@@ -690,7 +690,7 @@ class TestNotifierRoundRobin(unittest.TestCase):
         with self.assertRaises(StopIteration):
             el = next(it)
 
-    def test3_rewind(self):
+    def test5_rewind(self):
         n = NotifierRoundRobin()
         n.queue = [NotifierRoundRobinItem('c', 1), NotifierRoundRobinItem('a', 2), NotifierRoundRobinItem('b', 4),]
         it = iter(n)
@@ -709,7 +709,7 @@ class TestNotifierRoundRobin(unittest.TestCase):
 
 class TestNotifierPriority(unittest.TestCase):
 
-    def test0_inc_dec(self):
+    def test1_inc_dec(self):
         n = NotifierPriority()
         self.assertTrue(n.d == {})
         self.assertFalse(n.needs_cleanup)
@@ -729,7 +729,7 @@ class TestNotifierPriority(unittest.TestCase):
         self.assertEqual(n.d, {1: {'b': 2}})
         self.assertFalse(n.needs_cleanup)
 
-    def test1_iter_change(self):
+    def test2_iter_change(self):
         n = NotifierPriority()
         n.inc('a', priority=1)
         count = 0
@@ -739,7 +739,7 @@ class TestNotifierPriority(unittest.TestCase):
             count += 1
         self.assertTrue(count == 1)
 
-    def test2_cleanup(self):
+    def test3_cleanup(self):
         n = NotifierPriority()
         self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.d, {})
@@ -767,7 +767,7 @@ class TestNotifierPriority(unittest.TestCase):
         self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.d, {})
 
-    def test3_iter(self):
+    def test4_iter(self):
         n = NotifierPriority()
         n.d = {2: {'c': 1, 'a': 2, 'b': 4}, 1: {'d': 12, 'e': 14}}
         it = iter(n)
@@ -784,7 +784,7 @@ class TestNotifierPriority(unittest.TestCase):
         with self.assertRaises(StopIteration):
             el = next(it)
 
-    def test4_rewind(self):
+    def test5_rewind(self):
         n = NotifierPriority()
         n.d = {2: {'c': 1, 'a': 2, 'b': 4}, 1: {'d': 12, 'e': 14}}
         it = iter(n)

@@ -24,7 +24,7 @@ class MyComponent(DSComponent):
 class TestInterface(unittest.TestCase):
     ''' Test the time queue class behavior '''
 
-    def test0_simple_interface(self):
+    def test1_simple_interface(self):
         sim = Mock()
         sim.names = {}
         i0 = MyComponent(sim=sim)
