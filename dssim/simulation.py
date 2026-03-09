@@ -97,24 +97,58 @@ class SimScheduleMixin:
                          'For processes, full-producers and full-consumers, include SimProcessMixin.')
 
 
+# Default layer2 mixins — loaded when layer2 is not explicitly overridden.
+# These require the pubsub layer (SimPubsubMixin) to be present.
+PubSubLayer2 = (
+    SimPubsubMixin,
+    SimFutureMixin,
+    SimProcessMixin,
+    SimFilterMixin,
+    SimContainerMixin,
+    SimQueueMixin,
+    SimResourceMixin,
+    SimStateMixin,
+)
+
+# Cache of dynamically created subclasses keyed by (base_class, layer2_tuple).
+# Avoids recreating the same class on every DSSimulation() call.
+_dyn_class_cache: dict = {}
+
+
 class DSSimulation(DSComponentSingleton,
-                   SimPubsubMixin,
-                   SimFutureMixin,
-                   SimProcessMixin,   # defined schedule() for generators/coroutines/callables
-                #    SimScheduleMixin,  # base schedule() for plain ISubscriber
-                   SimFilterMixin,
-                   SimContainerMixin,
-                   SimQueueMixin,
-                   SimResourceMixin,
-                   SimStateMixin):
-    ''' The simulation is a which schedules the nearest (in time) events. '''
+                   SimScheduleMixin):  # basic schedule() for plain ISubscriber; always available
+    ''' The simulation is a which schedules the nearest (in time) events.
 
+    The second-layer mixins (SimProcessMixin, SimFutureMixin, ...) are loaded
+    dynamically at construction time via the *layer2* parameter.  When layer2
+    contains SimProcessMixin its gwait/wait/schedule override the base versions
+    from SimWaitMixin / SimScheduleMixin through normal MRO resolution.
 
-    def __init__(self, name: str = 'dssim', single_instance: bool = True) -> None:
-        ''' The simulation holds the list of producers which share the same time queue.
-        The list is only for the application informational purpose to be able to identify
-        all the producers which belong to the same simulation entity.
+    Pass layer2=[] (or layer2=None) to get a minimal simulation with no
+    process/pubsub layer — useful for plain-generator / coroutine usage.
+    '''
+
+    def _load_layer2(self, layer2) -> None:
+        ''' Inject layer2 mixins into this instance by reassigning __class__.
+
+        A cached dynamic subclass is reused across instances with the same
+        (base_class, layer2) combination so class-creation overhead is paid
+        only once.  The mixins are inserted before DSSimulation in the MRO so
+        that e.g. SimProcessMixin.gwait overrides SimWaitMixin.gwait.
         '''
+        key = (type(self), tuple(layer2))
+        if key not in _dyn_class_cache:
+            _dyn_class_cache[key] = type(
+                type(self).__name__,
+                tuple(layer2) + (type(self),),
+                {},
+            )
+        self.__class__ = _dyn_class_cache[key]
+
+    def __init__(self, name: str = 'dssim', single_instance: bool = True,
+                 layer2=PubSubLayer2) -> None:
+        if layer2:
+            self._load_layer2(layer2)
         self.name = name
         self.names: dict = {}  # stores names of associated components
         if DSComponentSingleton.sim_singleton is None:
