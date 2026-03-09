@@ -20,7 +20,7 @@ from dssim.pubsub import DSCallback, DSKWCallback, DSProducer, DSTrackableEvent,
 from dssim.pubsub import NotifierDict, NotifierRoundRobin, NotifierPriority
 from dssim.future import DSFuture
 from dssim.process import DSProcess
-from dssim.simulation import DSSchedulable
+from dssim.simulation import DSSchedulable, PubSubLayer2
 from dssim.process import DSInterruptibleContextError, DSTransferableCondition, DSTimeoutContextError
 from dssim.cond import DSFilter
 from dssim.processcomponent import DSProcessComponent, PCGenerator
