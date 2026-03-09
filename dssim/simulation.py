@@ -80,6 +80,31 @@ def DSSchedulable(api_func):
 
 
 
+class SimWaitMixin:
+    ''' Basic gwait/wait mixin for DSSimulation.
+
+    Provides timeout-only wait primitives that work purely at the simulation
+    layer — no conditions, no pubsub, no DSProcess.
+
+    SimProcessMixin (when present in DSSimulation's MRO before this class)
+    overrides both methods with the full condition-aware versions.
+    '''
+
+    def gwait(self: "DSSimulation", timeout: TimeType = float('inf')) -> "Generator[EventType, EventType, EventType]":
+        ''' Wait for up to *timeout* time units.
+        Returns the first event delivered to the caller, or None on timeout.
+        '''
+        retval = yield from self._gwait_for_event(timeout)
+        return retval
+
+    async def wait(self: "DSSimulation", timeout: TimeType = float('inf')) -> "EventType":
+        ''' Async variant of gwait.
+        Returns the first event delivered to the caller, or None on timeout.
+        '''
+        retval = await self._wait_for_event(timeout)
+        return retval
+
+
 class SimScheduleMixin:
     ''' Base schedule() for ISubscriber — the minimal schedulable type.
     SimProcessMixin (when present) overrides schedule() for generators and
@@ -96,6 +121,13 @@ class SimScheduleMixin:
         raise ValueError(f'The provided schedulable {schedulable} is not supported.'
                          'For processes, full-producers and full-consumers, include SimProcessMixin.')
 
+
+# Minimal layer2: plain-generator / coroutine scheduling with timeout-only
+# gwait/wait.  No pubsub, no DSProcess.
+TinyLayer2 = (
+    SimWaitMixin,
+    SimScheduleMixin,
+)
 
 # Default layer2 mixins — loaded when layer2 is not explicitly overridden.
 # These require the pubsub layer (SimPubsubMixin) to be present.
@@ -115,8 +147,7 @@ PubSubLayer2 = (
 _dyn_class_cache: dict = {}
 
 
-class DSSimulation(DSComponentSingleton,
-                   SimScheduleMixin):  # basic schedule() for plain ISubscriber; always available
+class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscriber; always available
     ''' The simulation is a which schedules the nearest (in time) events.
 
     The second-layer mixins (SimProcessMixin, SimFutureMixin, ...) are loaded

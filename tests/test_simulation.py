@@ -18,7 +18,7 @@ No DSProcess, DSProducer or DSConsumer objects are used here.
 '''
 import unittest
 from unittest.mock import Mock, call
-from dssim import DSAbsTime, DSSimulation, DSSchedulable
+from dssim import DSAbsTime, DSSimulation, DSSchedulable, TinyLayer2
 from dssim.simulation import VoidSubscriber, void_subscriber
 
 
@@ -299,15 +299,104 @@ class TestVoidSubscriber(unittest.TestCase):
 
     def test6_simulation_parent_process_defaults_to_void_subscriber(self):
         ''' After construction, sim._parent_process is the void_subscriber singleton. '''
-        sim = DSSimulation()
+        sim = DSSimulation(layer2=TinyLayer2)
         self.assertIs(sim._parent_process, void_subscriber)
 
     def test7_simulation_restart_restores_void_subscriber(self):
         ''' restart() resets _parent_process back to void_subscriber. '''
-        sim = DSSimulation()
+        sim = DSSimulation(layer2=TinyLayer2)
         sim._parent_process = Mock()
         sim.restart()
         self.assertIs(sim._parent_process, void_subscriber)
+
+
+# ---------------------------------------------------------------------------
+# SimWaitMixin — basic timeout-only gwait / wait
+# SimProcessMixin is bypassed via _TestSim so SimWaitMixin's methods are
+# actually under test (not the full condition-aware overrides).
+# ---------------------------------------------------------------------------
+
+class TestSimWaitMixin(unittest.TestCase):
+    ''' Tests for SimWaitMixin.gwait / SimWaitMixin.wait.
+    Uses a local _TestSim subclass that replaces gwait/wait/schedule with the
+    SimWaitMixin / SimScheduleMixin versions, preventing SimProcessMixin from
+    wrapping generators in DSProcess or overriding the wait methods. '''
+
+    def _make_sim(self):
+        ''' Minimal simulation: TinyLayer2 only (SimWaitMixin + SimScheduleMixin). '''
+        return DSSimulation(layer2=TinyLayer2)
+
+    def test1_gwait_returns_none_on_timeout(self):
+        ''' gwait(timeout) returns None when the timeout fires with no prior event. '''
+        sim = self._make_sim()
+        result = []
+        def my_gen():
+            retval = yield from sim.gwait(5)
+            result.append(retval)
+        sim.schedule(0, my_gen())
+        t, _ = sim.run()
+        self.assertEqual(result, [None])
+        self.assertEqual(t, 5)
+
+    def test2_gwait_returns_event_before_timeout(self):
+        ''' gwait(10) returns the event when one arrives before the timeout. '''
+        sim = self._make_sim()
+        result = []
+        def my_gen():
+            retval = yield from sim.gwait(10)
+            result.append(retval)
+        gen = my_gen()
+        sim.schedule(0, gen)
+        sim.schedule_event(3, 'hello', gen)
+        t, _ = sim.run()
+        self.assertEqual(result, ['hello'])
+        self.assertEqual(t, 3)
+
+    def test3_wait_returns_none_on_timeout(self):
+        ''' wait(timeout) returns None when the timeout fires with no prior event. '''
+        sim = self._make_sim()
+        result = []
+        async def my_coro():
+            retval = await sim.wait(5)
+            result.append(retval)
+        sim.schedule(0, my_coro())
+        t, _ = sim.run()
+        self.assertEqual(result, [None])
+        self.assertEqual(t, 5)
+
+    def test4_wait_returns_event_before_timeout(self):
+        ''' wait(10) returns the event delivered before timeout. '''
+        sim = self._make_sim()
+        result = []
+        async def my_coro():
+            retval = await sim.wait(10)
+            result.append(retval)
+        coro = my_coro()
+        sim.schedule(0, coro)
+        sim.schedule_event(3, 'hello', coro)
+        t, _ = sim.run()
+        self.assertEqual(result, ['hello'])
+        self.assertEqual(t, 3)
+
+    def test5_first_timeout_cleared_when_gwait_returns_early(self):
+        ''' When gwait() is woken early by an external event, the pending timeout
+        entry is removed from the time queue.  A subsequent gwait() must schedule
+        a fresh timeout relative to the current time — not fire on the stale one. '''
+        sim = self._make_sim()
+        result = []
+        def my_gen():
+            r1 = yield from sim.gwait(5)
+            result.append(('first', sim.time, r1))
+            r2 = yield from sim.gwait(5)
+            result.append(('second', sim.time, r2))
+        gen = my_gen()
+        sim.schedule(0, gen)
+        sim.schedule_event(2, 'hello', gen)  # wake first gwait at t=2 (before t=5)
+        sim.run()
+        # first gwait returns 'hello' at t=2; second times out at t=2+5=7, not t=5
+        self.assertEqual(result[0], ('first', 2, 'hello'))
+        self.assertEqual(result[1], ('second', 7, None))
+        self.assertEqual(len(sim.time_queue), 0)
 
 
 if __name__ == '__main__':
