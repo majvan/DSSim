@@ -14,6 +14,7 @@
 '''
 The file implements container and queue components.
 '''
+import heapq
 from collections import deque
 from typing import Any, List, Dict, Iterator, Union, Optional, Generator, TYPE_CHECKING
 from dssim.base import NumericType, TimeType, EventType, SignalMixin
@@ -142,29 +143,136 @@ class DSLifoQueue(DSQueue):
 
 
 class DSKeyQueue(DSQueue):
-    '''DSQueue variant that maintains items in ascending order of a key function.
+    '''DSQueue variant that dequeues items in ascending order of a key function.
 
-    The item with the smallest key value is always at the head and dequeued first
+    The item with the smallest key value is always dequeued first
     (min-priority semantics).  Use ``key=lambda item: -item.priority`` to get
-    max-priority behaviour.
+    max-priority behaviour.  Items with equal keys are dequeued in FIFO order.
 
-    ``enqueue`` performs a sorted insertion (O(n)); ``dequeue`` and ``peek``
-    operate on the head in O(1).
+    Internally uses a binary min-heap (heapq) so that ``enqueue`` and
+    ``dequeue`` are O(log n) and ``peek`` is O(1).
+
+    Heap entries are ``(key_val, counter, item)`` triples.  The ``counter``
+    is a monotonically increasing integer inserted between the key and the
+    item so that heapq never needs to compare item objects directly: Python
+    compares tuples left-to-right and stops at the first differing element,
+    so a unique counter guarantees the comparison always resolves before
+    reaching ``item``.  Without it, two items with equal keys would trigger
+    ``item1 < item2``, raising ``TypeError`` for any non-comparable type.
+    As a side-effect the counter also gives stable FIFO ordering among
+    equal-key items for free.
     '''
 
     def __init__(self, key: Any = lambda item: item) -> None:
         super().__init__()
+        self._data = []   # override deque with a list used as a heap
         self._key = key
+        self._counter = 0  # see class docstring for why this is needed
+
+    # ---- priority-queue policy interface -----------------------------------
 
     def enqueue(self, item: Any) -> Any:
-        '''Insert item at the correct sorted position. O(n).'''
-        key_val = self._key(item)
-        for i, existing in enumerate(self._data):
-            if self._key(existing) > key_val:
-                self._data.insert(i, item)
-                return item
-        self._data.append(item)
+        '''Insert item into heap. O(log n).'''
+        heapq.heappush(self._data, (self._key(item), self._counter, item))
+        self._counter += 1
         return item
+
+    def dequeue(self) -> Any:
+        '''Remove and return item with smallest key. O(log n).'''
+        return heapq.heappop(self._data)[2]
+
+    def peek(self) -> Any:
+        '''Return item with smallest key without removing it. O(1).'''
+        return self._data[0][2] if self._data else None
+
+    # ---- convenience properties --------------------------------------------
+
+    @property
+    def head(self) -> Any:
+        '''Smallest-key item (heap root). Returns None when empty.'''
+        return self._data[0][2] if self._data else None
+
+    @property
+    def tail(self) -> Any:
+        '''Last item in heap-array order (not sorted). Returns None when empty.'''
+        return self._data[-1][2] if self._data else None
+
+    # ---- sequence protocol -------------------------------------------------
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __bool__(self) -> bool:
+        return bool(self._data)
+
+    def __iter__(self) -> Iterator:
+        '''Iterate items in ascending key order (priority order). O(n log n).'''
+        return iter([entry[2] for entry in sorted(self._data)])
+
+    def __contains__(self, item: Any) -> bool:
+        return any(entry[2] is item or entry[2] == item for entry in self._data)
+
+    def __repr__(self) -> str:
+        return f'DSKeyQueue({[e[2] for e in sorted(self._data)]})'
+
+    def __getitem__(self, index: int) -> Any:
+        '''Return item at *index* in ascending key order. O(n log n).'''
+        return sorted(self._data)[index][2]
+
+    def __setitem__(self, index: int, value: Any) -> None:
+        '''Replace item at *index* in ascending key order with *value*. O(n log n).'''
+        old_entry = sorted(self._data)[index]
+        self._data.remove(old_entry)
+        heapq.heappush(self._data, (self._key(value), self._counter, value))
+        self._counter += 1
+
+    # ---- raw-deque delegates (keep DSQueue callers working) ----------------
+
+    def append(self, item: Any) -> Any:
+        '''Delegate to enqueue (heap insert). O(log n).'''
+        return self.enqueue(item)
+
+    def appendleft(self, item: Any) -> Any:
+        '''Delegate to enqueue; position is determined by key, not insertion side.'''
+        return self.enqueue(item)
+
+    def popleft(self) -> Any:
+        '''Delegate to dequeue (smallest-key item). O(log n).'''
+        return self.dequeue()
+
+    # ---- mutation ----------------------------------------------------------
+
+    def remove(self, item: Any) -> None:
+        '''Remove first occurrence of item. O(n) scan + O(n) heapify.'''
+        for i, entry in enumerate(self._data):
+            if entry[2] is item or entry[2] == item:
+                # swap with last, pop, rebuild
+                self._data[i] = self._data[-1]
+                self._data.pop()
+                heapq.heapify(self._data)
+                return
+        raise ValueError(f'{item!r} not in DSKeyQueue')
+
+    def remove_if(self, cond: CondType) -> bool:
+        '''Remove all items satisfying *cond*. O(n) filter + O(n) heapify.'''
+        before = len(self._data)
+        self._data = [e for e in self._data if not cond(e[2])]
+        if len(self._data) < before:
+            heapq.heapify(self._data)
+            return True
+        return False
+
+    def pop_at(self, index: int) -> Any:
+        '''Remove and return item at *index* in ascending key order. O(n log n).'''
+        entry = sorted(self._data)[index]
+        self._data.remove(entry)
+        heapq.heapify(self._data)
+        return entry[2]
+
+    def clear(self) -> None:
+        '''Remove all items.'''
+        self._data.clear()
+        self._counter = 0
 
 
 class Container(DSStatefulComponent, SignalMixin):

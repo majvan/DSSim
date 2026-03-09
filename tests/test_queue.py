@@ -1015,5 +1015,277 @@ class TestQueueSingleItemGet(unittest.TestCase):
         self.assertEqual(results, [42])
 
 
+# ---------------------------------------------------------------------------
+# Queue with DSKeyQueue policy (priority queue integration tests)
+# ---------------------------------------------------------------------------
+
+class TestQueuePriority(unittest.TestCase):
+    '''Integration tests for Queue backed by DSKeyQueue.
+
+    These tests verify that the priority ordering provided by DSKeyQueue is
+    preserved end-to-end through the Queue simulation component.
+    '''
+
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    # ---- construction ------------------------------------------------------
+
+    def test1_buffer_is_dskeyqueue(self):
+        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        self.assertIsInstance(q._buffer, DSKeyQueue)
+
+    # ---- nowait API --------------------------------------------------------
+
+    def test2_get_nowait_priority_order(self):
+        '''Items are dequeued in ascending key order regardless of insertion order.'''
+        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        q.put_nowait(5)
+        q.put_nowait(1)
+        q.put_nowait(3)
+        self.assertEqual(q.get_n_nowait(), [1])
+        self.assertEqual(q.get_n_nowait(), [3])
+        self.assertEqual(q.get_n_nowait(), [5])
+
+    def test3_get_nowait_single_priority_order(self):
+        '''get_nowait (single-item) respects priority.'''
+        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        q.put_nowait(10)
+        q.put_nowait(2)
+        q.put_nowait(7)
+        self.assertEqual(q.get_nowait(), 2)
+        self.assertEqual(q.get_nowait(), 7)
+        self.assertEqual(q.get_nowait(), 10)
+
+    def test4_max_priority_negated_key(self):
+        '''Negating the key turns min-heap into max-heap.'''
+        q = Queue(policy=DSKeyQueue(key=lambda x: -x), sim=self.sim)
+        for v in [3, 1, 4, 1, 5]:
+            q.put_nowait(v)
+        order = [q.get_n_nowait()[0] for _ in range(5)]
+        self.assertEqual(order, [5, 4, 3, 1, 1])
+
+    def test5_equal_keys_fifo_order(self):
+        '''Items with equal keys come out in FIFO (insertion) order.'''
+        q = Queue(policy=DSKeyQueue(key=lambda x: x[0]), sim=self.sim)
+        q.put_nowait((1, 'first'))
+        q.put_nowait((1, 'second'))
+        q.put_nowait((1, 'third'))
+        self.assertEqual(q.get_nowait()[1], 'first')
+        self.assertEqual(q.get_nowait()[1], 'second')
+        self.assertEqual(q.get_nowait()[1], 'third')
+
+    def test6_attribute_key(self):
+        '''Key function on object attribute orders correctly.'''
+        class Job:
+            def __init__(self, name, prio):
+                self.name = name
+                self.prio = prio
+
+        q = Queue(policy=DSKeyQueue(key=lambda j: j.prio), sim=self.sim)
+        q.put_nowait(Job('low', 100))
+        q.put_nowait(Job('high', 1))
+        q.put_nowait(Job('mid', 50))
+        self.assertEqual(q.get_nowait().name, 'high')
+        self.assertEqual(q.get_nowait().name, 'mid')
+        self.assertEqual(q.get_nowait().name, 'low')
+
+    def test7_capacity_enforced(self):
+        '''Capacity limit applies to priority queue as well.'''
+        q = Queue(capacity=2, policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        self.assertIsNotNone(q.put_nowait(3))
+        self.assertIsNotNone(q.put_nowait(1))
+        self.assertIsNone(q.put_nowait(2))
+        self.assertEqual(len(q), 2)
+
+    # ---- pop / remove ------------------------------------------------------
+
+    def test8_pop_at_sorted_index(self):
+        '''Queue.pop(index) removes item at sorted-priority index.'''
+        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        q.put_nowait(30)
+        q.put_nowait(10)
+        q.put_nowait(20)
+        # sorted order: [10, 20, 30]; pop index 1 => 20
+        self.assertEqual(q.pop(1), 20)
+        self.assertEqual(q.get_n_nowait(), [10])
+        self.assertEqual(q.get_n_nowait(), [30])
+
+    def test9_remove_exact_item(self):
+        '''Queue.remove() by exact object works with priority buffer.'''
+        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        q.put_nowait(3)
+        q.put_nowait(1)
+        q.put_nowait(2)
+        q.remove(1)
+        self.assertEqual(len(q), 2)
+        self.assertEqual(q.get_n_nowait(), [2])
+        self.assertEqual(q.get_n_nowait(), [3])
+
+    def test10_remove_callable_cond(self):
+        '''Queue.remove(callable) removes matching items from priority buffer.'''
+        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        for v in [1, 2, 3, 4, 5]:
+            q.put_nowait(v)
+        q.remove(lambda e: e % 2 == 0)
+        order = [q.get_n_nowait()[0] for _ in range(3)]
+        self.assertEqual(order, [1, 3, 5])
+
+    # ---- blocking gget (generator API) ------------------------------------
+
+    def test11_gget_n_blocks_then_returns_highest_priority(self):
+        '''Blocking gget_n returns the highest-priority item once available.'''
+        results = []
+
+        def consumer():
+            item = yield from q.gget_n()
+            results.append(('got', self.sim.time, item))
+
+        def producer():
+            yield from self.sim.gwait(4)
+            q.put_nowait(9)
+            q.put_nowait(3)
+            q.put_nowait(6)
+
+        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(results, [('got', 4, [3])])
+
+    def test12_gget_blocks_then_returns_single_highest_priority(self):
+        '''Blocking gget (single-item variant) also respects priority.'''
+        results = []
+
+        def consumer():
+            item = yield from q.gget()
+            results.append(item)
+
+        def producer():
+            yield from self.sim.gwait(3)
+            q.put_nowait(50)
+            q.put_nowait(10)
+            q.put_nowait(30)
+
+        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(results, [10])
+
+    def test13_multiple_consumers_get_in_priority_order(self):
+        '''Multiple waiting consumers each receive items in priority order.'''
+        results = []
+
+        def consumer(label):
+            item = yield from q.gget()
+            results.append((label, item))
+
+        def producer():
+            yield from self.sim.gwait(5)
+            q.put_nowait(30)
+            q.put_nowait(10)
+            q.put_nowait(20)
+
+        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        self.sim.schedule(0, consumer('c1'))
+        self.sim.schedule(0, consumer('c2'))
+        self.sim.schedule(0, consumer('c3'))
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(len(results), 3)
+        # Each consumer got exactly one item; items delivered lowest-first
+        received_items = [item for _, item in results]
+        self.assertEqual(sorted(received_items), [10, 20, 30])
+
+    def test14_gget_timeout_returns_none(self):
+        '''Blocking gget times out when no item arrives.'''
+        results = []
+
+        def consumer():
+            item = yield from q.gget(timeout=3)
+            results.append(item)
+
+        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        self.sim.schedule(0, consumer())
+        self.sim.run(10)
+        self.assertEqual(results, [None])
+
+    def test15_gput_blocks_until_space_priority_queue(self):
+        '''Blocking gput waits for capacity with priority buffer.'''
+        results = []
+
+        def producer():
+            q.put_nowait(1)          # fill the queue
+            retval = yield from q.gput(float('inf'), 2)
+            results.append(('put', self.sim.time, retval))
+
+        def consumer():
+            yield from self.sim.gwait(4)
+            q.get_nowait()           # free one slot
+
+        q = Queue(capacity=1, policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        self.sim.schedule(0, producer())
+        self.sim.schedule(0, consumer())
+        self.sim.run(20)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0][1], 4)   # unblocked at t=4
+
+    # ---- async API ---------------------------------------------------------
+
+    def test16_async_get_priority_order(self):
+        '''Async get returns highest-priority item.'''
+        results = []
+
+        async def consumer():
+            item = await q.get()
+            results.append(item)
+
+        async def producer():
+            await self.sim.wait(3)
+            q.put_nowait(99)
+            q.put_nowait(1)
+            q.put_nowait(42)
+
+        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(results, [1])
+
+    def test17_async_get_n_priority_order(self):
+        '''Async get_n returns items in priority order.'''
+        results = []
+
+        async def consumer():
+            items = await q.get_n(amount=3)
+            results.append(items)
+
+        async def producer():
+            await self.sim.wait(2)
+            q.put_nowait(5)
+            q.put_nowait(2)
+            q.put_nowait(8)
+
+        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+        self.assertEqual(results, [[2, 5, 8]])
+
+    # ---- interleaved puts --------------------------------------------------
+
+    def test18_interleaved_puts_maintain_priority(self):
+        '''Priority ordering holds across interleaved put_nowait calls.'''
+        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        q.put_nowait(7)
+        q.put_nowait(2)
+        self.assertEqual(q.get_nowait(), 2)
+        q.put_nowait(1)
+        q.put_nowait(5)
+        order = [q.get_nowait() for _ in range(3)]
+        self.assertEqual(order, [1, 5, 7])
+
+
 if __name__ == '__main__':
     unittest.main()
