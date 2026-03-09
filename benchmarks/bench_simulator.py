@@ -64,20 +64,21 @@ def dssim_timed_callbacks(n):
     Schedules N events at strictly increasing timestamps, all dispatched to
     one generator.  Stresses schedule_event + time_queue pop/dispatch.
     '''
-    sim = DSSimulation()
-    handled = [0]
+    sim = DSSimulation(layer2=None)
+    handled = 0
 
     def sink():
+        nonlocal handled
         while True:
             yield
-            handled[0] += 1
+            handled += 1
 
     consumer = sink()
-    sim.schedule(0, consumer)
+    sim.schedule_event(0, None, consumer)
     for i in range(n):
         sim.schedule_event(i + 1, i, consumer)
     sim.run()
-    assert handled[0] == n, f'timed-callbacks: expected {n}, got {handled[0]}'
+    assert handled == n, f'timed-callbacks: expected {n}, got {handled}'
 
 
 def dssim_now_burst(n):
@@ -85,26 +86,25 @@ def dssim_now_burst(n):
     One scheduled generator emits N zero-time events via schedule_event_now;
     a second generator consumes them.  Stresses now_queue append + drain.
     '''
-    sim = DSSimulation()
-    handled = [0]
+    sim = DSSimulation(layer2=None)
+    handled = 0
 
     def sink():
+        nonlocal handled
         while True:
             yield
-            handled[0] += 1
+            handled += 1
 
     def burst(sink_cb):
-        yield  # wait for trigger
         for _ in range(n):
             sim.schedule_event_now(None, sink_cb)
 
     sink_cb = sink()
-    sim.schedule(0, sink_cb)
+    sim.schedule_event(0, None, sink_cb)
     burst_cb = burst(sink_cb)
-    sim.schedule(0, burst_cb)
     sim.schedule_event(0, None, burst_cb)
     sim.run()
-    assert handled[0] == n, f'now-burst: expected {n}, got {handled[0]}'
+    assert handled == n, f'now-burst: expected {n}, got {handled}'
 
 
 def dssim_now_chain(n):
@@ -112,22 +112,23 @@ def dssim_now_chain(n):
     One generator reschedules itself via schedule_event_now until N iterations.
     Stresses zero-time dispatch with dynamic event generation.
     '''
-    sim = DSSimulation()
-    fired = [0]
-    chain_cb = [None]
+    sim = DSSimulation(layer2=None)
+    fired = 0
+    chain_cb = None
 
     def chain():
+        nonlocal fired, chain_cb
         while True:
             yield
-            fired[0] += 1
-            if fired[0] < n:
-                sim.schedule_event_now(None, chain_cb[0])
+            fired += 1
+            if fired < n:
+                sim.schedule_event_now(None, chain_cb)
 
-    chain_cb[0] = chain()
-    sim.schedule(0, chain_cb[0])
-    sim.schedule_event(0, None, chain_cb[0])
+    chain_cb = chain()
+    sim.schedule_event(0, None, chain_cb)
+    sim.schedule_event(0, None, chain_cb) # pass first yield
     sim.run()
-    assert fired[0] == n, f'now-chain: expected {n}, got {fired[0]}'
+    assert fired == n, f'now-chain: expected {n}, got {fired}'
 
 
 def dssim_generator_wakeup(n):
@@ -135,27 +136,26 @@ def dssim_generator_wakeup(n):
     A generator yields N times; a producer generator schedules N zero-time
     events to it.  Stresses coroutine send path in the simulation loop.
     '''
-    sim = DSSimulation()
-    received = [0]
-    waiter_ref = [None]
+    sim = DSSimulation(layer2=None)
+    received = 0
+    waiter_ref = None
 
     def waiter():
+        nonlocal received
         for _ in range(n):
             yield
-            received[0] += 1
+            received += 1
 
     def producer():
-        yield  # wait for start trigger
         for i in range(n):
-            sim.schedule_event_now(i, waiter_ref[0])
+            sim.schedule_event_now(i, waiter_ref)
 
-    waiter_ref[0] = waiter()
-    sim.schedule(0, waiter_ref[0])
+    waiter_ref = waiter()
+    sim.schedule_event(0, None, waiter_ref)
     producer_gen = producer()
-    sim.schedule(0, producer_gen)
     sim.schedule_event(0, None, producer_gen)
     sim.run()
-    assert received[0] == n, f'generator-wakeup: expected {n}, got {received[0]}'
+    assert received == n, f'generator-wakeup: expected {n}, got {received}'
 
 
 # ===========================================================================
@@ -169,16 +169,17 @@ def simpy_timed_callbacks(n):
     N SimPy timeout events at strictly increasing times dispatched via callbacks.
     '''
     env = _simpy.Environment()
-    handled = [0]
+    handled = 0
 
     def sink(event):
-        handled[0] += 1
+        nonlocal handled
+        handled += 1
 
     for i in range(n):
         ev = env.timeout(i + 1, value=i)
         ev.callbacks.append(sink)
     env.run()
-    assert handled[0] == n, f'simpy timed-callbacks: expected {n}, got {handled[0]}'
+    assert handled == n, f'simpy timed-callbacks: expected {n}, got {handled}'
 
 
 def simpy_now_burst(n):
@@ -186,10 +187,11 @@ def simpy_now_burst(n):
     A seed callback emits N timeout(0) events; a second callback counts each.
     '''
     env = _simpy.Environment()
-    handled = [0]
+    handled = 0
 
     def sink(event):
-        handled[0] += 1
+        nonlocal handled
+        handled += 1
 
     def burst(event):
         for _ in range(n):
@@ -199,7 +201,7 @@ def simpy_now_burst(n):
     seed = env.timeout(0)
     seed.callbacks.append(burst)
     env.run()
-    assert handled[0] == n, f'simpy now-burst: expected {n}, got {handled[0]}'
+    assert handled == n, f'simpy now-burst: expected {n}, got {handled}'
 
 
 def simpy_now_chain(n):
@@ -207,18 +209,19 @@ def simpy_now_chain(n):
     A callback reschedules itself via timeout(0) until N iterations.
     '''
     env = _simpy.Environment()
-    fired = [0]
+    fired = 0
 
     def chain(event):
-        fired[0] += 1
-        if fired[0] < n:
+        nonlocal fired
+        fired += 1
+        if fired < n:
             ev = env.timeout(0)
             ev.callbacks.append(chain)
 
     seed = env.timeout(0)
     seed.callbacks.append(chain)
     env.run()
-    assert fired[0] == n, f'simpy now-chain: expected {n}, got {fired[0]}'
+    assert fired == n, f'simpy now-chain: expected {n}, got {fired}'
 
 
 def simpy_process_wakeup(n):
@@ -227,24 +230,25 @@ def simpy_process_wakeup(n):
     triggers the event each iteration with timeout(0) between each.
     '''
     env = _simpy.Environment()
-    received = [0]
-    wakeup = [env.event()]
+    received = 0
+    wakeup = env.event()
 
     def waiter():
+        nonlocal received, wakeup
         for _ in range(n):
-            yield wakeup[0]
-            received[0] += 1
-            wakeup[0] = env.event()
+            yield wakeup
+            received += 1
+            wakeup = env.event()
 
     def producer():
         for i in range(n):
-            wakeup[0].succeed(i)
+            wakeup.succeed(i)
             yield env.timeout(0)
 
     env.process(waiter())
     env.process(producer())
     env.run()
-    assert received[0] == n, f'simpy process-wakeup: expected {n}, got {received[0]}'
+    assert received == n, f'simpy process-wakeup: expected {n}, got {received}'
 
 
 # ===========================================================================
