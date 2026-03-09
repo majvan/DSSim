@@ -40,8 +40,13 @@ class VoidSubscriber(ISubscriber):
     def __init__(self, name: str = 'Default void subscriber') -> None:
         self.name = name
 
-    def send(self, event: EventType) -> None:  # noqa: ARG002
-        raise RuntimeError('A void subscriber is never expected to be called.')
+    def send(self, event: EventType) -> None:
+        ''' A void subscriber is typically not expected to be called.
+        In special cases it can be called - for instance, for pure
+        coro kicks up or when the scheduling of events happens outside
+        coroutines - e.g. planning startup events.
+        '''
+        pass
 
 void_subscriber = VoidSubscriber()
 
