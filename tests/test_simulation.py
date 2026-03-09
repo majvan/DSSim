@@ -269,18 +269,16 @@ class TestSimScheduleGenerators(unittest.TestCase):
 class TestVoidSubscriber(unittest.TestCase):
     ''' Tests for VoidSubscriber and the void_subscriber singleton. '''
 
-    def test1_send_raises_runtime_error(self):
-        ''' VoidSubscriber.send() always raises RuntimeError. '''
+    def test1_send_is_noop(self):
+        ''' VoidSubscriber.send() silently ignores any event. '''
         vs = VoidSubscriber()
-        with self.assertRaises(RuntimeError):
-            vs.send(None)
+        vs.send(None)   # must not raise
 
-    def test2_send_raises_for_any_event(self):
-        ''' RuntimeError is raised regardless of the event value. '''
+    def test2_send_accepts_any_event(self):
+        ''' No exception is raised regardless of the event value. '''
         vs = VoidSubscriber()
         for event in (0, 'hello', {}, object()):
-            with self.assertRaises(RuntimeError):
-                vs.send(event)
+            vs.send(event)  # must not raise
 
     def test3_default_name(self):
         ''' Default name is set when no name is provided. '''
