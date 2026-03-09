@@ -1,5 +1,5 @@
 # Copyright 2020 NXP Semiconductors
-# Copyright 2020 NXP Semiconductors
+# Copyright 2020- majvan (majvan@gmail.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,676 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Tests for simulation module
+Tests for the core DSSimulation layer using only plain ISubscriber mocks.
+No DSProcess, DSProducer or DSConsumer objects are used here.
 '''
 import unittest
-from unittest.mock import Mock, MagicMock, call
-from dssim import DSAbsTime, DSSimulation, DSAbortException
-from dssim import DSSchedulable, DSProcess
-from dssim.process import DSSubscriberContextManager, DSTimeoutContext, DSTimeoutContextError
-from dssim import DSProducer
-from dssim.pubsub_base import StackedCond
+from unittest.mock import Mock, call
+from dssim import DSAbsTime, DSSimulation, DSSchedulable
+from dssim.simulation import VoidSubscriber, void_subscriber
+
 
 class SomeObj:
     pass
 
-class SomeCallableObj:
-    def __call__(self, event):
-        return True
 
-class FutureMock(Mock):
-    def get_future_eps(self):
-        return {self,}
-
-class EventForwarder:
-    ''' This represents basic forwarder which forwards events from time_process into a waiting
-    process. Some kind of a DSProducer which produces data into one exact running process
-    '''
-    def __init__(self, test_unit_running_sim, receiving_process):
-        self.testunit = test_unit_running_sim
-        self.receiving_process = receiving_process
-
-    def send(self, **data):
-        self.testunit.sim.send(self.receiving_process, **data)
-
-class TestDSSchedulable(unittest.TestCase):
-
-    @DSSchedulable
-    def __fcn(self):
-        return 'Success'
-
-    def __generator(self):
-        yield 'First return'
-        yield 'Second return'
-        return 'Success'
-
-    def __loopback_generator(self):
-        data = yield
-        while True:
-            data = yield data
-
-    @DSSchedulable
-    def __waiting_for_join(self, process, sim):
-        yield from sim.gwait(cond=process)
-        yield "After process finished"
-
-
-    def test0_schedulable_fcn(self):
-        process = self.__fcn()
-        try:
-            next(process)
-        except StopIteration as e:
-            retval = e.value
-        self.assertEqual(retval, 'Success')
-
-    def test1_schedulable_fcn_as_process(self):
-        sim = DSSimulation()
-        process = DSProcess(self.__fcn(), sim=sim).schedule(0)
-        try:
-            process.send(None)
-        except StopIteration as e:
-            retval = e.value
-        self.assertEqual(retval, 'Success')
-
-        process = DSProcess(self.__fcn(), sim=sim).schedule(0)
-        process.get_cond().push(lambda e:True)
-        retval = process.try_send(None)
-        self.assertEqual(retval, 'Success')
-        self.assertEqual(process.value, 'Success')
-
-    def test3_generator_as_process(self):
-        sim = DSSimulation()
-        process = DSProcess(self.__generator(), sim=sim).schedule(0)
-        retval = process.send(None)
-        self.assertEqual(retval, 'First return')
-        retval = process.send(None)
-        self.assertEqual(retval, 'Second return')
-        try:
-            next(process)
-        except StopIteration as e:
-            retval = e.value
-        self.assertEqual(retval, 'Success')
-
-        process = DSProcess(self.__generator(), sim=sim)
-        retval = next(process)
-        self.assertEqual(retval, 'First return')
-        retval = next(process)
-        self.assertEqual(retval, 'Second return')
-        process.get_cond().push(lambda e:True)
-        retval = process.try_send(None)
-        self.assertEqual(retval, 'Success')
-        self.assertEqual(process.value, 'Success')
-
-    def test5_send_to_process(self):
-        sim = DSSimulation()
-        process = DSProcess(self.__generator(), sim=sim)
-        retval = next(process)
-        self.assertEqual(retval, 'First return')
-        retval = process.send('anything0')
-        self.assertEqual(retval, 'Second return')
-        try:
-            retval = process.send('anything1')
-        except StopIteration as e:
-            retval2 = e.value
-        self.assertEqual(retval2, 'Success')
-
-        sim = DSSimulation()
-        process = DSProcess(self.__generator(), sim=sim)
-        retval = next(process)
-        self.assertEqual(retval, 'First return')
-        retval = process.send('anything0')
-        self.assertEqual(retval, 'Second return')
-        process.meta.cond.push(lambda e:True)  # accepting any event
-        retval = sim.schedule_event(1, 'anything0', process)
-        sim.run()
-        self.assertEqual(process.value, 'Success')
-
-
-    def test6_send_abort_to_generator(self):
-        process = self.__loopback_generator()
-        retval = next(process)
-        retval = process.send('from_test0')
-        self.assertEqual(retval, 'from_test0')
-        retval = process.send(DSAbortException(producer='test'))
-        self.assertTrue(isinstance(retval, DSAbortException))
-
-    def test7_send_abort_to_generator_as_process(self):
-        class MyExc(Exception):
-            pass
-        def my_wait(sim):
-            i = 0
-            while True:
-                i = i + 1
-                yield from sim.gwait(cond=lambda c: True, val=i)
-
-        sim = DSSimulation()
-        process = DSProcess(my_wait(sim), sim=sim)
-        process.get_cond().push(lambda e:True)
-        sim._parent_process = process  # needed because after kick the process will gwait
-        retval = process.send(None)
-        retval = process.send('from_test0')
-        self.assertEqual(retval, 2)
-        self.assertEqual(process.value, 2)
-        self.assertEqual(process.exc, None)
-        process.abort()
-        self.assertTrue(isinstance(process.exc, DSAbortException))
-        self.assertEqual(process.value, 2)
-
-        process = DSProcess(my_wait(sim), sim=sim)
-        process.get_cond().push(lambda e:True)
-        retval = next(process)
-        process.abort(MyExc())
-        self.assertTrue(isinstance(process.exc, MyExc))
-        self.assertEqual(process.value, 1)
-
-
-    def test8_waiting_process(self):
-        sim = DSSimulation()
-        events = []
-
-        def target():
-            yield from sim.gwait(5)
-            events.append('target_done')
-
-        def waiter(t):
-            yield from sim.gwait(cond=t)
-            events.append('waiter_done')
-
-        t = DSProcess(target(), sim=sim).schedule(0)
-        w = DSProcess(waiter(t), sim=sim).schedule(0)
-        sim.run(10)
-        self.assertEqual(events, ['target_done', 'waiter_done'])
-
-
-class TestException(unittest.TestCase):
-
-    def __my_buggy_code(self):
-        yield 'First is ok'
-        a = 10 / 0
-        return 'Second unreachable'
-
-    def __first_cyclic(self, sim):
-        process2 = yield 'Kick-on first'
-        yield
-        process2.try_send('Signal from first process')
-        yield 'After signalling first'
-        return 'Done first'
-
-    def __second_cyclic(self, sim):
-        process1 = yield 'Kick-on second'
-        yield
-        process1.try_send('Signal from second process')
-        yield 'After signalling second'
-        return 'Done second'
-
-    def setUp(self):
-        self.__time_process_event = Mock()
-
-    def test0_exception_usercode_generator(self):
-        sim = DSSimulation()
-        process = DSProcess(self.__my_buggy_code()).schedule(0)
-        process.send(None)  # kick the process
-        process.get_cond().push(lambda e:True)  # Accept all events
-        exc_to_check = None
-        try:
-            retval = process.try_send('My data')
-            # we should not get here, exception is expected
-            self.assertTrue(1 == 2)
-        except ZeroDivisionError as exc:
-            self.assertTrue('generator already executing' not in str(exc))
-
-    def test2_exception_usercode_process(self):
-        sim = DSSimulation()
-        process1 = DSProcess(self.__first_cyclic(sim), name="First cyclic", sim=sim).schedule(0)
-        sim.send_object(process1, None)  # initialize via send_object so _started is set correctly
-        process1.meta.cond.push(lambda e:True)  # accept any event
-        process2 = DSProcess(self.__second_cyclic(sim), name="Second cyclic", sim=sim).schedule(0)
-        sim.send_object(process2, None)  # initialize via send_object so _started is set correctly
-        process2.meta.cond.push(lambda e:True)  # accept any event
-        process1.try_send(process2)  # Inform processes about the other process
-        process2.try_send(process1)
-        try:
-            process1.try_send('My data')
-            # we should not get here, exception is expected
-            self.assertTrue(1 == 2)
-        except ValueError as exc:
-            self.assertTrue('generator already executing' in str(exc))
-
-class TestConditionChecking(unittest.TestCase):
-    ''' Test the processing of the events by the simulation '''
-    def __my_process(self):
-        while True:
-            yield 1
-
-    def test1_check_storing_cond_in_metadata(self):
-        ''' By calling wait, the metadata.cond should be stored '''
-        def my_process():
-            if True:
-                return 100
-            yield 101
-
-        sim = DSSimulation()
-        waitable = DSProcess(sim.gwait(cond='condition'), sim=sim).schedule(0)
-        sim._parent_process = waitable
-        meta = waitable.meta = Mock()
-        cond = meta.cond = Mock()
-        cond.push, cond.pop = Mock(), Mock()
-        cond.check = Mock(return_value=(True, 'return event'))
-        cond.cond_value = lambda: 'condition value result'
-        waitable._starter.send(None)  # kick the process
-        cond.push.assert_has_calls([call(None), call('condition'),])
-        try:
-            retval = waitable.try_send('something')
-        except StopIteration as e:
-            retval = e.value
-        self.assertTrue(retval == 'return event')  # this is what was sent to the process
-    
-    def test2_check_one_cond(self):
-        ''' Test all types of conditions - see _check_cond '''
-        exception = Exception('error')
-        stack = StackedCond()
-        for cond, event, expected_result in (
-            (lambda e:False, None, (False, None)),
-            (lambda e:True, None, (True, None)),
-            ('abc', None, (False, None)),
-            (None, None, (True, None)),
-            (lambda e:False, exception, (True, exception)),
-            (lambda e:True, exception, (True, exception)),
-            ('abc', exception, (True, exception)),
-            (exception, exception, (True, exception)),
-            (lambda e:False, 'def', (False, 'def')),
-            (lambda e:True, 'def', (True, 'def')),
-            ('abc', 'def', (False, 'def')),
-            ('def', 'def', (True, 'def')),
-        ):
-            stack.push(cond)
-            retval = stack.check(event)
-            self.assertEqual(retval, expected_result)
-            stack.pop()
-            self.assertTrue(len(stack.conds) == 0)
-
-    def test2_check_one_cond_and_timeout(self):
-        ''' Test all types of conditions - see _check_cond '''
-        # Now test with default 'None' timeout
-        exception = Exception('error')
-        stack = StackedCond()
-        stack.push(None)
-        for cond, event, expected_result in (
-            (lambda e:False, None, (True, None)),
-            (lambda e:True, None, (True, None)),
-            ('abc', None, (True, None)),
-            (None, None, (True, None)),
-            (lambda e:False, exception, (True, exception)),
-            (lambda e:True, exception, (True, exception)),
-            ('abc', exception, (True, exception)),
-            (exception, exception, (True, exception)),
-            (lambda e:False, 'def', (False, 'def')),
-            (lambda e:True, 'def', (True, 'def')),
-            ('abc', 'def', (False, 'def')),
-            ('def', 'def', (True, 'def')),
-        ):
-            stack.push(cond)
-            retval = stack.check(event)
-            self.assertEqual(retval, expected_result)
-            stack.pop()
-            self.assertTrue(len(stack.conds) == 1)
-
-
-    def test3_check_condition(self):
-        ''' The check_condition should retrieve cond from the metadata and then call _check_cond '''
-        sim = DSSimulation()
-        p = DSProcess(self.__my_process(), sim=sim).schedule(0)
-        p._starter.send(None)  # initialize the generator before replacing meta
-        p.meta = SomeObj()
-        p.meta.cond = MagicMock()
-        p.meta.cond.check = Mock(return_value=(True, 'abc'))
-        retval = p.try_send('test')
-        p.meta.cond.check.assert_called_once()
-        self.assertEqual(retval, True)
-    
-
-    def test6_gwait_return(self):
-        def my_process():
-            yield 1
-            yield from self.sim.gwait(cond=lambda e:True, val=2)
-            return 3
-        self.sim = DSSimulation()
-        p = DSProcess(my_process(), sim=self.sim).schedule(0)
-        retval = self.sim.send_object(p, None)  # kick the process
-        retval = self.sim.send_object(p, None)
-        self.assertTrue(retval == 2)
-        try:
-            retval = self.sim.send_object(p, None)
-        except StopIteration as e:
-            retval = e.value
-        self.assertTrue(retval == 3)
-
-        p = my_process()
-        p = self.sim.schedule(0, p)
-        retval = self.sim.send_object(p, None)  # kick the process
-        self.assertTrue(retval == 1)
-        retval = self.sim.send_object(p, None)
-        self.assertTrue(retval == 2)
-        try:
-            retval = self.sim.send_object(p, None)
-        except StopIteration as e:
-            retval = e.value
-        self.assertTrue(retval == 3)
-
-        p = DSProcess(my_process(), sim=self.sim)
-        p = self.sim.schedule(0, p)
-        p.get_cond().push(lambda e:True)
-        retval = p.try_send(None)
-        self.assertTrue(retval == 1)
-        retval = p.try_send(None)
-        self.assertTrue(retval == 2)
-        retval = p.try_send(None)
-        self.assertTrue(retval == 3)
-
-    def test7_wait_return(self):
-        class SomeAwaitable:
-            def __await__(self):
-                yield 1
-        async def my_process():
-            await SomeAwaitable()
-            await self.sim.wait(cond=lambda e:True, val=2)
-            return 3
-        self.sim = DSSimulation()
-        p = DSProcess(my_process(), sim=self.sim).schedule(0)
-        retval = self.sim.send_object(p, None)  # kick the process
-        retval = self.sim.send_object(p, None)
-        self.assertTrue(retval == 2)
-        try:
-            retval = self.sim.send_object(p, None)
-        except StopIteration as e:
-            retval = e.value
-        self.assertTrue(retval == 3)
-
-        p = my_process()
-        p = self.sim.schedule(0, p)
-        retval = self.sim.send_object(p, None)  # kick the process
-        self.assertTrue(retval == 1)
-        retval = self.sim.send_object(p, None)
-        self.assertTrue(retval == 2)
-        try:
-            retval = self.sim.send_object(p, None)
-        except StopIteration as e:
-            retval = e.value
-        self.assertTrue(retval == 3)
-
-        p = DSProcess(my_process(), sim=self.sim)
-        p = self.sim.schedule(0, p)
-        p.get_cond().push(lambda e:True)
-        retval = p.try_send(None)
-        self.assertTrue(retval == 1)
-        retval = p.try_send(None)
-        self.assertTrue(retval == 2)
-        retval = p.try_send(None)
-        self.assertTrue(retval == 3)
-
-
-class TestSubscriberContext(unittest.TestCase):
-
-    def __process(self):
-        yield 1
-
-    def test0_init_add_remove_producer(self):
-        sim = DSSimulation()
-        p = DSProcess(self.__process(), sim=sim)
-        a, b, c, d, e = DSProducer(), DSProducer(), DSProducer(), DSProducer(), DSProducer()
-        cm = DSSubscriberContextManager(p, DSProducer.Phase.PRE, (a, b, c))
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postp), len(cm.postn)) == (3, 0, 0, 0))
-        cm = DSSubscriberContextManager(p, DSProducer.Phase.CONSUME, (a, b, c, d))
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postp), len(cm.postn)) == (0, 4, 0, 0))
-        cm = DSSubscriberContextManager(p, DSProducer.Phase.POST_HIT, (a, b, c, d, e))
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postp), len(cm.postn)) == (0, 0, 5, 0))
-        cm = DSSubscriberContextManager(p, DSProducer.Phase.POST_MISS, (c, d, e))
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postp), len(cm.postn)) == (0, 0, 0, 3))
-        cm = cm + DSSubscriberContextManager(p, DSProducer.Phase.CONSUME, (a, b, c))
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postp), len(cm.postn)) == (0, 3, 0, 3))
-        cm = cm + DSSubscriberContextManager(p, DSProducer.Phase.CONSUME, (d,))
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postp), len(cm.postn)) == (0, 4, 0, 3))
-        cm = cm + DSSubscriberContextManager(p, DSProducer.Phase.CONSUME, (c,))
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postp), len(cm.postn)) == (0, 4, 0, 3))
-
-    def test1_init_add_remove_future(self):
-        sim = DSSimulation()
-        p = DSProcess(self.__process(), sim=sim)
-        a, b, c, d, e = sim.future(), sim.future(), sim.future(), sim.future(), sim.future()
-        cm = DSSubscriberContextManager(p, DSProducer.Phase.PRE, (a, b, c))
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postp), len(cm.postn)) == (3, 0, 0, 0))
-        cm = DSSubscriberContextManager(p, DSProducer.Phase.CONSUME, (a, b, c, d))
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postp), len(cm.postn)) == (0, 4, 0, 0))
-        cm = DSSubscriberContextManager(p, DSProducer.Phase.POST_HIT, (a, b, c, d, e))
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postp), len(cm.postn)) == (0, 0, 5, 0))
-        cm = DSSubscriberContextManager(p, DSProducer.Phase.POST_MISS, (c, d, e))
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postp), len(cm.postn)) == (0, 0, 0, 3))
-        cm = cm + DSSubscriberContextManager(p, DSProducer.Phase.CONSUME, (a, b, c))
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postp), len(cm.postn)) == (0, 3, 0, 3))
-        cm = cm + DSSubscriberContextManager(p, DSProducer.Phase.CONSUME, (d,))
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postp), len(cm.postn)) == (0, 4, 0, 3))
-        cm = cm + DSSubscriberContextManager(p, DSProducer.Phase.CONSUME, (c,))
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postp), len(cm.postn)) == (0, 4, 0, 3))
-
-    def test2_enter_exit(self):
-        sim = DSSimulation()
-        p = DSProcess(self.__process(), sim=sim)
-        a, b, c, d, e, f = (FutureMock(), FutureMock(), FutureMock(), FutureMock(), FutureMock(), FutureMock())
-        cm = DSSubscriberContextManager(p, DSProducer.Phase.POST_MISS, (f,)) + DSSubscriberContextManager(p, DSProducer.Phase.PRE, (a, c)) + DSSubscriberContextManager(p, DSProducer.Phase.POST_HIT, (b,)) + DSSubscriberContextManager(p, DSProducer.Phase.CONSUME, (e,))
-        cm.__enter__()
-        a.add_subscriber.assert_called_once_with(p, DSProducer.Phase.PRE)
-        c.add_subscriber.assert_called_once_with(p, DSProducer.Phase.PRE)
-        b.add_subscriber.assert_called_once_with(p, DSProducer.Phase.POST_HIT)
-        f.add_subscriber.assert_called_once_with(p, DSProducer.Phase.POST_MISS)
-        d.add_subscriber.assert_not_called()
-        e.add_subscriber.assert_called_once_with(p, DSProducer.Phase.CONSUME)
-        _ = a.reset_mock(), b.reset_mock(), c.reset_mock(), d.reset_mock()
-        cm.__exit__(None, None, None)
-        a.remove_subscriber.assert_called_once_with(p, DSProducer.Phase.PRE)
-        c.remove_subscriber.assert_called_once_with(p, DSProducer.Phase.PRE)
-        b.remove_subscriber.assert_called_once_with(p, DSProducer.Phase.POST_HIT)
-        f.remove_subscriber.assert_called_once_with(p, DSProducer.Phase.POST_MISS)
-        d.remove_subscriber.assert_not_called()
-        e.remove_subscriber.assert_called_once_with(p, DSProducer.Phase.CONSUME)
-
-    def test3_sim_functions_producer(self):
-        sim = DSSimulation()
-        sim._parent_process = DSProcess(self.__process(), sim=sim)
-        a, b, c, d = (DSProducer(), DSProducer(), DSProducer(), DSProducer(),)
-        cm = sim.observe_pre(a, b, c)
-        self.assertTrue(type(cm) == DSSubscriberContextManager)
-        self.assertTrue(cm.pre == {a, b, c})
-        self.assertTrue((len(cm.consume), len(cm.postp), len(cm.postn)) == (0, 0, 0))
-        cm = sim.consume(a, c)
-        self.assertTrue(type(cm) == DSSubscriberContextManager)
-        self.assertTrue(cm.consume == {a, c})
-        self.assertTrue((len(cm.pre), len(cm.postp), len(cm.postn)) == (0, 0, 0))
-        cm = sim.observe_consumed(d)
-        self.assertTrue(type(cm) == DSSubscriberContextManager)
-        self.assertTrue(cm.postp == {d,})
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postn)) == (0, 0, 0))
-        cm = sim.observe_unconsumed(b)
-        self.assertTrue(type(cm) == DSSubscriberContextManager)
-        self.assertTrue(cm.postn == {b,})
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postp)) == (0, 0, 0))
-        cm = sim.observe_consumed(d) + sim.observe_pre(a) + sim.consume(b, c) + sim.observe_unconsumed(b)
-        self.assertTrue(type(cm) == DSSubscriberContextManager)
-        self.assertTrue(cm.pre == {a,})
-        self.assertTrue(cm.consume == {b, c})
-        self.assertTrue(cm.postp == {d,})
-        self.assertTrue(cm.postn == {b,})
-
-    def test4_sim_functions_future(self):
-        sim = DSSimulation()
-        sim._parent_process = DSProcess(self.__process(), sim=sim)
-        a, b, c, d = (sim.future(), sim.future(), sim.future(), sim.future(),)
-        cm = sim.observe_pre(a, b, c)
-        self.assertTrue(type(cm) == DSSubscriberContextManager)
-        self.assertTrue(cm.pre == a.get_future_eps() | b.get_future_eps() | c.get_future_eps())
-        self.assertTrue((len(cm.consume), len(cm.postp), len(cm.postn)) == (0, 0, 0))
-        cm = sim.consume(a, c)
-        self.assertTrue(type(cm) == DSSubscriberContextManager)
-        self.assertTrue(cm.consume == a.get_future_eps() | c.get_future_eps())
-        self.assertTrue((len(cm.pre), len(cm.postp), len(cm.postn)) == (0, 0, 0))
-        cm = sim.observe_consumed(d)
-        self.assertTrue(type(cm) == DSSubscriberContextManager)
-        self.assertTrue(cm.postp == d.get_future_eps())
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postn)) == (0, 0, 0))
-        cm = sim.observe_unconsumed(b)
-        self.assertTrue(type(cm) == DSSubscriberContextManager)
-        self.assertTrue(cm.postn == b.get_future_eps())
-        self.assertTrue((len(cm.pre), len(cm.consume), len(cm.postp)) == (0, 0, 0))
-        cm = sim.observe_consumed(d) + sim.observe_pre(a) + sim.consume(b, c) + sim.observe_unconsumed(b)
-        self.assertTrue(type(cm) == DSSubscriberContextManager)
-        self.assertTrue(cm.pre == a.get_future_eps())
-        self.assertTrue(cm.consume == b.get_future_eps() | c.get_future_eps())
-        self.assertTrue(cm.postp == d.get_future_eps())
-        self.assertTrue(cm.postn == b.get_future_eps())
-
-
-class TestTimeoutContext(unittest.TestCase):
-
-    def test0_init(self):
-        sim = Mock()
-        cm = DSTimeoutContext(None, sim=sim)
-        self.assertTrue(cm.time is None)
-        self.assertTrue(cm.sim is sim)
-        sim.schedule_event.assert_not_called()
-
-        sim = Mock()
-        cm = DSTimeoutContext(0, sim=sim)
-        self.assertTrue(cm.time == 0)
-        self.assertTrue(cm.sim is sim)
-        sim.schedule_event.assert_has_calls([call(0, cm.exc),])
-
-        sim = Mock()
-        event = DSTimeoutContextError()
-        cm = DSTimeoutContext(0, event, sim=sim)
-        self.assertTrue(cm.time == 0)
-        self.assertTrue(cm.sim is sim)
-        sim.schedule_event.assert_has_calls([call(0, event),])
-
-    def test1_reschedule(self):
-        sim = DSSimulation()
-        sim._parent_process = 'process'
-        cm = DSTimeoutContext(None, 'hello', sim=sim)
-        self.assertTrue(len(sim.time_queue) == 0)
-        cm.reschedule(2)
-        self.assertTrue(len(sim.time_queue) == 1)
-        self.assertTrue(sim.time_queue.get0() == (2, ('process', 'hello')))
-        cm.reschedule(1)
-        self.assertTrue(len(sim.time_queue) == 1)
-        self.assertTrue(sim.time_queue.get0() == (1, ('process', 'hello')))
-
-        sim = DSSimulation()
-        sim._parent_process = 'process'
-        cm = DSTimeoutContext(0, 'hi', sim=sim)
-        self.assertTrue(len(sim.time_queue) == 1)
-        self.assertTrue(sim.time_queue.get0() == (0, ('process', 'hi')))
-        cm.reschedule(2)
-        self.assertTrue(len(sim.time_queue) == 1)
-        self.assertTrue(sim.time_queue.get0() == (2, ('process', 'hi')))
-        cm.reschedule(1)
-        self.assertTrue(len(sim.time_queue) == 1)
-        self.assertTrue(sim.time_queue.get0() == (1, ('process', 'hi')))
-
-        event = 'hi'
-        cm = DSTimeoutContext(3, 'bye', sim=sim)
-        self.assertTrue(len(sim.time_queue) == 2)
-        self.assertTrue(sim.time_queue.get0() == (1, ('process', 'hi')))
-        cm.reschedule(0)
-        self.assertTrue(len(sim.time_queue) == 2)
-        self.assertTrue(sim.time_queue.get0() == (0, ('process', 'bye')))
-        cm.reschedule(3)
-        self.assertTrue(len(sim.time_queue) == 2)
-        self.assertTrue(sim.time_queue.pop() == (1, ('process', 'hi')))
-        self.assertTrue(sim.time_queue.pop() == (3, ('process', 'bye')))
-
-    def test2_sim_timeout_positive(self):
-        sim = DSSimulation()
-        sim._parent_process = 'process'
-        with sim.timeout(0) as cm:
-            self.assertTrue(len(sim.time_queue) == 1)
-            queued = sim.time_queue.get0()
-            self.assertTrue(queued[0] == 0)
-            self.assertTrue(queued[1][0] == 'process')
-            self.assertTrue(isinstance(queued[1][1], DSTimeoutContextError))
-            cm.reschedule(10)
-            self.assertTrue(len(sim.time_queue) == 1)
-            queued = sim.time_queue.get0()
-            self.assertTrue(queued[0] == 10)
-            self.assertTrue(queued[1][0] == 'process')
-            self.assertTrue(isinstance(queued[1][1], DSTimeoutContextError))
-        self.assertTrue(len(sim.time_queue) == 0)
-
-    def test2_sim_timeout_negative(self):
-        def process(sim, timeout):
-            with sim.timeout(timeout) as cm:
-                self.assertFalse(cm.interrupted())
-                yield from sim.gwait(10)
-                self.assertTrue(timeout > 10)
-            self.assertTrue(cm.interrupted() == (timeout < 10))
-
-        sim = DSSimulation()
-        p = process(sim, 20)
-        sim.schedule(0, p)
-        sim.run()
-
-        sim = DSSimulation()
-        p = process(sim, 1)
-        sim.schedule(0, p)
-        sim.run()
-
-
-
+# ---------------------------------------------------------------------------
+# Core DSSimulation behaviour — pure ISubscriber / mock consumers
+# ---------------------------------------------------------------------------
 
 class TestSim(unittest.TestCase):
-    ''' Test the time queue class behavior '''
-
-    def __my_time_process(self):
-        self.__time_process_event('kick-on')
-        while True:
-            event = yield
-            if isinstance(event, DSAbortException):
-                self.__time_process_event(self.sim.time, {'abort': True, 'info': event.info})
-                break
-            else:
-                self.__time_process_event(self.sim.time, event)
-
-    def __my_wait_process(self):
-        try:
-            event = yield from self.sim.gwait(2)
-            self.__time_process_event(self.sim.time, None)
-            event = yield from self.sim.gwait(cond=lambda e: 'data' in e)
-            self.__time_process_event(self.sim.time, **event)
-            event = yield from self.sim.gwait(cond=lambda e: True)
-            self.__time_process_event(self.sim.time, **event)
-        except Exception as e:
-            return e
-
-    def __my_handler(self):
-        return True
-
-    @DSSchedulable
-    def __my_schedulable_handler(self):
-        return True
-
-    def setUp(self):
-        self.__time_process_event = Mock()
-
-    def test0_init_reset(self):
-        sim = DSSimulation()
-        self.assertEqual(len(sim.time_queue), 0)
-        self.assertEqual(sim.time, 0)
-        sim.schedule(0.5, self.__my_wait_process())
-        sim.schedule(1.5, self.__my_wait_process())
-        self.assertEqual(len(sim.time_queue), 2)
-        sim.run(1)
-        self.assertEqual(sim.time, 1)
-        self.assertEqual(len(sim.time_queue), 1)
-        sim.restart(0.9)
-        self.assertEqual(len(sim.time_queue), 0)
-        self.assertEqual(sim.time, 0.9)
+    ''' Tests for the core DSSimulation time-queue and dispatch machinery. '''
 
     def test1_time_conversion(self):
         sim = DSSimulation()
@@ -696,7 +45,6 @@ class TestSim(unittest.TestCase):
         self.assertEqual(t.value, 15)
         self.assertEqual(t.to_number(), 15)
         self.assertTrue(isinstance(t.to_number(), float))
-
 
     def test2_scheduling_events(self):
         ''' Assert working with time queue when pushing events '''
@@ -720,28 +68,14 @@ class TestSim(unittest.TestCase):
         consumer = Mock()
         sim.cleanup(consumer)
         sim.time_queue.delete_cond.assert_called_once()
-        # now test, if the call argument to the delete_cond was lambda e: e[0] is consumer
-        # first, get args
         args, kwargs = sim.time_queue.delete_cond.call_args
-        # get the lambda fcn
         lambda_fcn = args[0]
-        # check the lambda fcn on the tuple (consumer, )
         self.assertTrue(lambda_fcn((consumer,)))
         self.assertFalse(lambda_fcn((1,)))
         self.assertEqual(kwargs, {})
 
     def test4_scheduling(self):
-        ''' Assert the delay of scheduled process '''
-        self.sim = DSSimulation()
-        my_process = self.__my_time_process()
-        # schedule a process
-        with self.assertRaises(ValueError):
-            # scheduling with negative time delta
-            _parent_process = self.sim.schedule(-0.5, my_process)
-        _parent_process = self.sim.schedule(2, my_process)
-        self.assertEqual(len(self.sim.time_queue), 1)
-
-    def test5_scheduling(self):
+        ''' send_object delivers the event to a plain duck-typed ISubscriber. '''
         self.sim = DSSimulation()
         producer = SomeObj()
         producer.send = Mock()
@@ -749,85 +83,8 @@ class TestSim(unittest.TestCase):
         retval = self.sim.send_object(producer, event_obj)
         producer.send.assert_called_once_with(event_obj)
 
-    def test6_scheduling(self):
-        ''' Assert working with time queue when pushing events '''
-        self.sim = DSSimulation()
-        my_process = self.__my_time_process()
-        # schedule a process
-        with self.assertRaises(ValueError):
-            # negative time
-            self.sim.schedule(-0.5, my_process)
-
-        _parent_process = self.sim.schedule(0, my_process)
-        self.assertNotEqual(_parent_process, my_process)
-        self.__time_process_event.assert_not_called()
-        self.sim.run(0.5)
-        self.__time_process_event.assert_called_once_with('kick-on')
-        self.__time_process_event.reset_mock()
-        # schedule an event
-        with self.assertRaises(ValueError):
-            # negative time
-            self.sim.schedule_event(-0.5, {'producer': _parent_process, 'data': 1})
-
-        self.assertEqual(self.sim.time, 0.5)
-        event_obj = {'producer': _parent_process, 'data': 1}
-        self.sim.schedule_event(2, event_obj, my_process)
-        time, (process, event) = self.sim.time_queue.pop()
-        self.assertEqual((time, process), (2.5, my_process))
-        self.assertEqual(event, event_obj)
-        self.sim.run(2.5)
-
-        process = SomeObj()
-        process.send = Mock()
-        retval = _parent_process.abort(DSAbortException(testing=-1))
-        self.__time_process_event.assert_called_once_with(2.5, {'abort': True, 'info': {'testing': -1}})
-        self.__time_process_event.reset_mock()
-
-    def test7_run_process(self):
-        ''' Assert event loop behavior for process '''
-        self.sim = DSSimulation()
-        self.sim._parent_process = Mock()
-        my_process = self.__my_time_process()
-        _parent_process = self.sim.schedule(0, my_process)
-        # Problem: the _parent_process is already kicked on and waiting for a condition
-        # which is expected to be the latest one
-        # After the wait is fulfilled, the last condition will be removed - our condition
-        # That's why we have to insert before. The position 0 is for None event condition
-        _parent_process.get_cond().push(lambda e:True)  # Accept any event
-
-        self.sim.run(0.5) # kick on the process
-        self.sim.schedule_event(1, 3, _parent_process)
-        self.sim.schedule_event(2, 2, _parent_process)
-        self.sim.schedule_event(3, 1, _parent_process)
-        retval = self.sim.run(0.5)
-        self.__time_process_event.assert_called_once_with('kick-on')
-        self.assertEqual(retval, (0.5, 1))
-        self.__time_process_event.reset_mock()
-
-        _parent_process.get_cond().push(lambda e:True)  # Accept any event
-        self.sim.num_events = 0
-        retval = self.sim.run()
-        self.assertEqual(retval, (3.5, 3))
-        calls = [call(1.5, 3), call(2.5, 2), call(3.5, 1),]
-        self.__time_process_event.assert_has_calls(calls)
-        retval = len(self.sim.time_queue)
-        self.assertEqual(retval, 0)
-        self.__time_process_event.reset_mock()
-
-        self.sim.restart()
-        self.sim.schedule_event(1, 3, _parent_process)
-        self.sim.schedule_event(2, 2, _parent_process)
-        self.sim.schedule_event(3, 1, _parent_process)
-        retval = self.sim.run(2.5)
-        self.assertEqual(retval, (2, 2))
-        calls = [call(1, 3), call(2, 2),]
-        self.__time_process_event.assert_has_calls(calls)
-        num_events = len(self.sim.time_queue)
-        self.assertEqual(num_events, 1)
-        self.__time_process_event.reset_mock()
-
-
-    def test8_run_producer(self):
+    def test5_run_producer(self):
+        ''' sim.run() dispatches scheduled events to a mock ISubscriber. '''
         self.sim = DSSimulation()
         consumer = Mock()
         consumer.meta.cond.check = lambda e:(True, e)  # Accept any event
@@ -856,7 +113,7 @@ class TestSim(unittest.TestCase):
         num_events = len(self.sim.time_queue)
         self.assertEqual(num_events, 1)
 
-    def test8a_run_dispatches_without_consumer_try_send(self):
+    def test6_run_dispatches_without_consumer_try_send(self):
         ''' run() dispatches via simulation send_object path, not consumer.try_send. '''
         self.sim = DSSimulation()
         consumer = Mock()
@@ -870,7 +127,7 @@ class TestSim(unittest.TestCase):
         consumer.send.assert_called_once_with('hello')
         consumer.try_send.assert_not_called()
 
-    def test8b_run_still_checks_condition_before_send(self):
+    def test7_run_still_checks_condition_before_send(self):
         ''' run() must preserve condition gating semantics for consumers. '''
         self.sim = DSSimulation()
         consumer = Mock()
@@ -885,223 +142,16 @@ class TestSim(unittest.TestCase):
         consumer.send.assert_not_called()
         consumer.try_send.assert_not_called()
 
-    def test9_waiting(self):
-        self.sim = DSSimulation()
-        # the following process will create events for the time queue process
-        process = DSProcess(self.__my_wait_process(), sim=self.sim).schedule(0)
-        # those events are required to contain a producer
-        producer = EventForwarder(self, process)
-        self.sim.schedule_event(1.5, {'producer': producer, 'data': 1}, process)
-        self.sim.schedule_event(2.5, {'producer': producer, 'data': 2}, process)
-        self.sim.schedule_event(3.5, {'producer': producer, 'data': 3}, process)
-        retval = self.sim.run(5)
-        self.assertEqual(retval, (3.5, 6))  # 3 events scheduled here + 1 timeout + 2 events = schedule + the process finished itself
-        # first event is dropped, because though it was taken by the time_process, the process condition was
-        # to wait till timeout
-        calls = [
-            call(2, None),  # timeout logged
-            call(2.5, producer=producer, data=2),  # real event logged
-            call(3.5, producer=producer, data=3),  # real event logged after time
-        ]
-        self.__time_process_event.assert_has_calls(calls)
 
-    def testA_return_cleanup(self):
-        def my_process2(sim, alwaystrue=True):
-            if alwaystrue:
-                return 100
-            yield from sim.gwait(1)
-        sim = DSSimulation()
-        process = DSProcess(my_process2(sim), sim=sim).schedule(0)
-        process.get_cond().push(lambda e:True)  # Accept any event
-        sim.send_object(process, None)
-        sim.schedule_event(1, {'data': 1}, process)
-        sim.schedule_event(2, {'data': 2}, process)
-        sim.schedule_event(3, {'data': 3}, process)
-        retval = sim.run()
-        # if the process is finished, it does not prevent the sim to schedule events to the process
-        self.assertEqual(retval, (3, 4))  # 4 events: start of process schedule + 3 other events
-        self.assertTrue(process.finished())
-
-    def testB_timeout_cleanup(self):
-        def my_process(sim):
-            retval = yield from sim.gwait(1)
-            yield  # wait here with no interaction to the time_queue
-
-        sim = DSSimulation()
-        process = DSProcess(my_process(sim), sim=sim).schedule(0)
-        sim.send_object(process, None)  # go to the waiting
-        sim.schedule_event(4, 'some_event', consumer=process)
-        self.assertTrue(len(sim.time_queue) == 3)
-        retval = sim.send_object(process, 'value')  # sending some event makes that the waiting timeout will be removed
-        # ensure that the some_event scheduled in the future for the process is still in queue
-        self.assertTrue(retval is None)
-        self.assertTrue(len(sim.time_queue) == 2)  # removed only the timeout event
-
-    def testC_abort(self):
-        self.sim = DSSimulation()
-        # the following process will create events for the time queue process
-        process = self.sim.schedule(0, self.__my_wait_process())
-        # those events are required to contain a producer
-        self.sim.schedule_event(1, {'data': 1}, process)
-        num_events = self.sim.run(2.5)
-        # first event is dropped, because though it was taken by the time_process, the process condition was
-        # to wait till timeout
-        calls = [
-            call(2, None),  # timeout logged
-        ]
-        self.__time_process_event.assert_has_calls(calls)
-        self.assertEqual(len(self.sim.time_queue), 0)  # there is no event left from process
-        self.sim.schedule_event(float('inf'), {'data': 2}, process)
-        num_events = self.sim.run(2.5)
-        self.__time_process_event.assert_has_calls([])
-        self.assertEqual(len(self.sim.time_queue), 1)  # there are still timeout event left from process
-        process.abort(DSAbortException(testing=-1)),  # abort after time; this will schedule abort event
-        num_events = self.sim.run(3)
-        self.assertEqual(len(self.sim.time_queue), 0)  # test if the timeout event was removed after abort
-
-
-class TestDSProcessAbort(unittest.TestCase):
-    '''Tests for DSProcess.abort() covering both conditional branches:
-       - process not yet started (sitting in the time queue)
-       - process already started (running / suspended inside a yield)
-    '''
-
-    def _waiting_gen(self, ran):
-        '''Generator that records execution and suspends inside a gwait.'''
-        ran.append('started')
-        yield from self.sim.gwait(100)
-
-    def _recording_gen(self, ran, tag='ran'):
-        '''Generator that records execution and finishes immediately.'''
-        ran.append(tag)
-        return
-        yield  # makes this a generator without executing the yield
-
-    # ------------------------------------------------------------------
-    # Branch A: not started — process still in the time queue
-    # ------------------------------------------------------------------
-
-    def test_unstarted_abort_removes_startup_event_from_time_queue(self):
-        '''Aborting an unstarted process removes the process startup entry.
-
-        DSFuture.fail() fires _finish_tx.signal() which may add a separate
-        notification event, but the process's own startup entry is gone.
-        '''
-        self.sim = DSSimulation()
-        ran = []
-        process = self.sim.schedule(5, self._waiting_gen(ran))
-        self.assertFalse(process.started())
-        entries_before = len(self.sim.time_queue)  # 1: the startup event
-
-        process.abort()
-
-        # The process startup entry (consumer == process) must be gone.
-        # (fail() may add a _finish_tx notification, but that has a different consumer.)
-        process_entries = sum(
-            1 for _, (consumer, _) in
-            [self.sim.time_queue.pop() for _ in range(len(self.sim.time_queue))]
-            if consumer is process
-        )
-        self.assertEqual(process_entries, 0)
-        self.assertFalse(ran)  # generator body never executed
-
-    def test_unstarted_abort_sets_default_exception(self):
-        '''abort() with no argument stores a DSAbortException on the process.'''
-        self.sim = DSSimulation()
-        process = self.sim.schedule(5, self._waiting_gen([]))
-
-        process.abort()
-
-        self.assertIsInstance(process.exc, DSAbortException)
-
-    def test_unstarted_abort_sets_custom_exception(self):
-        '''abort(exc) with a custom exception stores that exception.'''
-        class _MyExc(Exception):
-            pass
-
-        self.sim = DSSimulation()
-        process = self.sim.schedule(5, self._waiting_gen([]))
-
-        process.abort(_MyExc())
-
-        self.assertIsInstance(process.exc, _MyExc)
-
-    def test_unstarted_abort_generator_never_runs_after_sim_run(self):
-        '''After aborting an unstarted process, sim.run() does not execute it.'''
-        self.sim = DSSimulation()
-        ran = []
-
-        process = self.sim.schedule(1, self._recording_gen(ran))
-        process.abort()
-        self.sim.run(10)
-
-        self.assertFalse(ran)
-
-    def test_unstarted_abort_other_processes_unaffected(self):
-        '''Aborting one unstarted process leaves other scheduled processes intact.'''
-        self.sim = DSSimulation()
-        ran = []
-
-        proc_a = self.sim.schedule(1, self._recording_gen(ran, 'a'))
-        proc_b = self.sim.schedule(2, self._recording_gen(ran, 'b'))
-
-        proc_a.abort()
-        self.sim.run(10)
-
-        self.assertEqual(ran, ['b'])
-
-    # ------------------------------------------------------------------
-    # Branch B: already started — delegates to DSFuture.abort()
-    # ------------------------------------------------------------------
-
-    def test_started_abort_raises_default_exception_in_generator(self):
-        '''abort() on a running process injects DSAbortException into the generator.'''
-        self.sim = DSSimulation()
-        caught = []
-
-        def my_gen():
-            try:
-                yield from self.sim.gwait(100)
-            except DSAbortException as exc:
-                caught.append(exc)
-
-        process = self.sim.schedule(0, my_gen())
-        self.sim.run(1)  # kick and suspend inside gwait
-        self.assertTrue(process.started())
-
-        process.abort()
-
-        self.assertEqual(len(caught), 1)
-        self.assertIsInstance(caught[0], DSAbortException)
-
-    def test_started_abort_raises_custom_exception_in_generator(self):
-        '''abort(exc) on a running process injects the custom exception.'''
-        class _MyExc(Exception):
-            pass
-
-        self.sim = DSSimulation()
-        caught = []
-
-        def my_gen():
-            try:
-                yield from self.sim.gwait(100)
-            except _MyExc as exc:
-                caught.append(exc)
-
-        process = self.sim.schedule(0, my_gen())
-        self.sim.run(1)
-        self.assertTrue(process.started())
-
-        process.abort(_MyExc())
-
-        self.assertEqual(len(caught), 1)
-        self.assertIsInstance(caught[0], _MyExc)
-
+# ---------------------------------------------------------------------------
+# schedule_event_now and the now_queue — pure mock consumers
+# ---------------------------------------------------------------------------
 
 class TestScheduleEventNow(unittest.TestCase):
-    ''' Tests for DSSimulation.schedule_event_now() and the now_queue drain in run(). '''
+    ''' Tests for DSSimulation.schedule_event_now() and the now_queue, using
+    plain Mock consumers (no DSCallback / DSProcess). '''
 
-    def test0_appends_to_now_queue(self):
+    def test1_appends_to_now_queue(self):
         ''' schedule_event_now appends a (consumer, event) tuple to now_queue. '''
         sim = DSSimulation()
         consumer = Mock()
@@ -1111,7 +161,7 @@ class TestScheduleEventNow(unittest.TestCase):
         self.assertIs(c, consumer)
         self.assertEqual(e, 'ev')
 
-    def test1_default_consumer_is_parent_process(self):
+    def test2_default_consumer_is_parent_process(self):
         ''' When consumer is omitted, _parent_process is used as the target. '''
         sim = DSSimulation()
         sentinel = object()
@@ -1120,7 +170,7 @@ class TestScheduleEventNow(unittest.TestCase):
         c, e = sim.now_queue[0]
         self.assertIs(c, sentinel)
 
-    def test2_restart_clears_now_queue(self):
+    def test3_restart_clears_now_queue(self):
         ''' restart() resets the now_queue to empty. '''
         sim = DSSimulation()
         consumer = Mock()
@@ -1130,7 +180,7 @@ class TestScheduleEventNow(unittest.TestCase):
         sim.restart()
         self.assertEqual(len(sim.now_queue), 0)
 
-    def test3_cleanup_removes_consumer_events_from_now_queue(self):
+    def test4_cleanup_removes_consumer_events_from_now_queue(self):
         ''' cleanup(consumer) filters that consumer's events out of now_queue. '''
         sim = DSSimulation()
         ca = Mock()
@@ -1147,76 +197,118 @@ class TestScheduleEventNow(unittest.TestCase):
         self.assertIs(c, cb)
         self.assertEqual(e, 'ev_b')
 
-    def test4_now_queue_drained_after_each_timed_event(self):
-        ''' Events appended to now_queue during a timed callback are dispatched
-        before the next timed event fires, and at the same sim.time. '''
+
+# ---------------------------------------------------------------------------
+# Scheduling plain generators, coroutines, and DSSchedulable functions
+# ---------------------------------------------------------------------------
+
+class TestSimScheduleGenerators(unittest.TestCase):
+    ''' Tests that sim.schedule() correctly runs plain generators, coroutines,
+    and DSSchedulable-decorated functions, verified by behavioral outcomes only.
+    No DSProcess is imported or referenced directly. '''
+
+    def test1_generator_starts_at_scheduled_time(self):
+        ''' A plain generator only starts when its scheduled time is reached. '''
         sim = DSSimulation()
         log = []
-
-        def sink(event):
-            log.append(('sink', sim.time, event))
-            return True
-
-        from dssim import DSCallback
-        sink_cb = DSCallback(sink, sim=sim)
-
-        def burst(event):
-            log.append(('burst', sim.time))
-            sim.schedule_event_now('a', sink_cb)
-            sim.schedule_event_now('b', sink_cb)
-            return True
-
-        burst_cb = DSCallback(burst, sim=sim)
-        sim.schedule_event(1, None, burst_cb)   # timed event at t=1
-        sim.schedule_event(2, None, burst_cb)   # timed event at t=2
+        def my_gen():
+            log.append(sim.time)
+            yield
+        sim.schedule(3, my_gen())
+        self.assertEqual(log, [])
         sim.run()
+        self.assertEqual(log, [3])
 
-        # burst fires at t=1, then now_queue drains at t=1, then t=2 fires
-        self.assertEqual(log[0], ('burst', 1))
-        self.assertEqual(log[1], ('sink',  1, 'a'))
-        self.assertEqual(log[2], ('sink',  1, 'b'))
-        self.assertEqual(log[3], ('burst', 2))
-        self.assertEqual(log[4], ('sink',  2, 'a'))
-        self.assertEqual(log[5], ('sink',  2, 'b'))
-
-    def test5_now_queue_fifo_order(self):
-        ''' Multiple events scheduled via schedule_event_now are consumed in FIFO order. '''
+    def test2_coroutine_runs_to_completion(self):
+        ''' An async coroutine scheduled via sim.schedule() runs in sim.run(). '''
         sim = DSSimulation()
-        received = []
-
-        def sink(event):
-            received.append(event)
-            return True
-
-        from dssim import DSCallback
-        sink_cb = DSCallback(sink, sim=sim)
-
-        def burst(event):
-            for i in range(5):
-                sim.schedule_event_now(i, sink_cb)
-            return True
-
-        burst_cb = DSCallback(burst, sim=sim)
-        sim.schedule_event(0, None, burst_cb)
+        log = []
+        async def my_coro():
+            log.append('ran')
+        sim.schedule(0, my_coro())
         sim.run()
-        self.assertEqual(received, [0, 1, 2, 3, 4])
+        self.assertEqual(log, ['ran'])
 
-    def test6_now_queue_empty_after_run(self):
-        ''' now_queue is fully drained by run() — nothing left afterwards. '''
+    def test3_dsschedulable_runs_to_completion(self):
+        ''' A DSSchedulable-decorated function runs when scheduled. '''
         sim = DSSimulation()
-
-        def sink(event):
-            return True
-
-        from dssim import DSCallback
-        sink_cb = DSCallback(sink, sim=sim)
-
-        def burst(event):
-            sim.schedule_event_now('x', sink_cb)
-            sim.schedule_event_now('y', sink_cb)
-            return True
-
-        burst_cb = DSCallback(burst, sim=sim)
-        sim.schedule_event(1, None, burst_cb)
+        log = []
+        @DSSchedulable
+        def my_fn():
+            log.append('ran')
+            return 'done'
+        sim.schedule(0, my_fn())
         sim.run()
-        self.assertEqual(len(sim.now_queue), 0)
+        self.assertEqual(log, ['ran'])
+
+    def test4_two_generators_run_in_time_order(self):
+        ''' Two generators scheduled at different times start in time order. '''
+        sim = DSSimulation()
+        log = []
+        def gen(tag):
+            log.append(tag)
+            yield
+        sim.schedule(2, gen('second'))
+        sim.schedule(1, gen('first'))
+        sim.run()
+        self.assertEqual(log, ['first', 'second'])
+
+    def test5_negative_time_raises_value_error(self):
+        ''' sim.schedule() with negative time raises ValueError. '''
+        sim = DSSimulation()
+        def my_gen():
+            yield
+        with self.assertRaises(ValueError):
+            sim.schedule(-1, my_gen())
+
+
+# ---------------------------------------------------------------------------
+# VoidSubscriber
+# ---------------------------------------------------------------------------
+
+class TestVoidSubscriber(unittest.TestCase):
+    ''' Tests for VoidSubscriber and the void_subscriber singleton. '''
+
+    def test1_send_raises_runtime_error(self):
+        ''' VoidSubscriber.send() always raises RuntimeError. '''
+        vs = VoidSubscriber()
+        with self.assertRaises(RuntimeError):
+            vs.send(None)
+
+    def test2_send_raises_for_any_event(self):
+        ''' RuntimeError is raised regardless of the event value. '''
+        vs = VoidSubscriber()
+        for event in (0, 'hello', {}, object()):
+            with self.assertRaises(RuntimeError):
+                vs.send(event)
+
+    def test3_default_name(self):
+        ''' Default name is set when no name is provided. '''
+        vs = VoidSubscriber()
+        self.assertIsInstance(vs.name, str)
+        self.assertTrue(len(vs.name) > 0)
+
+    def test4_custom_name(self):
+        ''' Custom name is stored on the instance. '''
+        vs = VoidSubscriber(name='my-void')
+        self.assertEqual(vs.name, 'my-void')
+
+    def test5_singleton_is_void_subscriber_instance(self):
+        ''' void_subscriber is an instance of VoidSubscriber. '''
+        self.assertIsInstance(void_subscriber, VoidSubscriber)
+
+    def test6_simulation_parent_process_defaults_to_void_subscriber(self):
+        ''' After construction, sim._parent_process is the void_subscriber singleton. '''
+        sim = DSSimulation()
+        self.assertIs(sim._parent_process, void_subscriber)
+
+    def test7_simulation_restart_restores_void_subscriber(self):
+        ''' restart() resets _parent_process back to void_subscriber. '''
+        sim = DSSimulation()
+        sim._parent_process = Mock()
+        sim.restart()
+        self.assertIs(sim._parent_process, void_subscriber)
+
+
+if __name__ == '__main__':
+    unittest.main()

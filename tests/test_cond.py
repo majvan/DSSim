@@ -24,7 +24,7 @@ from dssim.process import _StartProcess
 
 class TestDSFilter(unittest.TestCase):
 
-    def test0_init_value(self):
+    def test1_init_value(self):
         sim = DSSimulation()
         fa = _f('a', sim=sim)
         self.assertTrue(fa.expression == _f.ONE_LINER)
@@ -72,7 +72,7 @@ class TestDSFilter(unittest.TestCase):
             -fna  # once a filter is negative (reseter), it cannot be negated again
 
 
-    def test1_init_lambda(self):
+    def test2_init_lambda(self):
         sim = DSSimulation()
         l = lambda e: 'A' in e
         fa = _f(l, sim=sim)
@@ -123,7 +123,7 @@ class TestDSFilter(unittest.TestCase):
             -fna  # once a filter is negative (reseter), it cannot be negated again
 
 
-    def test2_init_future(self):
+    def test3_init_future(self):
         sim = DSSimulation()
         fut = DSFuture(sim=sim)
         fa = _f(fut, sim=sim)
@@ -174,7 +174,7 @@ class TestDSFilter(unittest.TestCase):
             -fna  # once a filter is negative (reseter), it cannot be negated again
 
 
-    def test3_init_gen(self):
+    def test4_init_gen(self):
         def gen():
             yield 'hi'
 
@@ -235,7 +235,7 @@ class TestDSFilter(unittest.TestCase):
         scheduled = sim.time_queue.pop()
         self.assertTrue(len(sim.time_queue) == 0)
 
-    def test4_init_coro(self):
+    def test5_init_coro(self):
         async def coro():
             class Awaitable:
                 def __await__(self):
@@ -298,7 +298,7 @@ class TestDSFilter(unittest.TestCase):
         scheduled = sim.time_queue.pop()
         self.assertTrue(len(sim.time_queue) == 0)
 
-    def test5_init_process(self):
+    def test6_init_process(self):
         def gen():
             yield 'hi'
 
@@ -375,7 +375,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(len(sim.time_queue) == 0)
 
 
-    def test6_feeding_value(self):
+    def test7_feeding_value(self):
         sim = DSSimulation()
         fa = _f('a', sim=sim)
         self.assertTrue(fa.signaled == False)
@@ -392,7 +392,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == True)
         self.assertTrue(fa.value == 'a')
 
-    def test7_feeding_lambda(self):
+    def test8_feeding_lambda(self):
         sim = DSSimulation()
         fa = _f(lambda e: 'A' in e, sim=sim)
         self.assertTrue(fa.signaled == False)
@@ -412,7 +412,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == True)
         self.assertTrue(fa.value == 'Ahoy')
 
-    def test8_feeding_future(self):
+    def test9_feeding_future(self):
         sim = DSSimulation()
         fut = DSFuture(sim=sim)
         fa = _f(fut, sim=sim)
@@ -433,7 +433,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == True)
         self.assertTrue(fut.finished() == True)
 
-    def test9_feeding_gen(self):
+    def test10_feeding_gen(self):
         def gen():
             yield 'First'
             return 'Return'
@@ -461,7 +461,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == True)
         self.assertTrue(fa.cond.finished() == True)
 
-    def test10_feeding_coro(self):
+    def test11_feeding_coro(self):
         async def coro():
             class Awaitable:
                 def __await__(self):
@@ -491,7 +491,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == True)
         self.assertTrue(fa.cond.finished() == True)
 
-    def test11_feeding_process(self):
+    def test12_feeding_process(self):
         def gen():
             yield 'First'
             return 'Return'
@@ -535,7 +535,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == True)
         self.assertTrue(p.finished() == True)
 
-    def test12_feeding_value_reevaluate(self):
+    def test13_feeding_value_reevaluate(self):
         sim = DSSimulation()
         fa = _f('a', sigtype=_f.SignalType.REEVALUATE, sim=sim)
         self.assertTrue(fa.signaled == False)
@@ -552,7 +552,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.value == 'a')
 
-    def test13_feeding_lambda_reevaluate(self):
+    def test14_feeding_lambda_reevaluate(self):
         sim = DSSimulation()
         fa = _f(lambda e: 'A' in e, sigtype=_f.SignalType.REEVALUATE, sim=sim)
         self.assertTrue(fa.signaled == False)
@@ -572,7 +572,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.value == 'Ahoy')
 
-    def test14_feeding_future_reevaluate(self):
+    def test15_feeding_future_reevaluate(self):
         sim = DSSimulation()
         fut = DSFuture(sim=sim)
         fa = _f(fut, sigtype=_f.SignalType.REEVALUATE, sim=sim)
@@ -593,7 +593,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == True)
         self.assertTrue(fut.finished() == True)
 
-    def test15_feeding_gen_reevaluate(self):
+    def test16_feeding_gen_reevaluate(self):
         def gen():
             yield 'First'
             return 'Return'
@@ -620,7 +620,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == True)
         self.assertTrue(fa.cond.finished() == True)
 
-    def test16_feeding_coro_reevaluate(self):
+    def test17_feeding_coro_reevaluate(self):
         async def coro():
             class Awaitable:
                 def __await__(self):
@@ -650,7 +650,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == True)
         self.assertTrue(fa.cond.finished() == True)
 
-    def test17_feeding_process_reevaluate(self):
+    def test18_feeding_process_reevaluate(self):
         def gen():
             yield 'First'
             return 'Return'
@@ -695,7 +695,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(p.finished() == True)
 
 
-    def test18_feeding_value_pulsed(self):
+    def test19_feeding_value_pulsed(self):
         sim = DSSimulation()
         fa = _f('a', sigtype=_f.SignalType.PULSED, sim=sim)
         self.assertTrue(fa.signaled == False)
@@ -712,7 +712,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.value == 'a')
 
-    def test19_feeding_lambda_pulsed(self):
+    def test20_feeding_lambda_pulsed(self):
         sim = DSSimulation()
         fa = _f(lambda e: 'A' in e, sigtype=_f.SignalType.PULSED, sim=sim)
         self.assertTrue(fa.signaled == False)
@@ -732,7 +732,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.value == 'Ahoy')
 
-    def test20_feeding_future_pulsed(self):
+    def test21_feeding_future_pulsed(self):
         sim = DSSimulation()
         fut = DSFuture(sim=sim)
         fa = _f(fut, sigtype=_f.SignalType.PULSED, sim=sim)
@@ -753,7 +753,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fut.finished() == True)
 
-    def test21_feeding_gen_pulsed(self):
+    def test22_feeding_gen_pulsed(self):
         def gen():
             yield 'First'
             return 'Return'
@@ -784,7 +784,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.cond.finished() == True)
 
-    def test22_feeding_coro_pulsed(self):
+    def test23_feeding_coro_pulsed(self):
         async def coro():
             class Awaitable:
                 def __await__(self):
@@ -818,7 +818,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.cond.finished() == True)
 
-    def test23_feeding_process_pulsed(self):
+    def test24_feeding_process_pulsed(self):
         def gen():
             yield 'First'
             return 'Return'
@@ -863,10 +863,10 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(p.finished() == True)
 
 
-    def test24_cond_gwait(self):
+    def test25_cond_gwait(self):
         pass
 
-    def test25_cond_wait(self):
+    def test26_cond_wait(self):
         pass
 
 
@@ -876,7 +876,7 @@ class TestDSFilter(unittest.TestCase):
 
 class TestDSCircuit(unittest.TestCase):
 
-    def test0_build(self):
+    def test1_build(self):
         sim = DSSimulation()
         fa, fb, fc, fd = _f('a', sim=sim), _f('b', sim=sim), _f('c', sim=sim), _f('d', sim=sim)
         c = fa | fb
@@ -979,7 +979,7 @@ class TestDSCircuit(unittest.TestCase):
         self.assertEqual(str(c), "-(DSFilter(a) & DSFilter(b))")
         self.assertTrue((len(c.setters), len(c.resetters)) == (2, 0))
 
-    def test1_build_with_reseters(self):
+    def test2_build_with_reseters(self):
         sim = DSSimulation()
         fa, fb, fc, fd = _f('a', sim=sim), _f('b', sim=sim), _f('c', sim=sim), _f('d', sim=sim)
         fna, fnb = -fa, -fb

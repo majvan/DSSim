@@ -30,7 +30,7 @@ class TestDSQueue(unittest.TestCase):
 
     # ---- construction / empty state ----------------------------------------
 
-    def test_init_empty(self):
+    def test1_init_empty(self):
         self.assertEqual(len(self.q), 0)
         self.assertFalse(self.q)
         self.assertIsNone(self.q.head)
@@ -38,7 +38,7 @@ class TestDSQueue(unittest.TestCase):
 
     # ---- append / popleft (FIFO) -------------------------------------------
 
-    def test_append_popleft_fifo(self):
+    def test2_append_popleft_fifo(self):
         self.q.append('a')
         self.q.append('b')
         self.q.append('c')
@@ -51,7 +51,7 @@ class TestDSQueue(unittest.TestCase):
 
     # ---- appendleft (priority insert) -------------------------------------
 
-    def test_appendleft(self):
+    def test3_appendleft(self):
         self.q.append('b')
         self.q.append('c')
         self.q.appendleft('a')
@@ -60,7 +60,7 @@ class TestDSQueue(unittest.TestCase):
 
     # ---- pop (from tail) ---------------------------------------------------
 
-    def test_pop_from_tail(self):
+    def test4_pop_from_tail(self):
         self.q.append('x')
         self.q.append('y')
         self.assertEqual(self.q.pop(), 'y')
@@ -68,7 +68,7 @@ class TestDSQueue(unittest.TestCase):
 
     # ---- head / tail properties -------------------------------------------
 
-    def test_head_tail(self):
+    def test5_head_tail(self):
         self.q.append(1)
         self.q.append(2)
         self.q.append(3)
@@ -77,7 +77,7 @@ class TestDSQueue(unittest.TestCase):
 
     # ---- __contains__ ------------------------------------------------------
 
-    def test_contains(self):
+    def test6_contains(self):
         self.q.append('alpha')
         self.q.append('beta')
         self.assertIn('alpha', self.q)
@@ -85,7 +85,7 @@ class TestDSQueue(unittest.TestCase):
 
     # ---- __iter__ ----------------------------------------------------------
 
-    def test_iter(self):
+    def test7_iter(self):
         items = [10, 20, 30]
         for i in items:
             self.q.append(i)
@@ -93,34 +93,34 @@ class TestDSQueue(unittest.TestCase):
 
     # ---- __getitem__ / __setitem__ -----------------------------------------
 
-    def test_getitem(self):
+    def test8_getitem(self):
         self.q.append('x')
         self.q.append('y')
         self.assertEqual(self.q[0], 'x')
         self.assertEqual(self.q[1], 'y')
 
-    def test_setitem(self):
+    def test9_setitem(self):
         self.q.append('old')
         self.q[0] = 'new'
         self.assertEqual(self.q[0], 'new')
 
     # ---- pop_at ------------------------------------------------------------
 
-    def test_pop_at_head(self):
+    def test10_pop_at_head(self):
         self.q.append('a')
         self.q.append('b')
         self.q.append('c')
         self.assertEqual(self.q.pop_at(0), 'a')
         self.assertEqual(list(self.q), ['b', 'c'])
 
-    def test_pop_at_middle(self):
+    def test11_pop_at_middle(self):
         self.q.append('a')
         self.q.append('b')
         self.q.append('c')
         self.assertEqual(self.q.pop_at(1), 'b')
         self.assertEqual(list(self.q), ['a', 'c'])
 
-    def test_pop_at_tail(self):
+    def test12_pop_at_tail(self):
         self.q.append('a')
         self.q.append('b')
         self.q.append('c')
@@ -129,34 +129,34 @@ class TestDSQueue(unittest.TestCase):
 
     # ---- remove ------------------------------------------------------------
 
-    def test_remove_item(self):
+    def test13_remove_item(self):
         self.q.append('a')
         self.q.append('b')
         self.q.remove('a')
         self.assertEqual(list(self.q), ['b'])
 
-    def test_remove_missing_raises(self):
+    def test14_remove_missing_raises(self):
         self.q.append('a')
         with self.assertRaises(ValueError):
             self.q.remove('z')
 
     # ---- remove_if ---------------------------------------------------------
 
-    def test_remove_if_matches(self):
+    def test15_remove_if_matches(self):
         for i in range(5):
             self.q.append(i)
         changed = self.q.remove_if(lambda e: e % 2 == 0)
         self.assertTrue(changed)
         self.assertEqual(list(self.q), [1, 3])
 
-    def test_remove_if_no_match(self):
+    def test16_remove_if_no_match(self):
         self.q.append(1)
         self.q.append(3)
         changed = self.q.remove_if(lambda e: e % 2 == 0)
         self.assertFalse(changed)
         self.assertEqual(list(self.q), [1, 3])
 
-    def test_remove_if_duplicates(self):
+    def test17_remove_if_duplicates(self):
         self.q.append('x')
         self.q.append('x')
         self.q.append('y')
@@ -166,7 +166,7 @@ class TestDSQueue(unittest.TestCase):
 
     # ---- clear -------------------------------------------------------------
 
-    def test_clear(self):
+    def test18_clear(self):
         self.q.append(1)
         self.q.append(2)
         self.q.clear()
@@ -175,14 +175,14 @@ class TestDSQueue(unittest.TestCase):
 
     # ---- append returns item -----------------------------------------------
 
-    def test_append_returns_item(self):
+    def test19_append_returns_item(self):
         obj = object()
         retval = self.q.append(obj)
         self.assertIs(retval, obj)
 
     # ---- policy interface: enqueue / dequeue / peek ------------------------
 
-    def test_enqueue_dequeue_fifo_default(self):
+    def test20_enqueue_dequeue_fifo_default(self):
         self.q.enqueue('a')
         self.q.enqueue('b')
         self.q.enqueue('c')
@@ -191,7 +191,7 @@ class TestDSQueue(unittest.TestCase):
         self.assertEqual(self.q.dequeue(), 'b')
         self.assertEqual(self.q.dequeue(), 'c')
 
-    def test_peek_empty(self):
+    def test21_peek_empty(self):
         self.assertIsNone(self.q.peek())
 
 
@@ -204,7 +204,7 @@ class TestDSLifoQueue(unittest.TestCase):
     def setUp(self):
         self.q = DSLifoQueue()
 
-    def test_lifo_order(self):
+    def test1_lifo_order(self):
         self.q.enqueue('a')
         self.q.enqueue('b')
         self.q.enqueue('c')
@@ -213,24 +213,24 @@ class TestDSLifoQueue(unittest.TestCase):
         self.assertEqual(self.q.dequeue(), 'b')
         self.assertEqual(self.q.dequeue(), 'a')
 
-    def test_peek_empty(self):
+    def test2_peek_empty(self):
         self.assertIsNone(self.q.peek())
 
-    def test_len_and_bool(self):
+    def test3_len_and_bool(self):
         self.assertEqual(len(self.q), 0)
         self.assertFalse(self.q)
         self.q.enqueue(1)
         self.assertEqual(len(self.q), 1)
         self.assertTrue(self.q)
 
-    def test_contains_and_iter(self):
+    def test4_contains_and_iter(self):
         self.q.enqueue('x')
         self.q.enqueue('y')
         self.assertIn('x', self.q)
         self.assertNotIn('z', self.q)
         self.assertEqual(list(self.q), ['x', 'y'])
 
-    def test_remove_if(self):
+    def test5_remove_if(self):
         for i in range(4):
             self.q.enqueue(i)
         self.q.remove_if(lambda e: e % 2 == 0)
@@ -245,7 +245,7 @@ class TestDSKeyQueue(unittest.TestCase):
 
     # ---- empty state -------------------------------------------------------
 
-    def test_init_empty(self):
+    def test1_init_empty(self):
         q = DSKeyQueue()
         self.assertEqual(len(q), 0)
         self.assertFalse(q)
@@ -254,14 +254,14 @@ class TestDSKeyQueue(unittest.TestCase):
 
     # ---- default key (identity) --------------------------------------------
 
-    def test_default_key_orders_ascending(self):
+    def test2_default_key_orders_ascending(self):
         q = DSKeyQueue()
         q.enqueue(3)
         q.enqueue(1)
         q.enqueue(2)
         self.assertEqual([q.dequeue() for _ in range(3)], [1, 2, 3])
 
-    def test_single_item(self):
+    def test3_single_item(self):
         q = DSKeyQueue()
         q.enqueue(42)
         self.assertEqual(q.peek(), 42)
@@ -270,13 +270,13 @@ class TestDSKeyQueue(unittest.TestCase):
 
     # ---- min / max priority ------------------------------------------------
 
-    def test_min_priority_integers(self):
+    def test4_min_priority_integers(self):
         q = DSKeyQueue(key=lambda x: x)
         for v in [5, 1, 3, 2, 4]:
             q.enqueue(v)
         self.assertEqual([q.dequeue() for _ in range(5)], [1, 2, 3, 4, 5])
 
-    def test_max_priority_negated_key(self):
+    def test5_max_priority_negated_key(self):
         q = DSKeyQueue(key=lambda x: -x)
         for v in [5, 1, 3, 2, 4]:
             q.enqueue(v)
@@ -284,7 +284,7 @@ class TestDSKeyQueue(unittest.TestCase):
 
     # ---- attribute-based key -----------------------------------------------
 
-    def test_key_on_dict_field(self):
+    def test6_key_on_dict_field(self):
         q = DSKeyQueue(key=lambda item: item['priority'])
         q.enqueue({'name': 'low',  'priority': 10})
         q.enqueue({'name': 'high', 'priority': 1})
@@ -293,7 +293,7 @@ class TestDSKeyQueue(unittest.TestCase):
         self.assertEqual(q.dequeue()['name'], 'mid')
         self.assertEqual(q.dequeue()['name'], 'low')
 
-    def test_key_on_object_attribute(self):
+    def test7_key_on_object_attribute(self):
         class Task:
             def __init__(self, name, prio):
                 self.name = name
@@ -308,7 +308,7 @@ class TestDSKeyQueue(unittest.TestCase):
 
     # ---- equal keys: stable (insertion) order ------------------------------
 
-    def test_equal_keys_stable_order(self):
+    def test8_equal_keys_stable_order(self):
         q = DSKeyQueue(key=lambda x: x[0])   # key = first element of tuple
         q.enqueue((1, 'first'))
         q.enqueue((1, 'second'))
@@ -319,7 +319,7 @@ class TestDSKeyQueue(unittest.TestCase):
 
     # ---- peek --------------------------------------------------------------
 
-    def test_peek_does_not_remove(self):
+    def test9_peek_does_not_remove(self):
         q = DSKeyQueue(key=lambda x: x)
         q.enqueue(5)
         q.enqueue(2)
@@ -327,19 +327,19 @@ class TestDSKeyQueue(unittest.TestCase):
         self.assertEqual(len(q), 2)
         self.assertEqual(q.peek(), 2)   # still there
 
-    def test_peek_empty(self):
+    def test10_peek_empty(self):
         self.assertIsNone(DSKeyQueue().peek())
 
     # ---- enqueue return value ----------------------------------------------
 
-    def test_enqueue_returns_item(self):
+    def test11_enqueue_returns_item(self):
         q = DSKeyQueue()
         obj = object()
         self.assertIs(q.enqueue(obj), obj)
 
     # ---- interleaved enqueue / dequeue -------------------------------------
 
-    def test_interleaved_operations(self):
+    def test12_interleaved_operations(self):
         q = DSKeyQueue(key=lambda x: x)
         q.enqueue(4)
         q.enqueue(2)
@@ -350,7 +350,7 @@ class TestDSKeyQueue(unittest.TestCase):
 
     # ---- inherited sequence operations ------------------------------------
 
-    def test_contains_and_iter(self):
+    def test13_contains_and_iter(self):
         q = DSKeyQueue(key=lambda x: x)
         q.enqueue(10)
         q.enqueue(5)
@@ -358,7 +358,7 @@ class TestDSKeyQueue(unittest.TestCase):
         self.assertNotIn(99, q)
         self.assertEqual(sorted(q), [5, 10])  # iter over stored order
 
-    def test_remove(self):
+    def test14_remove(self):
         q = DSKeyQueue(key=lambda x: x)
         q.enqueue(3)
         q.enqueue(1)
@@ -366,14 +366,14 @@ class TestDSKeyQueue(unittest.TestCase):
         q.remove(1)
         self.assertEqual([q.dequeue() for _ in range(2)], [2, 3])
 
-    def test_remove_if(self):
+    def test15_remove_if(self):
         q = DSKeyQueue(key=lambda x: x)
         for v in [4, 1, 3, 2]:
             q.enqueue(v)
         q.remove_if(lambda e: e % 2 == 0)
         self.assertEqual([q.dequeue() for _ in range(2)], [1, 3])
 
-    def test_pop_at(self):
+    def test16_pop_at(self):
         q = DSKeyQueue(key=lambda x: x)
         for v in [3, 1, 2]:
             q.enqueue(v)
@@ -381,7 +381,7 @@ class TestDSKeyQueue(unittest.TestCase):
         self.assertEqual(q.pop_at(1), 2)
         self.assertEqual([q.dequeue() for _ in range(2)], [1, 3])
 
-    def test_len_and_bool(self):
+    def test17_len_and_bool(self):
         q = DSKeyQueue()
         self.assertFalse(q)
         q.enqueue(0)
@@ -400,7 +400,7 @@ class TestQueue(unittest.TestCase):
 
     # ---- put_nowait / get_nowait -------------------------------------------
 
-    def test_put_nowait_and_get_nowait_basic(self):
+    def test1_put_nowait_and_get_nowait_basic(self):
         q = Queue(sim=self.sim)
         result = q.put_nowait('item')
         self.assertIsNotNone(result)
@@ -409,7 +409,7 @@ class TestQueue(unittest.TestCase):
         self.assertEqual(items, ['item'])
         self.assertEqual(len(q), 0)
 
-    def test_put_nowait_multiple(self):
+    def test2_put_nowait_multiple(self):
         q = Queue(sim=self.sim)
         q.put_nowait('a', 'b', 'c')
         self.assertEqual(len(q), 3)
@@ -417,26 +417,26 @@ class TestQueue(unittest.TestCase):
         self.assertEqual(q.get_n_nowait(), ['b'])
         self.assertEqual(q.get_n_nowait(), ['c'])
 
-    def test_put_nowait_full_returns_none(self):
+    def test3_put_nowait_full_returns_none(self):
         q = Queue(capacity=2, sim=self.sim)
         q.put_nowait('a', 'b')
         result = q.put_nowait('c')
         self.assertIsNone(result)
         self.assertEqual(len(q), 2)
 
-    def test_get_nowait_empty_returns_none(self):
+    def test4_get_nowait_empty_returns_none(self):
         q = Queue(sim=self.sim)
         result = q.get_n_nowait()
         self.assertIsNone(result)
 
-    def test_get_nowait_amount(self):
+    def test5_get_nowait_amount(self):
         q = Queue(sim=self.sim)
         q.put_nowait('a', 'b', 'c')
         items = q.get_n_nowait(amount=2)
         self.assertEqual(items, ['a', 'b'])
         self.assertEqual(len(q), 1)
 
-    def test_get_nowait_cond_head(self):
+    def test6_get_nowait_cond_head(self):
         q = Queue(sim=self.sim)
         q.put_nowait('skip')
         result = q.get_n_nowait(cond=lambda e: e != 'skip')
@@ -446,7 +446,7 @@ class TestQueue(unittest.TestCase):
 
     # ---- fifo ordering -----------------------------------------------------
 
-    def test_fifo_order(self):
+    def test7_fifo_order(self):
         q = Queue(sim=self.sim)
         for i in range(5):
             q.put_nowait(i)
@@ -455,13 +455,13 @@ class TestQueue(unittest.TestCase):
 
     # ---- capacity ----------------------------------------------------------
 
-    def test_infinite_capacity_default(self):
+    def test8_infinite_capacity_default(self):
         q = Queue(sim=self.sim)
         for i in range(1000):
             self.assertIsNotNone(q.put_nowait(i))
         self.assertEqual(len(q), 1000)
 
-    def test_capacity_enforced(self):
+    def test9_capacity_enforced(self):
         q = Queue(capacity=3, sim=self.sim)
         self.assertIsNotNone(q.put_nowait(1))
         self.assertIsNotNone(q.put_nowait(2))
@@ -470,19 +470,19 @@ class TestQueue(unittest.TestCase):
 
     # ---- sequence protocol -------------------------------------------------
 
-    def test_getitem_setitem(self):
+    def test10_getitem_setitem(self):
         q = Queue(sim=self.sim)
         q.put_nowait('x')
         self.assertEqual(q[0], 'x')
         q[0] = 'y'
         self.assertEqual(q[0], 'y')
 
-    def test_iter(self):
+    def test11_iter(self):
         q = Queue(sim=self.sim)
         q.put_nowait('a', 'b', 'c')
         self.assertEqual(list(q), ['a', 'b', 'c'])
 
-    def test_contains(self):
+    def test12_contains(self):
         q = Queue(sim=self.sim)
         q.put_nowait('needle')
         self.assertIn('needle', q)
@@ -490,19 +490,19 @@ class TestQueue(unittest.TestCase):
 
     # ---- pop ---------------------------------------------------------------
 
-    def test_pop_head(self):
+    def test13_pop_head(self):
         q = Queue(sim=self.sim)
         q.put_nowait('a', 'b', 'c')
         self.assertEqual(q.pop(0), 'a')
         self.assertEqual(list(q), ['b', 'c'])
 
-    def test_pop_middle(self):
+    def test14_pop_middle(self):
         q = Queue(sim=self.sim)
         q.put_nowait('a', 'b', 'c')
         self.assertEqual(q.pop(1), 'b')
         self.assertEqual(list(q), ['a', 'c'])
 
-    def test_pop_out_of_range(self):
+    def test15_pop_out_of_range(self):
         q = Queue(sim=self.sim)
         q.put_nowait('a')
         self.assertIsNone(q.pop(5))
@@ -510,7 +510,7 @@ class TestQueue(unittest.TestCase):
 
     # ---- remove ------------------------------------------------------------
 
-    def test_remove_exact_item(self):
+    def test16_remove_exact_item(self):
         q = Queue(sim=self.sim)
         obj = object()
         q.put_nowait(obj)
@@ -519,13 +519,13 @@ class TestQueue(unittest.TestCase):
         self.assertNotIn(obj, q)
         self.assertEqual(len(q), 1)
 
-    def test_remove_callable_cond(self):
+    def test17_remove_callable_cond(self):
         q = Queue(sim=self.sim)
         q.put_nowait(1, 2, 3, 4)
         q.remove(lambda e: e % 2 == 0)
         self.assertEqual(list(q), [1, 3])
 
-    def test_remove_no_match_is_noop(self):
+    def test18_remove_no_match_is_noop(self):
         q = Queue(sim=self.sim)
         q.put_nowait('a', 'b')
         q.remove('z')
@@ -533,7 +533,7 @@ class TestQueue(unittest.TestCase):
 
     # ---- blocking get / put via simulation ---------------------------------
 
-    def test_gget_blocks_until_item_available(self):
+    def test19_gget_blocks_until_item_available(self):
         '''getter waits for item; producer adds it at t=5.'''
         results = []
 
@@ -552,7 +552,7 @@ class TestQueue(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0], ('got', 5, ['hello']))
 
-    def test_gput_blocks_until_space_available(self):
+    def test20_gput_blocks_until_space_available(self):
         '''putter waits for space; consumer gets at t=5.'''
         results = []
 
@@ -574,7 +574,7 @@ class TestQueue(unittest.TestCase):
         self.assertEqual(results[1][0], 'put')
         self.assertEqual(results[1][1], 5)
 
-    def test_gget_with_cond(self):
+    def test21_gget_with_cond(self):
         '''getter only wakes when head item satisfies cond.'''
         results = []
 
@@ -601,7 +601,7 @@ class TestQueue(unittest.TestCase):
         # blocked. This shows the FIFO-with-cond semantics.
         self.assertEqual(results, [])  # cond never passes for head='skip'
 
-    def test_gget_timeout(self):
+    def test22_gget_timeout(self):
         '''getter times out when no item arrives in time.'''
         results = []
 
@@ -614,7 +614,7 @@ class TestQueue(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [None])
 
-    def test_gput_timeout(self):
+    def test23_gput_timeout(self):
         '''putter times out when no space becomes available in time.'''
         results = []
 
@@ -628,7 +628,7 @@ class TestQueue(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [None])
 
-    def test_multiple_consumers_fifo_wakeup(self):
+    def test24_multiple_consumers_fifo_wakeup(self):
         '''multiple waiting consumers get items in order.'''
         order = []
 
@@ -655,7 +655,7 @@ class TestQueue(unittest.TestCase):
 
     # ---- gwait / wait / check_and_gwait / check_and_wait on Queue ----------
 
-    def test_queue_gwait_membership(self):
+    def test25_queue_gwait_membership(self):
         '''gwait wakes when condition passes after a change.'''
         results = []
 
@@ -676,7 +676,7 @@ class TestQueue(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [('removed', 3)])
 
-    def test_queue_gwait_woken_by_put_nowait(self):
+    def test26_queue_gwait_woken_by_put_nowait(self):
         '''put_nowait fires tx_changed, waking gwait.'''
         results = []
 
@@ -694,7 +694,7 @@ class TestQueue(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [4])
 
-    def test_queue_gwait_woken_by_get_nowait(self):
+    def test27_queue_gwait_woken_by_get_nowait(self):
         '''get_nowait fires tx_changed, waking gwait.'''
         results = []
 
@@ -715,7 +715,7 @@ class TestQueue(unittest.TestCase):
 
     # ---- async (coroutine) variants ----------------------------------------
 
-    def test_async_get_and_put(self):
+    def test28_async_get_and_put(self):
         results = []
 
         async def consumer():
@@ -742,7 +742,7 @@ class TestQueueLifo(unittest.TestCase):
     def setUp(self):
         self.sim = DSSimulation()
 
-    def test_lifo_order_nowait(self):
+    def test1_lifo_order_nowait(self):
         q = Queue(policy=DSLifoQueue(), sim=self.sim)
         q.put_nowait('a')
         q.put_nowait('b')
@@ -751,16 +751,16 @@ class TestQueueLifo(unittest.TestCase):
         self.assertEqual(q.get_n_nowait(), ['b'])
         self.assertEqual(q.get_n_nowait(), ['a'])
 
-    def test_buffer_is_dslifoqueue(self):
+    def test2_buffer_is_dslifoqueue(self):
         q = Queue(policy=DSLifoQueue(), sim=self.sim)
         self.assertIsInstance(q._buffer, DSLifoQueue)
 
-    def test_fifo_is_default(self):
+    def test3_fifo_is_default(self):
         q = Queue(sim=self.sim)
         self.assertIsInstance(q._buffer, DSQueue)
         self.assertNotIsInstance(q._buffer, DSLifoQueue)
 
-    def test_lifo_blocking_gget(self):
+    def test4_lifo_blocking_gget(self):
         '''LIFO queue gives last-added item to a waiting consumer.'''
         results = []
 
@@ -796,7 +796,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
 
     # ---- get_nowait --------------------------------------------------------
 
-    def test_get_nowait_returns_single_element(self):
+    def test1_get_nowait_returns_single_element(self):
         q = Queue(sim=self.sim)
         q.put_nowait('A')
         result = q.get_nowait()
@@ -804,32 +804,32 @@ class TestQueueSingleItemGet(unittest.TestCase):
         self.assertNotIsInstance(result, list)
         self.assertEqual(len(q), 0)
 
-    def test_get_nowait_returns_none_when_empty(self):
+    def test2_get_nowait_returns_none_when_empty(self):
         q = Queue(sim=self.sim)
         result = q.get_nowait()
         self.assertIsNone(result)
 
-    def test_get_nowait_fifo_order(self):
+    def test3_get_nowait_fifo_order(self):
         q = Queue(sim=self.sim)
         q.put_nowait('first', 'second', 'third')
         self.assertEqual(q.get_nowait(), 'first')
         self.assertEqual(q.get_nowait(), 'second')
         self.assertEqual(q.get_nowait(), 'third')
 
-    def test_get_nowait_with_passing_cond(self):
+    def test4_get_nowait_with_passing_cond(self):
         q = Queue(sim=self.sim)
         q.put_nowait('match')
         result = q.get_nowait(cond=lambda e: e == 'match')
         self.assertEqual(result, 'match')
 
-    def test_get_nowait_with_failing_cond_returns_none(self):
+    def test5_get_nowait_with_failing_cond_returns_none(self):
         q = Queue(sim=self.sim)
         q.put_nowait('item')
         result = q.get_nowait(cond=lambda e: e == 'other')
         self.assertIsNone(result)
         self.assertEqual(len(q), 1)  # item still in queue
 
-    def test_get_nowait_vs_get_n_nowait_return_types(self):
+    def test6_get_nowait_vs_get_n_nowait_return_types(self):
         q = Queue(sim=self.sim)
         q.put_nowait('a')
         q.put_nowait('b')
@@ -840,7 +840,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
 
     # ---- gget ---------------------------------------------------------------
 
-    def test_gget_returns_single_element_immediately(self):
+    def test7_gget_returns_single_element_immediately(self):
         results = []
 
         def consumer():
@@ -854,7 +854,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
         self.assertEqual(results, ['hello'])
         self.assertNotIsInstance(results[0], list)
 
-    def test_gget_blocks_until_item_available(self):
+    def test8_gget_blocks_until_item_available(self):
         results = []
 
         def consumer():
@@ -871,7 +871,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
         self.sim.run(20)
         self.assertEqual(results, [('got', 5, 'deferred')])
 
-    def test_gget_timeout_returns_none(self):
+    def test9_gget_timeout_returns_none(self):
         results = []
 
         def consumer():
@@ -883,7 +883,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [None])
 
-    def test_gget_with_cond(self):
+    def test10_gget_with_cond(self):
         '''gget wakes only when head satisfies cond.'''
         results = []
 
@@ -905,7 +905,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
         self.sim.run(20)
         self.assertEqual(results, ['wanted'])
 
-    def test_gget_vs_gget_n_different_return_types(self):
+    def test11_gget_vs_gget_n_different_return_types(self):
         results_single = []
         results_list = []
 
@@ -926,7 +926,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
         self.assertNotIsInstance(results_single[0], list)
         self.assertIsInstance(results_list[0], list)
 
-    def test_multiple_gget_consumers_each_get_one(self):
+    def test12_multiple_gget_consumers_each_get_one(self):
         order = []
 
         def consumer(name):
@@ -951,7 +951,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
 
     # ---- async get ---------------------------------------------------------
 
-    def test_async_get_returns_single_element(self):
+    def test13_async_get_returns_single_element(self):
         results = []
 
         async def consumer():
@@ -965,7 +965,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
         self.assertEqual(results, ['async_item'])
         self.assertNotIsInstance(results[0], list)
 
-    def test_async_get_blocks_until_item_available(self):
+    def test14_async_get_blocks_until_item_available(self):
         results = []
 
         async def consumer():
@@ -982,7 +982,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
         self.sim.run(20)
         self.assertEqual(results, [('got', 4, 'late')])
 
-    def test_async_get_timeout_returns_none(self):
+    def test15_async_get_timeout_returns_none(self):
         results = []
 
         async def consumer():
@@ -994,7 +994,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [None])
 
-    def test_async_get_with_cond(self):
+    def test16_async_get_with_cond(self):
         results = []
 
         async def consumer():

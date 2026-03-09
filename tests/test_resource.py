@@ -31,77 +31,77 @@ class TestResourceNowait(unittest.TestCase):
 
     # ---- get_nowait / get_n_nowait -----------------------------------------
 
-    def test_get_nowait_takes_one(self):
+    def test1_get_nowait_takes_one(self):
         result = self.r.get_nowait()
         self.assertEqual(result, 1)
         self.assertEqual(self.r.amount, 4)
 
-    def test_get_nowait_fails_when_empty(self):
+    def test2_get_nowait_fails_when_empty(self):
         r = Resource(amount=0, capacity=5, sim=self.sim)
         result = r.get_nowait()
         self.assertEqual(result, 0)
         self.assertEqual(r.amount, 0)
 
-    def test_get_n_nowait_takes_n(self):
+    def test3_get_n_nowait_takes_n(self):
         result = self.r.get_n_nowait(3)
         self.assertEqual(result, 3)
         self.assertEqual(self.r.amount, 2)
 
-    def test_get_n_nowait_fails_when_insufficient(self):
+    def test4_get_n_nowait_fails_when_insufficient(self):
         result = self.r.get_n_nowait(6)
         self.assertEqual(result, 0)
         self.assertEqual(self.r.amount, 5)
 
-    def test_get_n_nowait_default_amount_is_one(self):
+    def test5_get_n_nowait_default_amount_is_one(self):
         result = self.r.get_n_nowait()
         self.assertEqual(result, 1)
         self.assertEqual(self.r.amount, 4)
 
-    def test_get_n_nowait_exact_available(self):
+    def test6_get_n_nowait_exact_available(self):
         result = self.r.get_n_nowait(5)
         self.assertEqual(result, 5)
         self.assertEqual(self.r.amount, 0)
 
     # ---- put_nowait / put_n_nowait -----------------------------------------
 
-    def test_put_nowait_adds_one(self):
+    def test7_put_nowait_adds_one(self):
         result = self.r.put_nowait()
         self.assertEqual(result, 1)
         self.assertEqual(self.r.amount, 6)
 
-    def test_put_nowait_fails_when_full(self):
+    def test8_put_nowait_fails_when_full(self):
         r = Resource(amount=10, capacity=10, sim=self.sim)
         result = r.put_nowait()
         self.assertEqual(result, 0)
         self.assertEqual(r.amount, 10)
 
-    def test_put_n_nowait_adds_n(self):
+    def test9_put_n_nowait_adds_n(self):
         result = self.r.put_n_nowait(3)
         self.assertEqual(result, 3)
         self.assertEqual(self.r.amount, 8)
 
-    def test_put_n_nowait_fails_when_would_exceed_capacity(self):
+    def test10_put_n_nowait_fails_when_would_exceed_capacity(self):
         result = self.r.put_n_nowait(6)
         self.assertEqual(result, 0)
         self.assertEqual(self.r.amount, 5)
 
-    def test_put_n_nowait_fills_exactly(self):
+    def test11_put_n_nowait_fills_exactly(self):
         result = self.r.put_n_nowait(5)
         self.assertEqual(result, 5)
         self.assertEqual(self.r.amount, 10)
 
     # ---- init validation ---------------------------------------------------
 
-    def test_init_amount_exceeds_capacity_raises(self):
+    def test12_init_amount_exceeds_capacity_raises(self):
         with self.assertRaises(ValueError):
             Resource(amount=10, capacity=5, sim=self.sim)
 
-    def test_infinite_capacity_default(self):
+    def test13_infinite_capacity_default(self):
         r = Resource(sim=self.sim)
         self.assertEqual(r.amount, 0)
         self.assertEqual(r.capacity, float('inf'))
 
-    def test_put_n_nowait_large_amount_infinite_capacity(self):
+    def test14_put_n_nowait_large_amount_infinite_capacity(self):
         r = Resource(amount=0, sim=self.sim)
         result = r.put_n_nowait(1_000_000)
         self.assertEqual(result, 1_000_000)
@@ -120,7 +120,7 @@ class TestResourceGget(unittest.TestCase):
     def _make(self, amount=0, capacity=float('inf')):
         return Resource(amount=amount, capacity=capacity, sim=self.sim)
 
-    def test_gget_takes_one_immediately(self):
+    def test1_gget_takes_one_immediately(self):
         r = self._make(amount=3)
         results = []
 
@@ -133,7 +133,7 @@ class TestResourceGget(unittest.TestCase):
         self.assertEqual(results, [1])
         self.assertEqual(r.amount, 2)
 
-    def test_gget_blocks_until_available(self):
+    def test2_gget_blocks_until_available(self):
         r = self._make(amount=0)
         results = []
 
@@ -151,7 +151,7 @@ class TestResourceGget(unittest.TestCase):
         self.assertEqual(results, [('got', 5, 1)])
         self.assertEqual(r.amount, 0)
 
-    def test_gget_timeout(self):
+    def test3_gget_timeout(self):
         r = self._make(amount=0)
         results = []
 
@@ -163,7 +163,7 @@ class TestResourceGget(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [0])
 
-    def test_gget_n_takes_n_immediately(self):
+    def test4_gget_n_takes_n_immediately(self):
         r = self._make(amount=5)
         results = []
 
@@ -176,7 +176,7 @@ class TestResourceGget(unittest.TestCase):
         self.assertEqual(results, [3])
         self.assertEqual(r.amount, 2)
 
-    def test_gget_n_blocks_until_enough_available(self):
+    def test5_gget_n_blocks_until_enough_available(self):
         r = self._make(amount=2)
         results = []
 
@@ -194,7 +194,7 @@ class TestResourceGget(unittest.TestCase):
         self.assertEqual(results, [('got', 4, 5)])
         self.assertEqual(r.amount, 0)
 
-    def test_gget_n_timeout(self):
+    def test6_gget_n_timeout(self):
         r = self._make(amount=1)
         results = []
 
@@ -207,7 +207,7 @@ class TestResourceGget(unittest.TestCase):
         self.assertEqual(results, [0])
         self.assertEqual(r.amount, 1)  # unchanged
 
-    def test_gget_n_default_amount_is_one(self):
+    def test7_gget_n_default_amount_is_one(self):
         r = self._make(amount=3)
         results = []
 
@@ -220,7 +220,7 @@ class TestResourceGget(unittest.TestCase):
         self.assertEqual(results, [1])
         self.assertEqual(r.amount, 2)
 
-    def test_multiple_gget_consumers_serialized(self):
+    def test8_multiple_gget_consumers_serialized(self):
         r = self._make(amount=0)
         order = []
 
@@ -256,7 +256,7 @@ class TestResourceAsyncGet(unittest.TestCase):
     def _make(self, amount=0, capacity=float('inf')):
         return Resource(amount=amount, capacity=capacity, sim=self.sim)
 
-    def test_get_takes_one_immediately(self):
+    def test1_get_takes_one_immediately(self):
         r = self._make(amount=3)
         results = []
 
@@ -269,7 +269,7 @@ class TestResourceAsyncGet(unittest.TestCase):
         self.assertEqual(results, [1])
         self.assertEqual(r.amount, 2)
 
-    def test_get_blocks_until_available(self):
+    def test2_get_blocks_until_available(self):
         r = self._make(amount=0)
         results = []
 
@@ -286,7 +286,7 @@ class TestResourceAsyncGet(unittest.TestCase):
         self.sim.run(20)
         self.assertEqual(results, [('got', 5, 1)])
 
-    def test_get_timeout(self):
+    def test3_get_timeout(self):
         r = self._make(amount=0)
         results = []
 
@@ -298,7 +298,7 @@ class TestResourceAsyncGet(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [0])
 
-    def test_get_n_takes_n_immediately(self):
+    def test4_get_n_takes_n_immediately(self):
         r = self._make(amount=5)
         results = []
 
@@ -311,7 +311,7 @@ class TestResourceAsyncGet(unittest.TestCase):
         self.assertEqual(results, [4])
         self.assertEqual(r.amount, 1)
 
-    def test_get_n_blocks_until_enough(self):
+    def test5_get_n_blocks_until_enough(self):
         r = self._make(amount=2)
         results = []
 
@@ -328,7 +328,7 @@ class TestResourceAsyncGet(unittest.TestCase):
         self.sim.run(20)
         self.assertEqual(results, [('got', 4, 5)])
 
-    def test_get_n_timeout(self):
+    def test6_get_n_timeout(self):
         r = self._make(amount=1)
         results = []
 
@@ -353,7 +353,7 @@ class TestResourceGput(unittest.TestCase):
     def _make(self, amount=0, capacity=10):
         return Resource(amount=amount, capacity=capacity, sim=self.sim)
 
-    def test_gput_adds_one_immediately(self):
+    def test1_gput_adds_one_immediately(self):
         r = self._make(amount=5)
         results = []
 
@@ -366,7 +366,7 @@ class TestResourceGput(unittest.TestCase):
         self.assertEqual(results, [1])
         self.assertEqual(r.amount, 6)
 
-    def test_gput_blocks_when_full(self):
+    def test2_gput_blocks_when_full(self):
         r = self._make(amount=10, capacity=10)
         results = []
 
@@ -384,7 +384,7 @@ class TestResourceGput(unittest.TestCase):
         self.assertEqual(results, [('put', 5, 1)])
         self.assertEqual(r.amount, 10)
 
-    def test_gput_timeout(self):
+    def test3_gput_timeout(self):
         r = self._make(amount=10, capacity=10)
         results = []
 
@@ -397,7 +397,7 @@ class TestResourceGput(unittest.TestCase):
         self.assertEqual(results, [0])
         self.assertEqual(r.amount, 10)
 
-    def test_gput_n_adds_n_immediately(self):
+    def test4_gput_n_adds_n_immediately(self):
         r = self._make(amount=3)
         results = []
 
@@ -410,7 +410,7 @@ class TestResourceGput(unittest.TestCase):
         self.assertEqual(results, [4])
         self.assertEqual(r.amount, 7)
 
-    def test_gput_n_blocks_until_space(self):
+    def test5_gput_n_blocks_until_space(self):
         r = self._make(amount=8, capacity=10)
         results = []
 
@@ -428,7 +428,7 @@ class TestResourceGput(unittest.TestCase):
         self.assertEqual(results, [('put', 4, 5)])
         self.assertEqual(r.amount, 10)
 
-    def test_gput_n_timeout(self):
+    def test6_gput_n_timeout(self):
         r = self._make(amount=9, capacity=10)
         results = []
 
@@ -454,7 +454,7 @@ class TestResourceAsyncPut(unittest.TestCase):
     def _make(self, amount=0, capacity=10):
         return Resource(amount=amount, capacity=capacity, sim=self.sim)
 
-    def test_put_adds_one_immediately(self):
+    def test1_put_adds_one_immediately(self):
         r = self._make(amount=5)
         results = []
 
@@ -467,7 +467,7 @@ class TestResourceAsyncPut(unittest.TestCase):
         self.assertEqual(results, [1])
         self.assertEqual(r.amount, 6)
 
-    def test_put_blocks_when_full(self):
+    def test2_put_blocks_when_full(self):
         r = self._make(amount=10, capacity=10)
         results = []
 
@@ -484,7 +484,7 @@ class TestResourceAsyncPut(unittest.TestCase):
         self.sim.run(20)
         self.assertEqual(results, [('put', 5, 1)])
 
-    def test_put_timeout(self):
+    def test3_put_timeout(self):
         r = self._make(amount=10, capacity=10)
         results = []
 
@@ -496,7 +496,7 @@ class TestResourceAsyncPut(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [0])
 
-    def test_put_n_adds_n_immediately(self):
+    def test4_put_n_adds_n_immediately(self):
         r = self._make(amount=3)
         results = []
 
@@ -509,7 +509,7 @@ class TestResourceAsyncPut(unittest.TestCase):
         self.assertEqual(results, [4])
         self.assertEqual(r.amount, 7)
 
-    def test_put_n_blocks_until_space(self):
+    def test5_put_n_blocks_until_space(self):
         r = self._make(amount=8, capacity=10)
         results = []
 
@@ -526,7 +526,7 @@ class TestResourceAsyncPut(unittest.TestCase):
         self.sim.run(20)
         self.assertEqual(results, [('put', 4, 5)])
 
-    def test_put_n_timeout(self):
+    def test6_put_n_timeout(self):
         r = self._make(amount=9, capacity=10)
         results = []
 
@@ -548,7 +548,7 @@ class TestResourceInterplay(unittest.TestCase):
     def setUp(self):
         self.sim = DSSimulation()
 
-    def test_gget_woken_by_gput(self):
+    def test1_gget_woken_by_gput(self):
         r = Resource(amount=0, capacity=10, sim=self.sim)
         log = []
 
@@ -567,7 +567,7 @@ class TestResourceInterplay(unittest.TestCase):
         self.assertEqual(log[0], ('put', 5))
         self.assertEqual(log[1], ('got', 5, 3))
 
-    def test_gput_woken_by_gget(self):
+    def test2_gput_woken_by_gget(self):
         r = Resource(amount=10, capacity=10, sim=self.sim)
         log = []
 
@@ -586,7 +586,7 @@ class TestResourceInterplay(unittest.TestCase):
         self.assertEqual(log[0], ('got', 5))
         self.assertEqual(log[1], ('put', 5, 5))
 
-    def test_get_and_get_n_independent(self):
+    def test3_get_and_get_n_independent(self):
         '''get (1 unit) and get_n (N units) can coexist; each gets only what it asked for.'''
         r = Resource(amount=0, capacity=10, sim=self.sim)
         log = []
@@ -625,12 +625,12 @@ class TestMutex(unittest.TestCase):
     def _make(self):
         return Mutex(sim=self.sim)
 
-    def test_initial_state_unlocked(self):
+    def test1_initial_state_unlocked(self):
         m = self._make()
         self.assertFalse(m.locked())
         self.assertEqual(m.amount, 1)
 
-    def test_lock_and_release(self):
+    def test2_lock_and_release(self):
         m = self._make()
         results = []
 
@@ -647,7 +647,7 @@ class TestMutex(unittest.TestCase):
         self.assertEqual(results[1], ('released', 5))
         self.assertFalse(m.locked())
 
-    def test_second_lock_blocks(self):
+    def test3_second_lock_blocks(self):
         m = self._make()
         log = []
 
@@ -668,7 +668,7 @@ class TestMutex(unittest.TestCase):
         self.assertEqual(log[0], ('first locked', 0))
         self.assertEqual(log[1], ('second locked', 5))
 
-    def test_lock_timeout(self):
+    def test4_lock_timeout(self):
         m = self._make()
         results = []
 
@@ -687,7 +687,7 @@ class TestMutex(unittest.TestCase):
         self.sim.run(20)
         self.assertEqual(results, [0])  # timed out
 
-    def test_release_when_not_locked_is_noop(self):
+    def test5_release_when_not_locked_is_noop(self):
         m = self._make()
         self.assertFalse(m.locked())
         m.release()   # should not raise or change state
@@ -710,7 +710,7 @@ class TestResourceMixin(unittest.TestCase):
     def _make_resource(self, amount=5, capacity=10):
         return Resource(amount=amount, capacity=capacity, sim=self.sim)
 
-    def test_gget_takes_one(self):
+    def test1_gget_takes_one(self):
         r = self._make_resource(amount=3)
         mixin = ResourceMixin()
         results = []
@@ -724,7 +724,7 @@ class TestResourceMixin(unittest.TestCase):
         self.assertEqual(results, [1])
         self.assertEqual(r.amount, 2)
 
-    def test_gget_n_takes_n(self):
+    def test2_gget_n_takes_n(self):
         r = self._make_resource(amount=5)
         mixin = ResourceMixin()
         results = []
@@ -738,7 +738,7 @@ class TestResourceMixin(unittest.TestCase):
         self.assertEqual(results, [3])
         self.assertEqual(r.amount, 2)
 
-    def test_gput_adds_one(self):
+    def test3_gput_adds_one(self):
         r = self._make_resource(amount=5)
         mixin = ResourceMixin()
         results = []
@@ -752,7 +752,7 @@ class TestResourceMixin(unittest.TestCase):
         self.assertEqual(results, [1])
         self.assertEqual(r.amount, 6)
 
-    def test_gput_n_adds_n(self):
+    def test4_gput_n_adds_n(self):
         r = self._make_resource(amount=2)
         mixin = ResourceMixin()
         results = []
@@ -766,19 +766,19 @@ class TestResourceMixin(unittest.TestCase):
         self.assertEqual(results, [4])
         self.assertEqual(r.amount, 6)
 
-    def test_put_nowait_adds_one(self):
+    def test5_put_nowait_adds_one(self):
         r = self._make_resource(amount=5)
         mixin = ResourceMixin()
         mixin.put_nowait(r)
         self.assertEqual(r.amount, 6)
 
-    def test_put_n_nowait_adds_n(self):
+    def test6_put_n_nowait_adds_n(self):
         r = self._make_resource(amount=2)
         mixin = ResourceMixin()
         mixin.put_n_nowait(r, 3)
         self.assertEqual(r.amount, 5)
 
-    def test_async_get(self):
+    def test7_async_get(self):
         r = self._make_resource(amount=3)
         mixin = ResourceMixin()
         results = []
@@ -792,7 +792,7 @@ class TestResourceMixin(unittest.TestCase):
         self.assertEqual(results, [1])
         self.assertEqual(r.amount, 2)
 
-    def test_async_get_n(self):
+    def test8_async_get_n(self):
         r = self._make_resource(amount=5)
         mixin = ResourceMixin()
         results = []
@@ -806,7 +806,7 @@ class TestResourceMixin(unittest.TestCase):
         self.assertEqual(results, [3])
         self.assertEqual(r.amount, 2)
 
-    def test_async_put(self):
+    def test9_async_put(self):
         r = self._make_resource(amount=5)
         mixin = ResourceMixin()
         results = []
@@ -820,7 +820,7 @@ class TestResourceMixin(unittest.TestCase):
         self.assertEqual(results, [1])
         self.assertEqual(r.amount, 6)
 
-    def test_async_put_n(self):
+    def test10_async_put_n(self):
         r = self._make_resource(amount=2)
         mixin = ResourceMixin()
         results = []

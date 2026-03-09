@@ -26,11 +26,11 @@ class TestTimeQueue(unittest.TestCase):
     def _get_len(self):
         return len(self.tq), len(self.tq._queue), len(self.tq._queue)
 
-    def test0_init(self):
+    def test1_init(self):
         ''' Assert initialization behavior '''
         self.assertEqual(self._get_len(), (0, 0, 0))
 
-    def test1_put_get(self):
+    def test2_put_get(self):
         ''' Test adding an event '''
         self.tq.add_element(0.123, 'An element')
         self.assertEqual(self._get_len(), (1, 1, 1))
@@ -44,7 +44,7 @@ class TestTimeQueue(unittest.TestCase):
         time, element = self.tq.get0()
         self.assertEqual((time, element), (float("inf"), (_void_subscriber, None)))
 
-    def test2_insert(self):
+    def test3_insert(self):
         ''' Test inserting an event '''
         self.tq.add_element(10, 'First element')
         self.tq.add_element(5, 'Second element')
@@ -68,7 +68,7 @@ class TestTimeQueue(unittest.TestCase):
         self.assertEqual((time, element), (10, '1st element'))
         self.assertEqual(self._get_len(), (0, 0, 0))
 
-    def test3_insert_infinite_time(self):
+    def test4_insert_infinite_time(self):
         ''' The elements with infinite time are valid elements '''
         self.tq.add_element(float('inf'), 'First element')
         self.tq.add_element(10, 'Second element')
@@ -79,7 +79,7 @@ class TestTimeQueue(unittest.TestCase):
         self.assertEqual((time, element), (float('inf'), 'First element'))
         self.assertEqual(self._get_len(), (0, 0, 0))
 
-    def test4_insert_elements_with_equal_time(self):
+    def test5_insert_elements_with_equal_time(self):
         ''' The elements with the same time shall be inserted in FIFO order '''
         self.tq.add_element(10, '1st element')
         self.tq.add_element(0, '2nd element')
@@ -98,7 +98,7 @@ class TestTimeQueue(unittest.TestCase):
         self.assertEqual((time, element), (10, '1st element'))
         self.assertEqual(self._get_len(), (0, 0, 0))
 
-    def test5_delete_cond(self):
+    def test6_delete_cond(self):
         ''' Assert deleting an event '''
         self.tq.add_element(2, {'a': 1, 'b': 2, 'c': 3})
         self.tq.add_element(1, {'b': 1, 'c': 2, 'd': 3})
@@ -113,7 +113,7 @@ class TestTimeQueue(unittest.TestCase):
         self.tq.delete_cond(lambda e:'b' in e)
         self.assertEqual(len(self.tq), 0)
 
-    def test6_delete_val(self):
+    def test7_delete_val(self):
         ''' Assert deleting an event '''
         self.tq.add_element(2, {'a': 1, 'b': 2, 'c': 3})
         self.tq.add_element(1, {'b': 1, 'c': 2, 'd': 3})
@@ -138,12 +138,12 @@ class TestZeroTimeQueue(unittest.TestCase):
     def setUp(self):
         self.q = ZeroTimeQueue()
 
-    def test0_init(self):
+    def test1_init(self):
         ''' Assert initialization — queue is empty '''
         self.assertEqual(len(self.q), 0)
         self.assertFalse(self.q)
 
-    def test1_append_popleft(self):
+    def test2_append_popleft(self):
         ''' Single item: append then popleft round-trips correctly '''
         self.q.append('a')
         self.assertEqual(len(self.q), 1)
@@ -153,7 +153,7 @@ class TestZeroTimeQueue(unittest.TestCase):
         self.assertEqual(len(self.q), 0)
         self.assertFalse(self.q)
 
-    def test2_fifo_order(self):
+    def test3_fifo_order(self):
         ''' Multiple items are delivered in FIFO order '''
         self.q.append('first')
         self.q.append('second')
@@ -164,7 +164,7 @@ class TestZeroTimeQueue(unittest.TestCase):
         self.assertEqual(self.q.popleft(), 'third')
         self.assertEqual(len(self.q), 0)
 
-    def test3_tuple_elements(self):
+    def test4_tuple_elements(self):
         ''' Stores (consumer, event) tuples as used by the simulator '''
         consumer_a, consumer_b = object(), object()
         self.q.append((consumer_a, 'event1'))
@@ -176,7 +176,7 @@ class TestZeroTimeQueue(unittest.TestCase):
         self.assertIs(c, consumer_b)
         self.assertEqual(e, 'event2')
 
-    def test4_filter_constructor(self):
+    def test5_filter_constructor(self):
         ''' ZeroTimeQueue(generator) filters items — used by cleanup() '''
         consumer_a, consumer_b = object(), object()
         self.q.append((consumer_a, 'ev1'))
