@@ -22,7 +22,7 @@ import inspect
 from dssim.base import EventType, TimeType, DSComponent
 from dssim.pubsub_base import CondType, DSAbortException, AlwaysTrue
 from dssim.process import DSProcess
-from dssim.process import DSSchedulable
+from dssim.simulation import DSSchedulable
 from dssim.components.container import ContainerMixin
 from dssim.components.resource import ResourceMixin
 

@@ -355,26 +355,6 @@ class SimProcessMixin:
                 cm.set_interrupted(e.value)
 
 
-def DSSchedulable(api_func):
-    ''' Decorator for schedulable functions / methods.
-    DSSchedulable converts a function into a generator so it could be scheduled or
-    used in DSProcess initializer.
-    '''
-    def _fcn_in_generator(*args: Any, **kwargs: Any) -> Iterator:
-        if False:
-            yield None  # dummy yield to make this to be generator
-        return api_func(*args, **kwargs)
-    
-    @wraps(api_func)
-    def scheduled_func(*args: Any, **kwargs: Any) -> Iterator:
-        if inspect.isgeneratorfunction(api_func) or inspect.iscoroutinefunction(api_func):
-            extended_gen = api_func(*args, **kwargs)
-        else:
-            extended_gen = _fcn_in_generator(*args, **kwargs)
-        return extended_gen
-    
-    return scheduled_func
-
 
 class DSTimeoutContextError(Exception):
     pass
