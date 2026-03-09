@@ -17,12 +17,12 @@ The file provides basic logic to run the simulation and supported methods.
 '''
 import sys
 import inspect
-from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Optional, overload, TYPE_CHECKING
+from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Optional, TYPE_CHECKING
 from dssim.timequeue import TimeQueue, ZeroTimeQueue
 from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, DSComponentSingleton, ISubscriber, IFuture
-from dssim.pubsub import DSCallback, void_consumer, SimPubsubMixin
+from dssim.pubsub import void_consumer, SimPubsubMixin
 from dssim.future import SimFutureMixin
-from dssim.process import DSProcessType, DSProcess, SimProcessMixin
+from dssim.process import SimProcessMixin
 from dssim.components.container import SimContainerMixin, SimQueueMixin
 from dssim.components.resource import SimResourceMixin
 from dssim.components.state import SimStateMixin
@@ -41,10 +41,28 @@ class _Awaitable:
 SchedulableType = Union[ISubscriber, Generator, Coroutine, Callable]
 
 
+class SimScheduleMixin:
+    ''' Base schedule() for ISubscriber — the minimal schedulable type.
+    SimProcessMixin (when present) overrides schedule() for generators and
+    callables and falls back to super().schedule() which resolves here.
+    '''
+    def schedule(self: "DSSimulation", time: TimeType, schedulable: ISubscriber) -> ISubscriber:
+        ''' Schedules an ISubscriber directly onto the time queue. '''
+        if inspect.iscoroutine(schedulable) or inspect.isgenerator(schedulable):
+            self.schedule_event(time, None, schedulable)
+            return schedulable
+        elif isinstance(schedulable, ISubscriber):
+            self.schedule_event(time, None, schedulable)
+            return schedulable
+        raise ValueError(f'The provided schedulable {schedulable} is not supported.'
+                         'For processes, full-producers and full-consumers, include SimProcessMixin.')
+
+
 class DSSimulation(DSComponentSingleton,
                    SimPubsubMixin,
                    SimFutureMixin,
-                   SimProcessMixin,
+                   SimProcessMixin,   # defined schedule() for generators/coroutines/callables
+                #    SimScheduleMixin,  # base schedule() for plain ISubscriber
                    SimFilterMixin,
                    SimContainerMixin,
                    SimQueueMixin,
@@ -109,31 +127,6 @@ class DSSimulation(DSComponentSingleton,
         if isinstance(time, DSAbsTime):
             return time
         return DSAbsTime(self._simtime + time)
-
-    @overload        
-    def schedule(self, time: TimeType, schedulable: Union[Generator, Coroutine]) -> DSProcess: ...
-
-    @overload        
-    def schedule(self, time: TimeType, schedulable: DSProcessType) -> DSProcessType: ...
-
-    @overload        
-    def schedule(self, time: TimeType, schedulable: Callable) -> DSCallback: ...
-
-    def schedule(self, time: TimeType, schedulable: SchedulableType) -> SchedulableType:
-        ''' Schedules the start of a (new) process. '''
-        if inspect.iscoroutine(schedulable) or inspect.isgenerator(schedulable):
-            process = DSProcess(schedulable, sim=self)
-        elif isinstance(schedulable, ISubscriber):
-            process = schedulable
-        elif callable(schedulable):
-            process = DSCallback(schedulable, sim=self)
-        else:
-            raise ValueError(f'The provided function {schedulable} is probably missing @DSSchedulable decorator')
-        if isinstance(process, DSProcess):
-            process.schedule(time)
-        else:
-            self.schedule_event(time, None, process)
-        return process
 
     def send_object(self, consumer: ISubscriber, event: EventType) -> EventType:
         ''' Send an event object to a consumer. Return value from the consumer. '''

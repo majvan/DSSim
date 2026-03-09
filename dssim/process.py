@@ -17,14 +17,14 @@ This file implements process for simulation + functionality required in
 the applications using processes.
 '''
 from __future__ import annotations
-from typing import Any, Tuple, Union, Optional, Generator, Coroutine, Iterator, TypeVar, TYPE_CHECKING
+from typing import Any, Tuple, Union, Optional, Generator, Coroutine, Iterator, Callable, TypeVar, TYPE_CHECKING
 from types import TracebackType
 from contextlib import contextmanager
 from functools import wraps
 import inspect
-from dssim.base import TimeType, EventType, EventRetType, SignalMixin
+from dssim.base import TimeType, EventType, EventRetType, SignalMixin, ISubscriber
 from dssim.pubsub_base import CondType, AlwaysFalse, AlwaysTrue, DSAbortException, DSTransferableCondition, ConsumerMetadata
-from dssim.pubsub import DSConsumer, TrackEvent, DSProducer
+from dssim.pubsub import DSConsumer, DSCallback, TrackEvent, DSProducer
 from dssim.future import DSFuture
 
 
@@ -257,6 +257,30 @@ class DSProcess(DSFuture, SignalMixin):
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
 class SimProcessMixin:
+    def schedule(self: DSSimulation, time: TimeType, schedulable: 'SchedulableType') -> 'SchedulableType':
+        ''' Schedules generators, coroutines, and callables.
+        Falls back to super().schedule() (SimScheduleMixin) for plain ISubscriber.
+        '''
+        if inspect.iscoroutine(schedulable) or inspect.isgenerator(schedulable):
+            # Already-instantiated generator/coroutine
+            process = DSProcess(schedulable, sim=self)
+            process.schedule(time)
+            return process
+        elif isinstance(schedulable, DSProcess):
+            # DSProcess uses its own schedule() which sets up the _Starter bootstrap
+            schedulable.schedule(time)
+            return schedulable
+        elif isinstance(schedulable, ISubscriber):
+            # Plain ISubscriber — deliver a None event at the scheduled time
+            self.schedule_event(time, None, schedulable)
+            return schedulable
+        elif callable(schedulable):
+            # Plain callable — wrap as a one-shot callback subscriber
+            callback = DSCallback(schedulable, sim=self)
+            self.schedule_event(time, None, callback)
+            return callback
+        raise ValueError(f'The provided schedulable {schedulable} is not supported.')
+
     def process(self: Any, *args: Any, **kwargs: Any) -> DSProcess:
         sim: DSSimulation = kwargs.pop('sim', self)
         if sim is not self:
