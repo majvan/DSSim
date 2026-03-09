@@ -19,9 +19,9 @@ import sys
 import inspect
 from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Optional, overload, TYPE_CHECKING
 from dssim.timequeue import TimeQueue, ZeroTimeQueue
-from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, DSComponentSingleton, ISubscriber
+from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, DSComponentSingleton, ISubscriber, IFuture
 from dssim.pubsub import DSCallback, void_consumer, SimPubsubMixin
-from dssim.future import DSFuture, SimFutureMixin
+from dssim.future import SimFutureMixin
 from dssim.process import DSProcessType, DSProcess, SimProcessMixin
 from dssim.components.container import SimContainerMixin, SimQueueMixin
 from dssim.components.resource import SimResourceMixin
@@ -38,7 +38,7 @@ class _Awaitable:
         return retval
 
 
-SchedulableType = Union[DSFuture, ISubscriber, Generator, Coroutine, Callable]
+SchedulableType = Union[ISubscriber, Generator, Coroutine, Callable]
 
 
 class DSSimulation(DSComponentSingleton,
@@ -154,13 +154,13 @@ class DSSimulation(DSComponentSingleton,
             self._parent_process = consumer
             retval = consumer.send(event)
         except StopIteration as exc:
-            if isinstance(consumer, DSFuture):
+            if isinstance(consumer, IFuture):
                 retval = consumer.finish(exc.value)
             else:
                 retval = exc.value
             self.cleanup(consumer)
         except ValueError as exc:
-            if isinstance(consumer, DSFuture):
+            if isinstance(consumer, IFuture):
                 retval = consumer.fail(exc)
             global _exiting
             if 'generator already executing' in str(exc) and not _exiting:

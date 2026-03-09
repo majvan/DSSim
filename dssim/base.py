@@ -49,6 +49,15 @@ class ISubscriber(ABC):
     def send(self, event: EventType) -> EventRetType: ...
 
 
+class IFuture(ABC):
+    ''' Minimal interface for future-like objects that can finish or fail. '''
+    @abstractmethod
+    def finish(self, value: EventType) -> EventType: ...
+
+    @abstractmethod
+    def fail(self, exc: Exception) -> Exception: ...
+
+
 if TYPE_CHECKING:
     from dssim.simulation import DSSimulation  # to satisfy static analyzer
 

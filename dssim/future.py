@@ -16,7 +16,7 @@ This file implements future class (see the paradigm in async programming).
 '''
 from typing import Any, Set, Optional, Generator, TYPE_CHECKING
 from contextlib import contextmanager
-from dssim.base import EventType, SignalMixin
+from dssim.base import EventType, SignalMixin, IFuture
 from dssim.pubsub_base import DSAbortException, ConsumerMetadata
 from dssim.pubsub import DSConsumer, DSProducer, TrackEvent
 
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
-class DSFuture(DSConsumer, SignalMixin):
+class DSFuture(DSConsumer, SignalMixin, IFuture):
     ''' Typical future which can be used in the simulations.
     A future can be 'signaled', i.e. finished.
     '''
