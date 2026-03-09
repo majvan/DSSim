@@ -3,6 +3,8 @@
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]:-$0}"; )" &> /dev/null && pwd 2> /dev/null; )";
 export PYTHONPATH="$SCRIPT_DIR/.."
 
+echo "Coro schedule"
+python $SCRIPT_DIR/coro_schedule.py
 echo "Process schedule"
 python $SCRIPT_DIR/process_schedule.py
 echo "Process return value"
