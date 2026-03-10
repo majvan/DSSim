@@ -51,7 +51,7 @@ from collections import deque
 from typing import Any, Iterator, Optional, Generator, TYPE_CHECKING
 
 from dssim.base import NumericType, EventType, EventRetType, ISubscriber, DSComponent
-from dssim.components.container import DSQueue
+from dssim.components.queue import DSQueue
 
 if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
