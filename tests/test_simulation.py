@@ -406,7 +406,7 @@ class TestSimTinyQueueMixin(unittest.TestCase):
 
     def test1_tiny_queue_returns_tiny_queue_instance(self):
         ''' sim.tiny_queue() returns a TinyQueue bound to the sim. '''
-        from dssim.components.tinycontainer import TinyQueue
+        from dssim.components.tinyqueue import TinyQueue
         sim = DSSimulation(layer2=TinyLayer2)
         q = sim.tiny_queue()
         self.assertIsInstance(q, TinyQueue)

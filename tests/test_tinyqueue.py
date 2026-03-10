@@ -16,7 +16,7 @@ Tests for TinyQueue — a minimal queue for TinyLayer2 simulations.
 '''
 import unittest
 from dssim.simulation import DSSimulation, TinyLayer2
-from dssim.components.tinycontainer import TinyQueue
+from dssim.components.tinyqueue import TinyQueue
 
 
 def _make(capacity=float('inf')):
