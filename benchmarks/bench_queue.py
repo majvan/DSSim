@@ -210,7 +210,7 @@ def dssim_cross_notify(n, k, capacity):
 # DSSim TinyQueue  (TinyLayer2)
 # ===========================================================================
 from dssim.simulation import TinyLayer2
-from dssim.components.tinycontainer import TinyQueue
+from dssim.components.tinyqueue import TinyQueue
 
 
 def tiny_free_flow(n):

@@ -181,7 +181,7 @@ def dssim_bounded(n):
 # DSSim TinyQueue (TinyLayer2)
 # ===========================================================================
 from dssim.simulation import TinyLayer2
-from dssim.components.tinycontainer import TinyQueue
+from dssim.components.tinyqueue import TinyQueue
 
 
 def _make_tiny_queue(capacity=float('inf')):
