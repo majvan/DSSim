@@ -16,7 +16,7 @@ Tests for Resource, Mutex, and ResourceMixin components.
 '''
 import unittest
 from dssim import DSSimulation
-from dssim.components.resource import Resource, Mutex, ResourceMixin
+from dssim.components.resource import Resource, PriorityResource, DSResourcePreempted, Mutex, ResourceMixin
 
 
 # ---------------------------------------------------------------------------
@@ -242,6 +242,197 @@ class TestResourceGget(unittest.TestCase):
         self.assertEqual(len(order), 3)
         for _, t in order:
             self.assertEqual(t, 5)
+
+
+# ---------------------------------------------------------------------------
+# PriorityResource waiter ordering
+# ---------------------------------------------------------------------------
+
+class TestPriorityResource(unittest.TestCase):
+
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    def _make(self, amount=0, capacity=float('inf')):
+        return PriorityResource(amount=amount, capacity=capacity, sim=self.sim)
+
+    def test1_gget_serves_higher_priority_first(self):
+        r = self._make(amount=0, capacity=3)
+        order = []
+
+        def consumer(name, prio):
+            result = yield from r.gget(priority=prio)
+            order.append((name, result, self.sim.time))
+
+        def producer():
+            yield from self.sim.gwait(5)
+            r.put_n_nowait(3)
+
+        self.sim.schedule(0, consumer('low', 10))
+        self.sim.schedule(0, consumer('high', 1))
+        self.sim.schedule(0, consumer('mid', 5))
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+
+        self.assertEqual([item[0] for item in order], ['high', 'mid', 'low'])
+        self.assertTrue(all(item[1] == 1 for item in order))
+        self.assertTrue(all(item[2] == 5 for item in order))
+
+    def test2_equal_priority_keeps_fifo(self):
+        r = self._make(amount=0, capacity=2)
+        order = []
+
+        def consumer(name):
+            result = yield from r.gget(priority=3)
+            order.append((name, result, self.sim.time))
+
+        def producer():
+            yield from self.sim.gwait(5)
+            r.put_n_nowait(2)
+
+        self.sim.schedule(0, consumer('c1'))
+        self.sim.schedule(0, consumer('c2'))
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+
+        self.assertEqual([item[0] for item in order], ['c1', 'c2'])
+        self.assertTrue(all(item[1] == 1 for item in order))
+        self.assertTrue(all(item[2] == 5 for item in order))
+
+    def test3_preemptive_interrupts_lower_priority_holder(self):
+        r = self._make(amount=1, capacity=1)
+        log = []
+
+        def low():
+            got = yield from r.gget(priority=5, preempt=True)
+            self.assertEqual(got, 1)
+            log.append(('low_start', self.sim.time))
+            try:
+                yield from self.sim.gwait(10)
+                log.append(('low_no_preempt', self.sim.time))
+                r.put_nowait()
+            except DSResourcePreempted as exc:
+                log.append(('low_preempted', self.sim.time, exc.amount))
+                got2 = yield from r.gget(priority=5, preempt=False)
+                self.assertEqual(got2, 1)
+                log.append(('low_resumed', self.sim.time))
+                yield from self.sim.gwait(2)
+                r.put_nowait()
+                log.append(('low_done', self.sim.time))
+
+        def high():
+            yield from self.sim.gwait(3)
+            got = yield from r.gget(priority=1, preempt=True)
+            self.assertEqual(got, 1)
+            log.append(('high_start', self.sim.time))
+            yield from self.sim.gwait(2)
+            r.put_nowait()
+            log.append(('high_done', self.sim.time))
+
+        self.sim.schedule(0, low())
+        self.sim.schedule(0, high())
+        self.sim.run(20)
+
+        self.assertEqual(log, [
+            ('low_start', 0),
+            ('high_start', 3),
+            ('low_preempted', 3, 1),
+            ('high_done', 5),
+            ('low_resumed', 5),
+            ('low_done', 7),
+        ])
+        self.assertEqual(r.amount, 1)
+
+    def test4_preempt_false_waits_without_interrupt(self):
+        r = self._make(amount=1, capacity=1)
+        log = []
+
+        def low():
+            got = yield from r.gget(priority=5, preempt=True)
+            self.assertEqual(got, 1)
+            log.append(('low_start', self.sim.time))
+            yield from self.sim.gwait(4)
+            r.put_nowait()
+            log.append(('low_done', self.sim.time))
+
+        def high():
+            yield from self.sim.gwait(1)
+            got = yield from r.gget(priority=1, preempt=False)
+            self.assertEqual(got, 1)
+            log.append(('high_start', self.sim.time))
+            r.put_nowait()
+            log.append(('high_done', self.sim.time))
+
+        self.sim.schedule(0, low())
+        self.sim.schedule(0, high())
+        self.sim.run(20)
+
+        self.assertEqual(log, [
+            ('low_start', 0),
+            ('low_done', 4),
+            ('high_start', 4),
+            ('high_done', 4),
+        ])
+        self.assertEqual(r.amount, 1)
+
+    def test5_hold_context_autoreleases_on_normal_exit(self):
+        r = self._make(amount=1, capacity=1)
+        log = []
+
+        def worker():
+            with r.autorelease():
+                got = yield from r.gget(priority=2)
+                self.assertEqual(got, 1)
+                log.append(('start', self.sim.time, r.amount))
+                yield from self.sim.gwait(3)
+                log.append(('end_scope', self.sim.time, r.amount))
+            log.append(('after_scope', self.sim.time, r.amount))
+
+        self.sim.schedule(0, worker())
+        self.sim.run(20)
+        self.assertEqual(log, [
+            ('start', 0, 0),
+            ('end_scope', 3, 0),
+            ('after_scope', 3, 1),
+        ])
+        self.assertEqual(r.amount, 1)
+
+    def test6_hold_context_autorelease_after_preemption(self):
+        r = self._make(amount=1, capacity=1)
+        log = []
+
+        def low():
+            with r.autorelease():
+                got = yield from r.gget(priority=5, preempt=True)
+                self.assertEqual(got, 1)
+                log.append(('low_start', self.sim.time))
+                try:
+                    yield from self.sim.gwait(10)
+                except DSResourcePreempted:
+                    log.append(('low_preempted', self.sim.time))
+            log.append(('low_after_scope', self.sim.time, r.amount))
+
+        def high():
+            yield from self.sim.gwait(3)
+            with r.autorelease():
+                got = yield from r.gget(priority=1, preempt=True)
+                self.assertEqual(got, 1)
+                log.append(('high_start', self.sim.time))
+                yield from self.sim.gwait(2)
+            log.append(('high_after_scope', self.sim.time, r.amount))
+
+        self.sim.schedule(0, low())
+        self.sim.schedule(0, high())
+        self.sim.run(20)
+
+        self.assertEqual(log, [
+            ('low_start', 0),
+            ('high_start', 3),
+            ('low_preempted', 3),
+            ('low_after_scope', 3, 0),
+            ('high_after_scope', 5, 1),
+        ])
+        self.assertEqual(r.amount, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -612,6 +803,52 @@ class TestResourceInterplay(unittest.TestCase):
         self.assertEqual(totals, 4)
         self.assertEqual(r.amount, 0)
 
+    def test4_gget_waits_on_tx_nempty(self):
+        r = Resource(amount=0, capacity=1, sim=self.sim)
+        seen = {}
+
+        def consumer():
+            result = yield from r.gget(timeout=10)
+            seen['result'] = result
+
+        def probe_and_produce():
+            # Let consumer subscribe and block.
+            yield from self.sim.gwait(0)
+            seen['nempty_sub'] = r.tx_nempty.has_subscribers()
+            seen['nfull_sub'] = r.tx_nfull.has_subscribers()
+            r.put_nowait()
+
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, probe_and_produce())
+        self.sim.run(20)
+
+        self.assertTrue(seen.get('nempty_sub', False))
+        self.assertFalse(seen.get('nfull_sub', True))
+        self.assertEqual(seen.get('result'), 1)
+
+    def test5_gput_waits_on_tx_nfull(self):
+        r = Resource(amount=1, capacity=1, sim=self.sim)
+        seen = {}
+
+        def producer():
+            result = yield from r.gput(timeout=10)
+            seen['result'] = result
+
+        def probe_and_consume():
+            # Let producer subscribe and block.
+            yield from self.sim.gwait(0)
+            seen['nempty_sub'] = r.tx_nempty.has_subscribers()
+            seen['nfull_sub'] = r.tx_nfull.has_subscribers()
+            r.get_nowait()
+
+        self.sim.schedule(0, producer())
+        self.sim.schedule(0, probe_and_consume())
+        self.sim.run(20)
+
+        self.assertFalse(seen.get('nempty_sub', True))
+        self.assertTrue(seen.get('nfull_sub', False))
+        self.assertEqual(seen.get('result'), 1)
+
 
 # ---------------------------------------------------------------------------
 # Mutex
@@ -692,6 +929,32 @@ class TestMutex(unittest.TestCase):
         self.assertFalse(m.locked())
         m.release()   # should not raise or change state
         self.assertFalse(m.locked())
+
+    def test6_open_returns_context_wrapper(self):
+        m = self._make()
+        cm = m.open(5)
+        self.assertIsNot(cm, m)
+        self.assertTrue(hasattr(cm, '__aenter__'))
+        self.assertTrue(hasattr(cm, '__aexit__'))
+
+    def test7_async_with_open_acquires_and_releases(self):
+        m = self._make()
+        log = []
+
+        async def worker():
+            async with m.open(10) as event:
+                log.append(('entered', self.sim.time, event, m.locked()))
+                await self.sim.wait(3)
+                log.append(('inside', self.sim.time, m.locked()))
+            log.append(('after', self.sim.time, m.locked()))
+
+        self.sim.schedule(0, worker())
+        self.sim.run(20)
+        self.assertEqual(log, [
+            ('entered', 0, 1, True),
+            ('inside', 3, True),
+            ('after', 3, False),
+        ])
 
 
 # ---------------------------------------------------------------------------
