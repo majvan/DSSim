@@ -16,7 +16,7 @@ Tests for DSQueue and Queue components.
 '''
 import unittest
 from dssim import DSSimulation, Queue
-from dssim.components.queue import DSQueue, DSLifoQueue, DSKeyQueue
+from dssim.base_components import DSQueue, DSLifoQueue, DSKeyQueue
 
 
 # ---------------------------------------------------------------------------
