@@ -35,7 +35,7 @@ class Studio(DSComponent):
             yield from sim.gwait(randint(20, 40))
             print('Speaker finished')
             self.stat['finish'] += 1
-            self.sim.signal(self.moderator, 'finished')
+            self.sim.signal('finished', self.moderator)
         except DSAbortException as e:
             print('No time left')
             self.stat['abort'] += 1

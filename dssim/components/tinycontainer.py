@@ -17,7 +17,7 @@ TinyQueue — a minimal queue for use with TinyLayer2.
 Unlike :class:`Queue`, TinyQueue requires no pubsub layer and no condition
 machinery.  It works purely with two simulation primitives:
 
-  * ``sim.schedule_event_now(event, subscriber)``
+  * ``sim.signal(event, subscriber)``
   * ``yield from sim.gwait()`` — a single unconditional yield
 
 Internal event model
@@ -93,12 +93,12 @@ class TinyQueue(DSComponent, ISubscriber):
         '''Dispatch ``_GET_READY`` / ``_PUT_READY`` to the first waiter.
 
         Called by the simulation event loop when a sentinel scheduled via
-        ``schedule_event_now`` is processed.  Never called directly.
+        ``sim.signal`` is processed.  Never called directly.
 
         Waiters are plain generators already suspended at ``yield from
         sim.gwait()``.  We wake them directly via ``sim.send_object()``
         instead of re-scheduling through the now-queue — this avoids
-        routing the item through ``schedule_event_now(event, consumer)``
+        routing the item through ``sim.signal(event, consumer)``
         where the ``consumer or _parent_process`` fallback could misbehave
         if ``consumer`` (i.e. ``self``) evaluates as falsy.
         '''
@@ -112,10 +112,10 @@ class TinyQueue(DSComponent, ISubscriber):
                 self.sim.send_object(getter, item)
                 # A slot just opened — let a waiting putter through.
                 if was_full and self._putters:
-                    self.sim.schedule_event_now(_PUT_READY, self)
+                    self.sim.signal(_PUT_READY, self)
                 # More items and more getters — chain another wakeup.
                 if self._getters and self._buffer:
-                    self.sim.schedule_event_now(_GET_READY, self)
+                    self.sim.signal(_GET_READY, self)
         elif event is _PUT_READY:
             # A putter is waiting and a slot is available.
             if self._putters and len(self._buffer) < self.capacity:
@@ -126,10 +126,10 @@ class TinyQueue(DSComponent, ISubscriber):
                 self.sim.send_object(putter, item)
                 # Buffer just became non-empty — let a waiting getter through.
                 if was_empty and self._getters:
-                    self.sim.schedule_event_now(_GET_READY, self)
+                    self.sim.signal(_GET_READY, self)
                 # More space and more putters — chain another wakeup.
                 if self._putters and len(self._buffer) < self.capacity:
-                    self.sim.schedule_event_now(_PUT_READY, self)
+                    self.sim.signal(_PUT_READY, self)
         return None
 
     # -----------------------------------------------------------------------
@@ -145,7 +145,7 @@ class TinyQueue(DSComponent, ISubscriber):
             was_empty = len(self._buffer) == 0
             self._buffer.enqueue(item)
             if was_empty and self._getters:
-                self.sim.schedule_event_now(_GET_READY, self)
+                self.sim.signal(_GET_READY, self)
             return item
         return None
 
@@ -158,7 +158,7 @@ class TinyQueue(DSComponent, ISubscriber):
             was_full = len(self._buffer) >= self.capacity
             item = self._buffer.dequeue()
             if was_full and self._putters:
-                self.sim.schedule_event_now(_PUT_READY, self)
+                self.sim.signal(_PUT_READY, self)
             return item
         return None
 
@@ -179,7 +179,7 @@ class TinyQueue(DSComponent, ISubscriber):
             was_empty = len(self._buffer) == 0
             self._buffer.enqueue(item)
             if was_empty and self._getters:
-                self.sim.schedule_event_now(_GET_READY, self)
+                self.sim.signal(_GET_READY, self)
             return item
         # Buffer full — register as a waiter and suspend.
         caller = self.sim._parent_process
@@ -202,7 +202,7 @@ class TinyQueue(DSComponent, ISubscriber):
             was_full = len(self._buffer) >= self.capacity
             item = self._buffer.dequeue()
             if was_full and self._putters:
-                self.sim.schedule_event_now(_PUT_READY, self)
+                self.sim.signal(_PUT_READY, self)
             return item
         # Buffer empty — register as a waiter and suspend.
         caller = self.sim._parent_process
@@ -222,7 +222,7 @@ class TinyQueue(DSComponent, ISubscriber):
         # Must be True regardless of buffer contents — TinyQueue is a simulation
         # component, not a plain container.  Python would otherwise fall back to
         # __len__ and treat an empty queue as falsy, which breaks the
-        # `consumer or self._parent_process` fallback inside schedule_event_now.
+        # `consumer or self._parent_process` fallback inside sim.signal.
         return True
 
     def __iter__(self) -> Iterator:

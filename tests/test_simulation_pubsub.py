@@ -44,8 +44,8 @@ class TestScheduleEventNow(unittest.TestCase):
 
         def burst(event):
             log.append(('burst', sim.time))
-            sim.schedule_event_now('a', sink_cb)
-            sim.schedule_event_now('b', sink_cb)
+            sim.signal('a', sink_cb)
+            sim.signal('b', sink_cb)
             return True
 
         burst_cb = DSCallback(burst, sim=sim)
@@ -61,7 +61,7 @@ class TestScheduleEventNow(unittest.TestCase):
         self.assertEqual(log[5], ('sink',  2, 'b'))
 
     def test2_now_queue_fifo_order(self):
-        ''' Multiple events scheduled via schedule_event_now are consumed in
+        ''' Multiple events scheduled via signal are consumed in
         FIFO order. '''
         sim = DSSimulation()
         received = []
@@ -74,7 +74,7 @@ class TestScheduleEventNow(unittest.TestCase):
 
         def burst(event):
             for i in range(5):
-                sim.schedule_event_now(i, sink_cb)
+                sim.signal(i, sink_cb)
             return True
 
         burst_cb = DSCallback(burst, sim=sim)
@@ -92,8 +92,8 @@ class TestScheduleEventNow(unittest.TestCase):
         sink_cb = DSCallback(sink, sim=sim)
 
         def burst(event):
-            sim.schedule_event_now('x', sink_cb)
-            sim.schedule_event_now('y', sink_cb)
+            sim.signal('x', sink_cb)
+            sim.signal('y', sink_cb)
             return True
 
         burst_cb = DSCallback(burst, sim=sim)

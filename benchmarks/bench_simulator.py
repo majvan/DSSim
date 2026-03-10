@@ -105,7 +105,7 @@ def dssim_raw_now_burst(n):
 
     def burst(sink_cb):
         for _ in range(n):
-            sim.schedule_event_now(None, sink_cb)
+            sim.signal(None, sink_cb)
 
     sink_cb = sink()
     sim.schedule_event(0, None, sink_cb)
@@ -130,7 +130,7 @@ def dssim_raw_now_chain(n):
             yield
             fired += 1
             if fired < n:
-                sim.schedule_event_now(None, chain_cb)
+                sim.signal(None, chain_cb)
 
     chain_cb = chain()
     sim.schedule_event(0, None, chain_cb)
@@ -156,7 +156,7 @@ def dssim_raw_generator_wakeup(n):
 
     def producer():
         for i in range(n):
-            sim.schedule_event_now(i, waiter_ref)
+            sim.signal(i, waiter_ref)
 
     waiter_ref = waiter()
     sim.schedule_event(0, None, waiter_ref)
@@ -210,7 +210,7 @@ def dssim_tiny_now_burst(n):
 
     def burst():
         for _ in range(n):
-            sim.schedule_event_now(None, sink_cb)
+            sim.signal(None, sink_cb)
         yield from sim.gwait()  # suspend after emitting all events
 
     sink_cb = sink()
@@ -234,7 +234,7 @@ def dssim_tiny_now_chain(n):
             yield from sim.gwait()
             fired += 1
             if fired < n:
-                sim.schedule_event_now(None, chain_cb)
+                sim.signal(None, chain_cb)
 
     chain_cb = chain()
     sim.schedule(0, chain_cb)   # prime: advances chain_cb to first gwait
@@ -259,7 +259,7 @@ def dssim_tiny_generator_wakeup(n):
 
     def producer():
         for i in range(n):
-            sim.schedule_event_now(i, waiter_ref)
+            sim.signal(i, waiter_ref)
         yield from sim.gwait()  # suspend after scheduling all events
 
     waiter_ref = waiter()
@@ -313,7 +313,7 @@ def dssim_pubsub_now_burst(n):
 
     def burst(sink_process):
         for _ in range(n):
-            sim.schedule_event_now(None, sink_process)
+            sim.signal(None, sink_process)
         yield from sim.gwait(cond=AlwaysTrue)  # suspend after emitting all events
 
     sink_process = sim.schedule(0, sink())          # prime sink, get DSProcess
@@ -336,7 +336,7 @@ def dssim_pubsub_now_chain(n):
             yield from sim.gwait(cond=AlwaysTrue)
             fired += 1
             if fired < n:
-                sim.schedule_event_now(None, chain_process)
+                sim.signal(None, chain_process)
 
     chain_process = sim.schedule(0, chain())    # prime, get DSProcess
     sim.schedule_event(0, None, chain_process)  # trigger first iteration
@@ -360,7 +360,7 @@ def dssim_pubsub_generator_wakeup(n):
 
     def producer(waiter_process):
         for i in range(n):
-            sim.schedule_event_now(i, waiter_process)
+            sim.signal(i, waiter_process)
         yield from sim.gwait(cond=AlwaysTrue)  # suspend after scheduling all events
 
     waiter_process = sim.schedule(0, waiter())      # prime waiter, get DSProcess

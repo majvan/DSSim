@@ -16,7 +16,7 @@ from dssim import DSProcess, DSSchedulable, DSSimulation, DSFilter as _f
 
 @DSSchedulable
 def pusher(name, where_to_push):
-    sim.signal(where_to_push, f'signal from pusher {name}')
+    sim.signal(f'signal from pusher {name}', where_to_push)
 
 def process_with_no_external_events():
     yield from sim.gwait(1)

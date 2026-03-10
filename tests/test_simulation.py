@@ -144,18 +144,18 @@ class TestSim(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# schedule_event_now and the now_queue — pure mock consumers
+# signal and the now_queue — pure mock consumers
 # ---------------------------------------------------------------------------
 
-class TestScheduleEventNow(unittest.TestCase):
-    ''' Tests for DSSimulation.schedule_event_now() and the now_queue, using
+class TestSignal(unittest.TestCase):
+    ''' Tests for DSSimulation.signal() and the now_queue, using
     plain Mock consumers (no DSCallback / DSProcess). '''
 
     def test1_appends_to_now_queue(self):
-        ''' schedule_event_now appends a (consumer, event) tuple to now_queue. '''
+        ''' signal appends a (consumer, event) tuple to now_queue. '''
         sim = DSSimulation()
         consumer = Mock()
-        sim.schedule_event_now('ev', consumer)
+        sim.signal('ev', consumer)
         self.assertEqual(len(sim.now_queue), 1)
         c, e = sim.now_queue[0]
         self.assertIs(c, consumer)
@@ -166,7 +166,7 @@ class TestScheduleEventNow(unittest.TestCase):
         sim = DSSimulation()
         sentinel = object()
         sim._parent_process = sentinel
-        sim.schedule_event_now('ev')
+        sim.signal('ev')
         c, e = sim.now_queue[0]
         self.assertIs(c, sentinel)
 
@@ -174,8 +174,8 @@ class TestScheduleEventNow(unittest.TestCase):
         ''' restart() resets the now_queue to empty. '''
         sim = DSSimulation()
         consumer = Mock()
-        sim.schedule_event_now('ev1', consumer)
-        sim.schedule_event_now('ev2', consumer)
+        sim.signal('ev1', consumer)
+        sim.signal('ev2', consumer)
         self.assertEqual(len(sim.now_queue), 2)
         sim.restart()
         self.assertEqual(len(sim.now_queue), 0)
@@ -187,9 +187,9 @@ class TestScheduleEventNow(unittest.TestCase):
         ca.meta.cond = Mock()
         cb = Mock()
         cb.meta.cond = Mock()
-        sim.schedule_event_now('ev_a1', ca)
-        sim.schedule_event_now('ev_b',  cb)
-        sim.schedule_event_now('ev_a2', ca)
+        sim.signal('ev_a1', ca)
+        sim.signal('ev_b',  cb)
+        sim.signal('ev_a2', ca)
         self.assertEqual(len(sim.now_queue), 3)
         sim.cleanup(ca)
         self.assertEqual(len(sim.now_queue), 1)
