@@ -6,9 +6,9 @@ Four scenarios
 --------------
 1. timed-callbacks : N events at strictly increasing timestamps dispatched to
                      one generator; stresses schedule_event + time_queue pop/dispatch
-2. now-burst       : one generator emits N zero-time events via schedule_event_now;
+2. now-burst       : one generator emits N zero-time events via signal;
                      a second generator consumes them — stresses now_queue append + drain
-3. now-chain       : a generator reschedules itself via schedule_event_now N times;
+3. now-chain       : a generator reschedules itself via signal N times;
                      stresses zero-time dispatch with dynamic event generation
 4. generator-wakeup: a generator yields N times, woken by N zero-time events from a
                      producer generator; stresses coroutine send path in the loop
@@ -91,7 +91,7 @@ def dssim_raw_timed_callbacks(n):
 
 def dssim_raw_now_burst(n):
     '''
-    One scheduled generator emits N zero-time events via schedule_event_now;
+    One scheduled generator emits N zero-time events via signal;
     a second generator consumes them.  Stresses now_queue append + drain.
     '''
     sim = DSSimulation(layer2=None)
@@ -117,7 +117,7 @@ def dssim_raw_now_burst(n):
 
 def dssim_raw_now_chain(n):
     '''
-    One generator reschedules itself via schedule_event_now until N iterations.
+    One generator reschedules itself via signal until N iterations.
     Stresses zero-time dispatch with dynamic event generation.
     '''
     sim = DSSimulation(layer2=None)
@@ -196,7 +196,7 @@ def dssim_tiny_timed_callbacks(n):
 
 def dssim_tiny_now_burst(n):
     '''
-    One scheduled generator emits N zero-time events via schedule_event_now;
+    One scheduled generator emits N zero-time events via signal;
     a second generator consumes them.  Stresses now_queue append + drain.
     '''
     sim = DSSimulation(layer2=TinyLayer2)
@@ -222,7 +222,7 @@ def dssim_tiny_now_burst(n):
 
 def dssim_tiny_now_chain(n):
     '''
-    One generator reschedules itself via schedule_event_now until N iterations.
+    One generator reschedules itself via signal until N iterations.
     Stresses zero-time dispatch with dynamic event generation.
     '''
     sim = DSSimulation(layer2=TinyLayer2)
@@ -299,7 +299,7 @@ def dssim_pubsub_timed_callbacks(n):
 
 def dssim_pubsub_now_burst(n):
     '''
-    One scheduled process emits N zero-time events via schedule_event_now;
+    One scheduled process emits N zero-time events via signal;
     a second process consumes them.  Stresses now_queue append + drain.
     '''
     sim = DSSimulation(layer2=PubSubLayer2)
@@ -324,7 +324,7 @@ def dssim_pubsub_now_burst(n):
 
 def dssim_pubsub_now_chain(n):
     '''
-    One process reschedules itself via schedule_event_now until N iterations.
+    One process reschedules itself via signal until N iterations.
     Stresses zero-time dispatch with dynamic event generation.
     '''
     sim = DSSimulation(layer2=PubSubLayer2)
