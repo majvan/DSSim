@@ -48,6 +48,8 @@ python $SCRIPT_DIR/visa_check.py
 # The following are benchmark tests which take some time
 echo "Process events"
 python $SCRIPT_DIR/process_events.py
+echo "Process events tiny"
+python $SCRIPT_DIR/process_events_tiny.py
 echo "UART loop"
 python $SCRIPT_DIR/uart_loop.py
 

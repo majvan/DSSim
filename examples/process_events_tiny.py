@@ -12,7 +12,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+'''
+TinyLayer2 adaptation of process_events.py.
+
+Key differences from the PubSubLayer2 version:
+
+* TinyLayer2 has no DSProcess / .signal() / cond-filtered gwait().
+* The locker generator is stored as ``self._locker_gen`` and the attacker
+  signals it via ``sim.signal(code, self._locker_gen)``.
+* Condition filtering is done manually in ``_wait_for_code()``, which loops
+  with a shrinking timeout until the right code arrives or the deadline passes.
+'''
 from dssim import DSComponent, DSSimulation
+from dssim.simulation import TinyLayer2
 from random import randint
 
 
@@ -37,11 +49,12 @@ class MyComponent(DSComponent):
         # Create the locker generator and keep a reference so the attacker
         # can address events directly to it via sim.signal().
         self._locker_gen = self.locker_state_machine()
-        self.sm = self.sim.process(self._locker_gen, name=self.name+'.rx_sm').schedule(0)
+        self.sm = self._locker_gen
+        self.sim.schedule(0, self.sm)
 
     def boot(self):
-        self.sim.process(self.attacker1(), name=self.name+'.attacker1').schedule(0)
-        self.sim.process(self.attacker2(), name=self.name+'.attacker2').schedule(0)
+        self.sim.schedule(0, self.attacker1())
+        self.sim.schedule(0, self.attacker2())
 
     def attacker1(self):
         ''' Attacker provides random numbers to try to break the locker machine '''
@@ -51,7 +64,7 @@ class MyComponent(DSComponent):
 			# target generator does not signal anything back
 			# However the always safe way to do this:
             # self.sim.signal(code, self.sm)
-            self.sim.try_send_object(self.sm, code)  # send directly event "code"
+            self.sim.send_object(self._locker_gen, code)  # send directly event "code"
             self.stat['tries'] += 1
             # 2 ms to generate the code, send it and check the status of unlock
             yield from self.sim.gwait(0.002)
@@ -63,22 +76,43 @@ class MyComponent(DSComponent):
 			# target process does not signal anything back
 			# However the always safe way to do this:
             # self.sim.signal(1, self.sm)
-            self.sim.try_send_object(self.sm, (1, 1))  # send directly event "1"
+            self.sim.send_object(self._locker_gen, (1, 1))  # send directly event "1"
             self.stat['tries'] += 1
             # 500 us to generate the code, send it and check the status of unlock
             yield from self.sim.gwait(0.0005)
 
+    def _wait_for_code(self, timeout, expected):
+        '''Wait up to *timeout* seconds for *expected* to arrive.
+
+        Unlike PubSubLayer2's ``gwait(cond=...)``, TinyLayer2's ``gwait()``
+        accepts one event per yield.  This helper loops with the remaining
+        time budget so that wrong codes are discarded and the deadline is
+        respected across multiple receives.
+
+        Returns ``True`` when the expected code arrives within the deadline,
+        ``False`` on timeout.
+        '''
+        deadline = self.sim._simtime + timeout
+        while True:
+            remaining = deadline - self.sim.time
+            if remaining <= 0:
+                return None
+            rv = yield from self.sim.gwait(remaining)
+            if rv == expected or rv is None:
+                return rv
+
+
     def locker_state_machine(self):
         while True:
             lock_code = randint(0, 100), randint(0, 100)
-            rv = yield from self.sim.gwait(0.01, lock_code)
+            rv = yield from self._wait_for_code(0.01, lock_code)
             if rv is None:
                 self.stat['timeout'] += 1
             else:
                 self.stat['success'] += 1
 
 if __name__ == '__main__':
-    sim = DSSimulation()
+    sim = DSSimulation(layer2=TinyLayer2)
     obj0 = MyComponent(name='obj0', sim=sim)
     obj0.boot()
     print('Running...')
