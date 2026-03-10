@@ -397,5 +397,39 @@ class TestSimWaitMixin(unittest.TestCase):
         self.assertEqual(len(sim.time_queue), 0)
 
 
+# ---------------------------------------------------------------------------
+# SimTinyQueueMixin — factory method available on TinyLayer2 simulations
+# ---------------------------------------------------------------------------
+
+class TestSimTinyQueueMixin(unittest.TestCase):
+    ''' Tests for SimTinyQueueMixin.tiny_queue() factory. '''
+
+    def test1_tiny_queue_returns_tiny_queue_instance(self):
+        ''' sim.tiny_queue() returns a TinyQueue bound to the sim. '''
+        from dssim.components.tinycontainer import TinyQueue
+        sim = DSSimulation(layer2=TinyLayer2)
+        q = sim.tiny_queue()
+        self.assertIsInstance(q, TinyQueue)
+        self.assertIs(q.sim, sim)
+
+    def test2_tiny_queue_passes_capacity(self):
+        ''' Capacity keyword argument is forwarded to TinyQueue. '''
+        sim = DSSimulation(layer2=TinyLayer2)
+        q = sim.tiny_queue(capacity=3)
+        self.assertEqual(q.capacity, 3)
+
+    def test3_tiny_queue_wrong_sim_raises(self):
+        ''' Passing a different sim instance raises ValueError. '''
+        sim1 = DSSimulation(layer2=TinyLayer2)
+        sim2 = DSSimulation(layer2=TinyLayer2)
+        with self.assertRaises(ValueError):
+            sim1.tiny_queue(sim=sim2)
+
+    def test4_tiny_queue_not_available_without_tiny_layer2(self):
+        ''' tiny_queue() is not present on a default (PubSubLayer2) simulation. '''
+        sim = DSSimulation()
+        self.assertFalse(hasattr(sim, 'tiny_queue'))
+
+
 if __name__ == '__main__':
     unittest.main()
