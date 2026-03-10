@@ -38,7 +38,7 @@ class State(DSStatefulComponent):
     def __setitem__(self, key: Any, value: Any) -> bool:
         if (key not in self.state) or self.state[key] != value:
             self.state[key] = value
-            self.sim.schedule_event_now(self.tx_changed, self.tx_changed)
+            self.sim.signal(self.tx_changed, self.tx_changed)
             return True
         return False
 

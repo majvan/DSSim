@@ -43,7 +43,7 @@ class TestTinyQueueSequenceProtocol(unittest.TestCase):
         '''TinyQueue is always truthy — even when its buffer is empty.
 
         Python falls back to __len__ when __bool__ is absent, which would make
-        an empty queue falsy and break schedule_event_now's
+        an empty queue falsy and break signal's
         ``consumer or _parent_process`` fallback.
         '''
         self.assertTrue(bool(self.q))

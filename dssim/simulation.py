@@ -34,7 +34,7 @@ from dssim.cond import SimFilterMixin
 class VoidSubscriber(ISubscriber):
     ''' A void subscriber which should never be called.
 
-    If seen in the debugger, it typically means that the current consumer
+    If seen in the debugger, it typically means that the current subscriber
     does not run within any process.  The singleton instance is used as a
     safe non-null default for _parent_process.
     '''
@@ -125,7 +125,7 @@ class SimScheduleMixin:
             self.schedule_event(time, None, schedulable)
             return schedulable
         raise ValueError(f'The provided schedulable {schedulable} is not supported.'
-                         'For processes, full-producers and full-consumers, include SimProcessMixin.')
+                         'For processes, full-producers and full-subscribers, include SimProcessMixin.')
 
 
 # Minimal layer2: plain-generator / coroutine scheduling with timeout-only
@@ -219,7 +219,7 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
         self.time_queue = TimeQueue()
         self.now_queue = ZeroTimeQueue()
         self.num_events: int = 0
-        # By default, we use fake consumer. It will be rewritten on the first 
+        # By default, we use fake subscriber. It will be rewritten on the first 
         self._parent_process: ISubscriber = void_subscriber
 
     def _compute_time(self, time: TimeType) -> NumericType:
@@ -239,8 +239,8 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
             return time
         return DSAbsTime(self._simtime + time)
 
-    def send_object(self, consumer: ISubscriber, event: EventType) -> EventType:
-        ''' Send an event object to a consumer. Return value from the consumer. '''
+    def send_object(self, subscriber: ISubscriber, event: EventType) -> EventType:
+        ''' Send an event object to a subscriber. Return value from the subscriber. '''
 
         # We want to kick from this process to another process (see below). However, after
         # returning back to this process, we want to renew our process ID back to be used.
@@ -248,24 +248,24 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
         pid = self._parent_process
 
         try:
-            # We want to kick from this process another 'consumer' process. So we will change
+            # We want to kick from this process another 'subscriber' process. So we will change
             # the process ID (we call it self._parent_process). This is needed because if the new
             # created process would schedule a wait cycle for his own, he would like to know his own
             # process ID (see the wait method). That's why we have to set him his PID now.
-            # In other words, the consumer.send() can invoke a context switch
+            # In other words, the subscriber.send() can invoke a context switch
             # without a handler- so this is the context switch handler, currently only
             # changing process ID.
-            self._parent_process = consumer
-            retval = consumer.send(event)
+            self._parent_process = subscriber
+            retval = subscriber.send(event)
         except StopIteration as exc:
-            if isinstance(consumer, IFuture):
-                retval = consumer.finish(exc.value)
+            if isinstance(subscriber, IFuture):
+                retval = subscriber.finish(exc.value)
             else:
                 retval = exc.value
-            self.cleanup(consumer)
+            self.cleanup(subscriber)
         except ValueError as exc:
-            if isinstance(consumer, IFuture):
-                retval = consumer.fail(exc)
+            if isinstance(subscriber, IFuture):
+                retval = subscriber.fail(exc)
             global _exiting
             if 'generator already executing' in str(exc) and not _exiting:
                 _exiting = True
@@ -275,24 +275,17 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
             self._parent_process = pid
         return retval
 
-    def signal(self, process: ISubscriber, event: EventType, time: TimeType = 0) -> EventType:
+    def schedule_event(self, time: TimeType, event: EventType, subscriber: Optional[ISubscriber] = None) -> EventType:
         ''' Schedules an event object into timequeue. Finally the target process will be signalled. '''
         time = self._compute_time(time)
-        consumer = process if process is not None else self._parent_process  # schedule to a process or to itself
-        self.time_queue.add_element(time, (consumer, event))
+        subscriber = subscriber or self._parent_process  # schedule to a process or to itself
+        self.time_queue.add_element(time, (subscriber, event))
         return event
 
-    def schedule_event(self, time: TimeType, event: EventType, consumer: Optional[ISubscriber] = None) -> EventType:
-        ''' Schedules an event object into timequeue. Finally the target process will be signalled. '''
-        time = self._compute_time(time)
-        consumer = consumer or self._parent_process  # schedule to a process or to itself
-        self.time_queue.add_element(time, (consumer, event))
-        return event
-
-    def schedule_event_now(self, event: EventType, consumer: Optional[ISubscriber] = None) -> SchedulableType:
-        ''' Schedules an event object onto a special queue for fast processing. '''
-        consumer = consumer or self._parent_process  # schedule to a process or to itself
-        self.now_queue.append((consumer, event))
+    def signal(self, event: EventType, subscriber: Optional[ISubscriber] = None) -> None:
+        ''' Schedules an event object onto the now-queue for zero-time dispatch. '''
+        subscriber = subscriber or self._parent_process  # schedule to a process or to itself
+        self.now_queue.append((subscriber, event))
 
     def _gwait_for_event(self, timeout: TimeType, val: EventRetType = None) -> Generator[EventType, EventType, EventType]:
         # Re-compute abs/relative time to abs for the timeout
@@ -346,23 +339,23 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
                 self.time_queue.delete_val((self._parent_process, None))
         return event
 
-    def cleanup(self, consumer: ISubscriber = None) -> None:
-        consumer = consumer or self.pid
-        # The consumer has finished.
+    def cleanup(self, subscriber: ISubscriber = None) -> None:
+        subscriber = subscriber or self.pid
+        # The subscriber has finished.
         # We make a cleanup of a waitable condition. There is still waitable condition kept
-        # for the consumer. Since the process has finished, it will never need it, however
+        # for the subscriber. Since the process has finished, it will never need it, however
         # there may be events for the process planned.
-        # Reset the condition if the consumer supports it
-        if hasattr(consumer, 'reset_cond'):
-            consumer.reset_cond()
-        # Remove all the events for this consumer
-        self.now_queue = ZeroTimeQueue(item for item in self.now_queue if item[0] is not consumer)
-        self.time_queue.delete_cond(lambda e: e[0] is consumer)
+        # Reset the condition if the subscriber supports it
+        if hasattr(subscriber, 'reset_cond'):
+            subscriber.reset_cond()
+        # Remove all the events for this subscriber
+        self.now_queue = ZeroTimeQueue(item for item in self.now_queue if item[0] is not subscriber)
+        self.time_queue.delete_cond(lambda e: e[0] is subscriber)
 
-    def _try_send_object(self, subscriber: ISubscriber, event: EventType) -> EventType:
+    def try_send_object(self, subscriber: ISubscriber, event: EventType) -> EventType:
         '''Condition-aware dispatch used by run().
 
-        Unlike DSConsumer.try_send(), this path keeps dispatch ownership in DSSimulation
+        Unlike DSsubscriber.try_send(), this path keeps dispatch ownership in DSSimulation
         and still supports plain ISubscriber implementations that only expose send().
         '''
         if hasattr(subscriber, 'get_cond'):
@@ -391,14 +384,14 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
             self.num_events += 1
             self._simtime = tevent
             self.time_queue.pop()
-            self._try_send_object(subscriber, event_obj)
+            self.try_send_object(subscriber, event_obj)
             while self.now_queue:
                 (subscriber, event_obj) = self.now_queue.popleft()
                 # check for the future as well in the now_queue
                 if event_obj == future:
                     return self.time, self.num_events
                 self.num_events += 1
-                self._try_send_object(subscriber, event_obj)
+                self.try_send_object(subscriber, event_obj)
         else:
             retval_time = self.time
             self._simtime = ftime
@@ -451,7 +444,7 @@ def print_cyclic_signal_exception(exc: Exception) -> None:
             filename = frame.f_code.co_filename
         elif frame.f_code.co_name == 'send_object':
             from_process = frame.f_locals['pid']
-            to_process = frame.f_locals['consumer']
+            to_process = frame.f_locals['subscriber']
             event = frame.f_locals['event']
             d: List = [method, line, filename, from_process, to_process, event, False, False]
             process_stack.append(d)

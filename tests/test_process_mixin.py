@@ -511,7 +511,7 @@ class TestSim(unittest.TestCase):
         sim = DSSimulation()
         process = DSProcess(my_process(sim), sim=sim).schedule(0)
         sim.send_object(process, None)  # go to the waiting
-        sim.schedule_event(4, 'some_event', consumer=process)
+        sim.schedule_event(4, 'some_event', subscriber=process)
         self.assertTrue(len(sim.time_queue) == 3)
         retval = sim.send_object(process, 'value')
         self.assertTrue(retval is None)

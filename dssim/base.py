@@ -110,11 +110,11 @@ class SignalMixin:
 
     def signal(self: Any, event: EventType) -> EventType:
         ''' Signal event. '''
-        return self.sim.signal(self, event)
+        return self.sim.signal(event, self)
 
     def signal_kw(self: Any, **event) -> EventType:
         ''' Signal key-value event type as kwargs. '''
-        return self.sim.signal(self, event)
+        return self.sim.signal(event, self)
 
     def schedule_event(self: Any, time: TimeType, event: EventType) -> EventType:
         ''' Signal event later. '''
