@@ -21,6 +21,7 @@ Consumer: an object which takes signal from producer and then stops
 '''
 from abc import abstractmethod
 from enum import IntEnum
+from bisect import bisect_left, insort
 from typing import List, Dict, Any, Type, Generator, Callable, Tuple, Iterator, TYPE_CHECKING
 from dssim.base import TimeType, DSComponent, DSEvent, EventType, SignalMixin, ISubscriber
 from dssim.pubsub_base import CondType, AlwaysTrue, ConsumerMetadata, StackedCond
@@ -73,7 +74,7 @@ class DSConsumer(DSComponent, ISubscriber):
 
     def try_send(self, event: EventType) -> EventType:
         ''' Send an event to this consumer if its condition is met. Returns False if not accepted. '''
-        conds = self.get_cond()
+        conds = self.meta.cond
         signaled, event = conds.check(event)
         if not signaled:
             return False
@@ -227,34 +228,62 @@ NotifierPriorityItemIter = Tuple[DSConsumer, int]
 class NotifierPriority(NotifierPolicy):
     def __init__(self) -> None:
         self.d: NotifierPriorityItemsType = {}
+        self._sorted_priorities: List[int] = []
+        self._dict_id: int = id(self.d)
+        self.needs_cleanup: bool = False
 
-    def __iter__(self) -> Any: #Iterator[NotifierPriorityItemType]:
-        return iter(list(self._iterate_by_priority()))
+    def __iter__(self) -> Iterator[NotifierPriorityItemIter]:
+        # Freeze priority ordering for this iteration, but snapshot each
+        # priority bucket lazily so callers that break early avoid flattening
+        # all buckets into one list.
+        priorities = tuple(self._get_sorted_priorities())
+        d = self.d
+        for prio in priorities:
+            bucket = d.get(prio)
+            if not bucket:
+                continue
+            for item in list(bucket.items()):
+                yield item
 
-    def _iterate_by_priority(self) -> Iterator[NotifierPriorityItemIter]:
-        for prio in sorted(self.d.keys()):
-            for d in self.d[prio].items():
-                yield d
+    def _get_sorted_priorities(self) -> List[int]:
+        # Defensive invalidation: tests and advanced callers may replace
+        # self.d directly (without inc/dec), so we track dict identity too.
+        if self.needs_cleanup or self._dict_id != id(self.d):
+            self._sorted_priorities = sorted(self.d.keys())
+            self._dict_id = id(self.d)
+        return self._sorted_priorities
 
     def rewind(self) -> None:
         return
 
     def inc(self, key: DSConsumer, priority: int = 0, **kwargs: Any) -> None:
-        priority_dict = self.d[priority] = self.d.get(priority, {})
+        if priority not in self.d:
+            self.d[priority] = {}
+            insort(self._sorted_priorities, priority)
+        priority_dict = self.d[priority]
         priority_dict[key] = priority_dict.get(key, 0) + 1
 
     def dec(self, key: DSConsumer, priority: int = 0, **kwargs: Any) -> None:
-        priority_dict = self.d[priority] = self.d.get(priority, {})
+        priority_dict = self.d.get(priority)
+        if priority_dict is None:
+            self.d[priority] = {}
+            priority_dict = self.d[priority]
         v = priority_dict.get(key, 0) - 1
         if v <= 0:
             priority_dict.pop(key, None)
             if not priority_dict:
                 self.d.pop(priority, None)
+                idx = bisect_left(self._sorted_priorities, priority)
+                if idx < len(self._sorted_priorities) and self._sorted_priorities[idx] == priority:
+                    self._sorted_priorities.pop(idx)
         else:
             priority_dict[key] = v
 
     def cleanup(self) -> None:
-        pass  # dec() already removes zero-count entries inline
+        # Keep sorted-priority cache coherent with current keys when d was
+        # externally replaced and clear deferred cleanup flag.
+        self._get_sorted_priorities()
+        self.needs_cleanup = False
 
 
 class DSProducer(DSConsumer, SignalMixin):
@@ -270,51 +299,75 @@ class DSProducer(DSConsumer, SignalMixin):
         super().__init__(**kwargs)
         self.subs = (notifier(), notifier(), notifier(), notifier())
         self._subscriber_count = 0  # total ref-count across all tiers; kept in sync by add/remove_subscriber
+        self._phase_subscriber_count = [0, 0, 0, 0]
         # A producer takes any event - no conditional
         self.meta.cond.push(AlwaysTrue)
 
     def add_subscriber(self, subscriber: DSConsumer, phase: Phase = Phase.CONSUME, **kwargs: Any) -> None:
         self.subs[phase].inc(subscriber, **kwargs)
         self._subscriber_count += 1
+        self._phase_subscriber_count[phase] += 1
 
     def remove_subscriber(self, subscriber: DSConsumer, phase: Phase = Phase.CONSUME, **kwargs: Any) -> None:
         self.subs[phase].dec(subscriber, **kwargs)
         self._subscriber_count -= 1
+        self._phase_subscriber_count[phase] -= 1
 
     @TrackEvent
     def send(self, event: EventType) -> None:
         ''' Send signal object to the subscribers '''
+        if self._subscriber_count <= 0:
+            return
+
         pre, consume, post_hit, post_miss = self.subs
+        pre_count, consume_count, post_hit_count, post_miss_count = self._phase_subscriber_count
 
         # Emit the signal to all pre-observers
-        for subscriber, refs in pre:
-            if refs:
-                subscriber.try_send(event)
+        if pre_count > 0:
+            for subscriber, refs in pre:
+                if refs:
+                    subscriber.try_send(event)
 
         # Emit the signal to all consumers and stop with the first one
         # which accepted the signal
-        for consumer, refs in consume:
-            if refs and consumer.try_send(event):
-                # The event was consumed.
-                consume.rewind()  # this will rewind for round robin
-                # Notify all the post-observers about consumed event.
+        consumed = False
+        accepted_consumer = None
+        if consume_count > 0:
+            for consumer, refs in consume:
+                if refs and consumer.try_send(event):
+                    consumed = True
+                    accepted_consumer = consumer
+                    # The event was consumed.
+                    consume.rewind()  # this will rewind for round robin
+                    break
+        if consumed:
+            # Notify all the post-observers about consumed event.
+            if post_hit_count > 0:
+                hit_payload = {'consumer': accepted_consumer, 'event': event}
                 for subscriber, prefs in post_hit:
                     # The post-observers will receive a dict with two objects
                     if prefs:
-                        subscriber.try_send({'consumer': consumer, 'event': event})
-                break
+                        subscriber.try_send(hit_payload)
         else:
             # Emit the missed signal to all post-observers
-            for subscriber, refs in post_miss:
-                if refs:
-                    subscriber.try_send(event)
+            if post_miss_count > 0:
+                for subscriber, refs in post_miss:
+                    if refs:
+                        subscriber.try_send(event)
 
         # cleanup- remove items with zero references
         # We do not cleanup in remove_subscriber, because remove_subscriber could
         # be called from the notify(...) and that could produce an error
-        for queue in self.subs:
-            if queue.needs_cleanup:
-                queue.cleanup()
+        # Pre-check all for faster computation in hot path
+        if pre.needs_cleanup or consume.needs_cleanup or post_hit.needs_cleanup or post_miss.needs_cleanup:
+            if pre.needs_cleanup:
+                pre.cleanup()
+            if consume.needs_cleanup:
+                consume.cleanup()
+            if post_hit.needs_cleanup:
+                post_hit.cleanup()
+            if post_miss.needs_cleanup:
+                post_miss.cleanup()
 
     def has_subscribers(self) -> bool:
         '''Returns True if any subscriber is attached in any tier (pre, consume, post+, post-).
