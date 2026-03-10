@@ -23,7 +23,9 @@ import statistics
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from dssim import DSSimulation, Resource, PriorityResource, Queue, DSResourcePreempted
+from dssim import DSSimulation, TinyLayer2
+from dssim import Resource, PriorityResource, TinyResource, TinyPriorityResource
+from dssim import Queue, DSResourcePreempted
 
 try:
     import simpy
@@ -80,6 +82,25 @@ def dssim_resource_uncontended(n):
     assert done == n, f'resource-uncontended: expected {n}, got {done}'
 
 
+# TinyLayer2 variant of scenario 1
+def dssim_tiny_resource_uncontended(n):
+    sim = DSSimulation(layer2=TinyLayer2)
+    res = TinyResource(amount=1, capacity=1, sim=sim)
+    done = 0
+
+    def worker():
+        nonlocal done
+        for _ in range(n):
+            got = yield from res.gget()
+            assert got == 1
+            res.put_nowait()
+            done += 1
+
+    sim.schedule(0, worker())
+    sim.run()
+    assert done == n, f'tiny resource-uncontended: expected {n}, got {done}'
+
+
 # ---------------------------------------------------------------------------
 # Scenario 2: PriorityResource waiter dispatch
 # ---------------------------------------------------------------------------
@@ -106,6 +127,32 @@ def dssim_priority_dispatch(n, k):
     sim.schedule(0, feeder())
     sim.run()
     assert consumed == per * k, f'priority-dispatch: expected {per*k}, got {consumed}'
+
+
+# TinyLayer2 variant of scenario 2
+def dssim_tiny_priority_dispatch(n, k):
+    sim = DSSimulation(layer2=TinyLayer2)
+    res = TinyPriorityResource(amount=0, capacity=1, sim=sim)
+    per = n // k
+    consumed = 0
+
+    def waiter(priority):
+        nonlocal consumed
+        for _ in range(per):
+            got = yield from res.gget(priority=priority)
+            assert got == 1
+            consumed += 1
+
+    def feeder():
+        for _ in range(per * k):
+            res.put_nowait()
+            yield from sim.gwait(0)
+
+    for i in range(k):
+        sim.schedule(0, waiter(i))
+    sim.schedule(0, feeder())
+    sim.run()
+    assert consumed == per * k, f'tiny priority-dispatch: expected {per*k}, got {consumed}'
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +192,42 @@ def dssim_preemption_delivery(n):
     sim.run()
     assert preempted == n, f'preemption-delivery: expected {n} preemptions, got {preempted}'
     assert high_got == n, f'preemption-delivery: expected {n} high acquires, got {high_got}'
+
+
+def dssim_tiny_preemption_delivery(n):
+    sim = DSSimulation(layer2=TinyLayer2)
+    res = TinyPriorityResource(amount=1, capacity=1, preemptive=True, sim=sim)
+    handoff = sim.tiny_queue(capacity=1)
+
+    preempted = 0
+    high_got = 0
+
+    def low_holder():
+        nonlocal preempted
+        for _ in range(n):
+            with res.autorelease():
+                got = yield from res.gget(priority=10, preempt=True)
+                assert got == 1
+                handoff.put_nowait(1)
+                try:
+                    yield from sim.gwait(float('inf'))
+                except TinyPriorityResource.Preempted:
+                    preempted += 1
+
+    def high_preempter():
+        nonlocal high_got
+        for _ in range(n):
+            yield from handoff.gget()
+            with res.autorelease():
+                got = yield from res.gget(priority=1, preempt=True)
+                assert got == 1
+                high_got += 1
+
+    sim.schedule(0, low_holder())
+    sim.schedule(0, high_preempter())
+    sim.run()
+    assert preempted == n, f'tiny preemption-delivery: expected {n} preemptions, got {preempted}'
+    assert high_got == n, f'tiny preemption-delivery: expected {n} high acquires, got {high_got}'
 
 
 # ---------------------------------------------------------------------------
@@ -235,17 +318,20 @@ if __name__ == '__main__':
 
     print(f'=== Scenario 1: Resource uncontended (N={N_EVENTS:,}) ===')
     report('DSSim Resource', N_EVENTS, *bench(dssim_resource_uncontended, N_EVENTS))
+    report('DSSim TinyResource', N_EVENTS, *bench(dssim_tiny_resource_uncontended, N_EVENTS))
     if _HAS_SIMPY:
         report('SimPy Resource', N_EVENTS, *bench(simpy_resource_uncontended, N_EVENTS))
 
     print(f'\n=== Scenario 2: Priority dispatch (N={N_EVENTS:,}, K={N_WAITERS}) ===')
     n2 = (N_EVENTS // N_WAITERS) * N_WAITERS  # keep divisible
     report('DSSim PriorityResource', n2, *bench(dssim_priority_dispatch, n2, N_WAITERS))
+    report('DSSim TinyPriorityResource', n2, *bench(dssim_tiny_priority_dispatch, n2, N_WAITERS))
     if _HAS_SIMPY:
         report('SimPy PriorityResource', n2, *bench(simpy_priority_dispatch, n2, N_WAITERS))
 
     print(f'\n=== Scenario 3: Preemption delivery (N={N_EVENTS:,}) ===')
     report('DSSim Preemption', N_EVENTS, *bench(dssim_preemption_delivery, N_EVENTS))
+    report('DSSim TinyPreemption', N_EVENTS, *bench(dssim_tiny_preemption_delivery, N_EVENTS))
     if _HAS_SIMPY:
         report('SimPy PreemptiveResource', N_EVENTS, *bench(simpy_preemption_delivery, N_EVENTS))
 
