@@ -69,7 +69,7 @@ def report(label, n, min_t, mean_t, stdev_t, total_t):
 # DSSim
 # ===========================================================================
 from dssim import DSSimulation, Queue
-from dssim.components.container import DSKeyQueue
+from dssim.components.queue import DSKeyQueue
 
 
 def _make_queue(sim=None, capacity=float('inf')):

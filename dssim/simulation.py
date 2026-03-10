@@ -24,7 +24,8 @@ from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType
 from dssim.pubsub import SimPubsubMixin
 from dssim.future import SimFutureMixin
 from dssim.process import SimProcessMixin
-from dssim.components.container import SimContainerMixin, SimQueueMixin
+from dssim.components.container import SimContainerMixin
+from dssim.components.queue import SimQueueMixin
 from dssim.components.tinycontainer import SimTinyQueueMixin
 from dssim.components.resource import SimResourceMixin
 from dssim.components.state import SimStateMixin
