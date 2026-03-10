@@ -26,5 +26,5 @@ from dssim.cond import DSFilter
 from dssim.processcomponent import DSProcessComponent, PCGenerator
 from dssim.simulation import DSSimulation
 
-from dssim.components import DSQueue, DSLifoQueue, DSKeyQueue, Queue, Resource, PriorityResource, DSResourcePreempted, Mutex, State
+from dssim.components import DSQueue, DSLifoQueue, DSKeyQueue, Queue, TinyResource, TinyPriorityResource, Resource, PriorityResource, DSResourcePreempted, Mutex, State
 from dssim.components import Timer, Delay, Limiter

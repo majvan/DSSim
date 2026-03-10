@@ -27,6 +27,7 @@ from dssim.process import SimProcessMixin
 from dssim.components.container import SimContainerMixin
 from dssim.components.queue import SimQueueMixin
 from dssim.components.tinyqueue import SimTinyQueueMixin
+from dssim.components.tinyresource import SimTinyResourceMixin
 from dssim.components.resource import SimResourceMixin
 from dssim.components.state import SimStateMixin
 from dssim.cond import SimFilterMixin
@@ -135,6 +136,7 @@ TinyLayer2 = (
     SimWaitMixin,
     SimScheduleMixin,
     SimTinyQueueMixin,
+    SimTinyResourceMixin,
 )
 
 # Default layer2 mixins — loaded when layer2 is not explicitly overridden.

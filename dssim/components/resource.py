@@ -1,4 +1,3 @@
-# Copyright 2021-2022 NXP Semiconductors
 # Copyright 2021- majvan (majvan@gmail.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,10 +27,12 @@ if TYPE_CHECKING:
 
 
 class Resource(DSStatefulComponent):
-    ''' The Resource models a container of virtual resource(s).
-    By virtual, it means that the components holds only the amount of the resources,
-    not individual objects. The amount can be divisable to any extent, it is represented
-    by float type.
+    '''Resource models a pool of virtual resource amount.
+
+    * ``get`` consumes amount from the pool.
+    * ``put`` adds amount to the pool.
+
+    Unlike TinyResource, wakeups are pubsub-driven via ``tx_nempty``/``tx_nfull``.
     '''
     def __init__(
         self,
@@ -54,6 +55,10 @@ class Resource(DSStatefulComponent):
         self.tx_nempty = nempty_ep if nempty_ep is not None else self.sim.producer(name=self.name + '.tx_nempty')
         self.tx_nfull = nfull_ep if nfull_ep is not None else self.sim.producer(name=self.name + '.tx_nfull')
 
+    # ------------------------------------------------------------------
+    # Internal notification hooks
+    # ------------------------------------------------------------------
+
     def _fire_nempty(self) -> None:
         if self.tx_nempty.has_subscribers():
             self.sim.signal(self.tx_nempty, self.tx_nempty)
@@ -66,6 +71,10 @@ class Resource(DSStatefulComponent):
         if self.tx_changed.has_subscribers():
             self.sim.signal(self.tx_changed, self.tx_changed)
 
+    # ------------------------------------------------------------------
+    # Nowait operations
+    # ------------------------------------------------------------------
+
     def put_nowait(self) -> NumericType:
         ''' Put 1 unit into the resource pool immediately. '''
         return self.put_n_nowait(1)
@@ -73,40 +82,6 @@ class Resource(DSStatefulComponent):
     def put_n_nowait(self, amount: NumericType) -> NumericType:
         ''' Put amount units into the resource pool immediately. '''
         if self.amount + amount > self.capacity:
-            retval: NumericType = 0
-        else:
-            self.amount += amount
-            self._fire_nempty()
-            self._fire_changed()
-            retval = amount
-        return retval
-
-    async def put(self, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
-        ''' Put 1 unit into the resource pool, waiting if at capacity. '''
-        return await self.put_n(timeout, 1, **policy_params)
-
-    async def put_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
-        ''' Put amount units into the resource pool, waiting if at capacity. '''
-        with self.sim.consume(self.tx_nfull, **policy_params):
-            obj = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
-        if obj is None:
-            retval: NumericType = 0
-        else:
-            self.amount += amount
-            self._fire_nempty()
-            self._fire_changed()
-            retval = amount
-        return retval
-
-    def gput(self, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
-        ''' Put 1 unit into the resource pool (generator version), waiting if at capacity. '''
-        return (yield from self.gput_n(timeout, 1, **policy_params))
-
-    def gput_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
-        ''' Put amount units into the resource pool (generator version), waiting if at capacity. '''
-        with self.sim.consume(self.tx_nfull, **policy_params):
-            obj = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
-        if obj is None:
             retval: NumericType = 0
         else:
             self.amount += amount
@@ -130,19 +105,23 @@ class Resource(DSStatefulComponent):
             retval = amount
         return retval
 
-    async def get(self, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
-        ''' Get 1 unit from the resource pool, waiting if not available. '''
-        return await self.get_n(timeout, 1, **policy_params)
+    # ------------------------------------------------------------------
+    # Blocking generator operations
+    # ------------------------------------------------------------------
 
-    async def get_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
-        ''' Get amount units from the resource pool, waiting if not available. '''
-        with self.sim.consume(self.tx_nempty, **policy_params):
-            obj = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount >= amount)
+    def gput(self, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        ''' Put 1 unit into the resource pool (generator version), waiting if at capacity. '''
+        return (yield from self.gput_n(timeout, 1, **policy_params))
+
+    def gput_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        ''' Put amount units into the resource pool (generator version), waiting if at capacity. '''
+        with self.sim.consume(self.tx_nfull, **policy_params):
+            obj = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
         if obj is None:
             retval: NumericType = 0
         else:
-            self.amount -= amount
-            self._fire_nfull()
+            self.amount += amount
+            self._fire_nempty()
             self._fire_changed()
             retval = amount
         return retval
@@ -164,14 +143,53 @@ class Resource(DSStatefulComponent):
             retval = amount
         return retval
 
+    # ------------------------------------------------------------------
+    # Blocking async operations
+    # ------------------------------------------------------------------
+
+    async def put(self, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+        ''' Put 1 unit into the resource pool, waiting if at capacity. '''
+        return await self.put_n(timeout, 1, **policy_params)
+
+    async def put_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
+        ''' Put amount units into the resource pool, waiting if at capacity. '''
+        with self.sim.consume(self.tx_nfull, **policy_params):
+            obj = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
+        if obj is None:
+            retval: NumericType = 0
+        else:
+            self.amount += amount
+            self._fire_nempty()
+            self._fire_changed()
+            retval = amount
+        return retval
+
+    async def get(self, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+        ''' Get 1 unit from the resource pool, waiting if not available. '''
+        return await self.get_n(timeout, 1, **policy_params)
+
+    async def get_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
+        ''' Get amount units from the resource pool, waiting if not available. '''
+        with self.sim.consume(self.tx_nempty, **policy_params):
+            obj = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount >= amount)
+        if obj is None:
+            retval: NumericType = 0
+        else:
+            self.amount -= amount
+            self._fire_nfull()
+            self._fire_changed()
+            retval = amount
+        return retval
+
 
 class PriorityResource(Resource):
-    '''A Resource variant with priority-ordered waiter wakeup policy.
+    '''Resource variant with priority-ordered waiter wakeups.
 
-    It mirrors SimPy's ``PriorityResource`` waiter ordering (lower numeric
-    priority is served first). The resource accounting model is unchanged:
-    ``get()`` acquires capacity and ``put()`` releases it.
+    Lower numeric priority value is served first. Same priority keeps notifier
+    policy order. With ``preempt=True``, higher priority requesters may reclaim
+    units from lower-priority holders.
     '''
+
     def __init__(
         self,
         amount: NumericType = 0,
@@ -236,6 +254,10 @@ class PriorityResource(Resource):
             acquired_in_scope = held_now - self._held_before
             if acquired_in_scope > 0:
                 self.resource.put_n_nowait(acquired_in_scope)
+
+    # ------------------------------------------------------------------
+    # Holder / preemption bookkeeping
+    # ------------------------------------------------------------------
 
     def _held_amount(self, owner: Any) -> NumericType:
         state = self._holders_by_owner.get(owner)
@@ -340,6 +362,10 @@ class PriorityResource(Resource):
             self._reclaimed.pop(owner, None)
         return amount - consumed
 
+    # ------------------------------------------------------------------
+    # Nowait operations
+    # ------------------------------------------------------------------
+
     def get_nowait(self, priority: int = 0) -> NumericType:
         return self.get_n_nowait(1, priority=priority)
 
@@ -349,7 +375,7 @@ class PriorityResource(Resource):
             self._remember_acquire(self.sim.pid, retval, priority)
         return retval
 
-    def put_n_nowait(self, amount: NumericType) -> NumericType:
+    def put_n_nowait(self, amount: NumericType = 1) -> NumericType:
         owner = self.sim.pid
         accepted = 0
         remaining = amount
@@ -370,15 +396,32 @@ class PriorityResource(Resource):
         # Then absorb stale release attempts for already-preempted allocations.
         before = remaining
         remaining = self._consume_reclaimed_release(owner, remaining)
-        consumed_reclaimed = before - remaining
-        accepted += consumed_reclaimed
+        accepted += before - remaining
         if remaining <= 0:
             return accepted
 
         # Finally allow explicit external top-up behavior of Resource.
-        extra = super().put_n_nowait(remaining)
-        accepted += extra
+        accepted += super().put_n_nowait(remaining)
         return accepted
+
+    # ------------------------------------------------------------------
+    # Blocking generator operations
+    # ------------------------------------------------------------------
+
+    def gget_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        priority = policy_params.get('priority', 0)
+        preempt = policy_params.get('preempt', self.preemptive)
+        owner = self.sim.pid
+        if preempt and self.amount < amount:
+            self._reclaim_from_victims(amount - self.amount, owner, priority)
+        retval = yield from super().gget_n(timeout=timeout, amount=amount, **policy_params)
+        if retval > 0:
+            self._remember_acquire(owner, retval, priority)
+        return retval
+
+    # ------------------------------------------------------------------
+    # Blocking async operations
+    # ------------------------------------------------------------------
 
     async def get_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
         priority = policy_params.get('priority', 0)
@@ -391,16 +434,9 @@ class PriorityResource(Resource):
             self._remember_acquire(owner, retval, priority)
         return retval
 
-    def gget_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
-        priority = policy_params.get('priority', 0)
-        preempt = policy_params.get('preempt', self.preemptive)
-        owner = self.sim.pid
-        if preempt and self.amount < amount:
-            self._reclaim_from_victims(amount - self.amount, owner, priority)
-        retval = yield from super().gget_n(timeout=timeout, amount=amount, **policy_params)
-        if retval > 0:
-            self._remember_acquire(owner, retval, priority)
-        return retval
+    # ------------------------------------------------------------------
+    # Context helpers
+    # ------------------------------------------------------------------
 
     def autorelease(self) -> "_HoldContext":
         '''Context manager that auto-releases acquisitions done in this scope.

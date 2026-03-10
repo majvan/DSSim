@@ -1,0 +1,579 @@
+# Copyright 2026- majvan (majvan@gmail.com)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+'''
+TinyResource / TinyPriorityResource for TinyLayer2.
+
+These components avoid pubsub/conditions and rely only on TinyLayer2 primitives:
+  - sim.signal(event, subscriber)
+  - yield from sim.gwait(...)
+  - await sim.wait(...)
+'''
+from __future__ import annotations
+
+from collections import deque
+from typing import Any, Deque, Dict, Generator, List, Optional, TYPE_CHECKING
+
+from dssim.base import DSComponent, NumericType, EventType, EventRetType, ISubscriber, TimeType
+
+
+if TYPE_CHECKING:
+    from dssim.simulation import DSSimulation
+
+
+_DISPATCH = object()
+
+
+class _Waiter:
+    __slots__ = ('subscriber', 'amount', 'done')
+
+    def __init__(self, subscriber: ISubscriber, amount: NumericType) -> None:
+        self.subscriber = subscriber
+        self.amount = amount
+        self.done = False
+
+
+class _PriorityWaiter(_Waiter):
+    __slots__ = ('priority', 'seq')
+
+    def __init__(self, subscriber: ISubscriber, amount: NumericType, priority: int, seq: int) -> None:
+        super().__init__(subscriber, amount)
+        self.priority = priority
+        self.seq = seq
+
+
+class _WaitTimeout:
+    __slots__ = ('waiter',)
+
+    def __init__(self, waiter: _Waiter) -> None:
+        self.waiter = waiter
+
+
+class TinyResource(DSComponent, ISubscriber):
+    '''Minimal resource for TinyLayer2 simulations.
+
+    * ``get`` consumes amount from the pool.
+    * ``put`` adds amount to the pool.
+    * blocked getters/putters are resumed directly via sim.send_object().
+    '''
+
+    def __init__(self, amount: NumericType = 0, capacity: NumericType = float('inf'),
+                 *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        if amount > capacity:
+            raise ValueError('Initial amount of the resource is greater than capacity.')
+        self.amount = amount
+        self.capacity = capacity
+        self._getters: Deque[_Waiter] = deque()
+        self._putters: Deque[_Waiter] = deque()
+        self._dispatch_scheduled = False
+
+    # ------------------------------------------------------------------
+    # Internal queue policy hooks (TinyPriorityResource overrides getter policy)
+    # ------------------------------------------------------------------
+
+    def _enqueue_getter(self, waiter: _Waiter, **policy_params: Any) -> None:
+        self._getters.append(waiter)
+
+    def _peek_getter(self) -> Optional[_Waiter]:
+        return self._getters[0] if self._getters else None
+
+    def _pop_getter(self) -> Optional[_Waiter]:
+        return self._getters.popleft() if self._getters else None
+
+    def _remove_getter(self, waiter: _Waiter) -> bool:
+        try:
+            self._getters.remove(waiter)
+            return True
+        except ValueError:
+            return False
+
+    def _enqueue_putter(self, waiter: _Waiter) -> None:
+        self._putters.append(waiter)
+
+    def _peek_putter(self) -> Optional[_Waiter]:
+        return self._putters[0] if self._putters else None
+
+    def _pop_putter(self) -> Optional[_Waiter]:
+        return self._putters.popleft() if self._putters else None
+
+    def _remove_putter(self, waiter: _Waiter) -> bool:
+        try:
+            self._putters.remove(waiter)
+            return True
+        except ValueError:
+            return False
+
+    # ------------------------------------------------------------------
+    # Internal dispatch
+    # ------------------------------------------------------------------
+
+    def _request_dispatch(self) -> None:
+        if not self._dispatch_scheduled:
+            self._dispatch_scheduled = True
+            self.sim.signal(_DISPATCH, self)
+
+    def _dispatch_waiters(self) -> None:
+        while True:
+            progressed = False
+
+            while True:
+                waiter = self._peek_getter()
+                if waiter is None or waiter.amount > self.amount:
+                    break
+                self._pop_getter()
+                if waiter.done:
+                    continue
+                self.amount -= waiter.amount
+                waiter.done = True
+                self.sim.send_object(waiter.subscriber, waiter.amount)
+                progressed = True
+
+            while True:
+                waiter = self._peek_putter()
+                if waiter is None or self.amount + waiter.amount > self.capacity:
+                    break
+                self._pop_putter()
+                if waiter.done:
+                    continue
+                self.amount += waiter.amount
+                waiter.done = True
+                self.sim.send_object(waiter.subscriber, waiter.amount)
+                progressed = True
+
+            if not progressed:
+                break
+
+    def _handle_timeout(self, event: _WaitTimeout) -> None:
+        waiter = event.waiter
+        if waiter.done:
+            return
+        waiter.done = True
+        removed = self._remove_getter(waiter)
+        if not removed:
+            self._remove_putter(waiter)
+        self.sim.send_object(waiter.subscriber, 0)
+
+    # ------------------------------------------------------------------
+    # ISubscriber
+    # ------------------------------------------------------------------
+
+    def send(self, event: EventType) -> EventRetType:
+        if event is _DISPATCH:
+            self._dispatch_scheduled = False
+            self._dispatch_waiters()
+        elif isinstance(event, _WaitTimeout):
+            self._handle_timeout(event)
+        return None
+
+    # ------------------------------------------------------------------
+    # Nowait operations
+    # ------------------------------------------------------------------
+
+    def put_nowait(self) -> NumericType:
+        return self.put_n_nowait(1)
+
+    def put_n_nowait(self, amount: NumericType = 1) -> NumericType:
+        if self.amount + amount > self.capacity:
+            return 0
+        self.amount += amount
+        if self._getters:
+            self._request_dispatch()
+        return amount
+
+    def get_nowait(self, **policy_params: Any) -> NumericType:
+        return self.get_n_nowait(1, **policy_params)
+
+    def get_n_nowait(self, amount: NumericType = 1, **policy_params: Any) -> NumericType:
+        if amount > self.amount:
+            return 0
+        self.amount -= amount
+        if self._putters:
+            self._request_dispatch()
+        return amount
+
+    # ------------------------------------------------------------------
+    # Blocking generator operations
+    # ------------------------------------------------------------------
+
+    def gput(self, timeout: TimeType = float('inf')) -> Generator[EventType, EventType, NumericType]:
+        return (yield from self.gput_n(timeout=timeout, amount=1))
+
+    def gput_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1) -> Generator[EventType, EventType, NumericType]:
+        retval = self.put_n_nowait(amount)
+        if retval > 0:
+            return retval
+        waiter = _Waiter(self.sim._parent_process, amount)
+        self._enqueue_putter(waiter)
+        if timeout != float('inf'):
+            self.sim.schedule_event(timeout, _WaitTimeout(waiter), self)
+        self._request_dispatch()
+        event = yield from self.sim.gwait()
+        return 0 if event is None else event
+
+    def gget(self, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, NumericType]:
+        return (yield from self.gget_n(timeout=timeout, amount=1, **policy_params))
+
+    def gget_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, EventType, NumericType]:
+        retval = self.get_n_nowait(amount, **policy_params)
+        if retval > 0:
+            return retval
+        waiter = _Waiter(self.sim._parent_process, amount)
+        self._enqueue_getter(waiter, **policy_params)
+        if timeout != float('inf'):
+            self.sim.schedule_event(timeout, _WaitTimeout(waiter), self)
+        self._request_dispatch()
+        event = yield from self.sim.gwait()
+        return 0 if event is None else event
+
+    # ------------------------------------------------------------------
+    # Blocking async operations (for coroutine schedulables in TinyLayer2)
+    # ------------------------------------------------------------------
+
+    async def put(self, timeout: TimeType = float('inf')) -> NumericType:
+        return await self.put_n(timeout=timeout, amount=1)
+
+    async def put_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1) -> NumericType:
+        retval = self.put_n_nowait(amount)
+        if retval > 0:
+            return retval
+        waiter = _Waiter(self.sim._parent_process, amount)
+        self._enqueue_putter(waiter)
+        if timeout != float('inf'):
+            self.sim.schedule_event(timeout, _WaitTimeout(waiter), self)
+        self._request_dispatch()
+        event = await self.sim.wait()
+        return 0 if event is None else event
+
+    async def get(self, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+        return await self.get_n(timeout=timeout, amount=1, **policy_params)
+
+    async def get_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
+        retval = self.get_n_nowait(amount, **policy_params)
+        if retval > 0:
+            return retval
+        waiter = _Waiter(self.sim._parent_process, amount)
+        self._enqueue_getter(waiter, **policy_params)
+        if timeout != float('inf'):
+            self.sim.schedule_event(timeout, _WaitTimeout(waiter), self)
+        self._request_dispatch()
+        event = await self.sim.wait()
+        return 0 if event is None else event
+
+
+class TinyPriorityResource(TinyResource):
+    '''TinyResource variant with priority-ordered getter wakeups.
+
+    Lower numeric priority value is served first. Same priority preserves FIFO.
+    '''
+
+    def __init__(self, *args: Any, preemptive: bool = False, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.preemptive = preemptive
+        self._getters: List[_PriorityWaiter] = []
+        self._prio_seq = 0
+        # Dual-index holder state:
+        # - by owner: fast release/update for current process
+        # - by priority buckets: efficient preemption candidate ordering
+        self._holders_by_owner: Dict[Any, Dict[str, Any]] = {}
+        self._holders_by_priority: Dict[int, List[Any]] = {}
+        self._reclaimed: Dict[Any, NumericType] = {}
+
+    class Preempted(Exception):
+        def __init__(self, resource: "TinyPriorityResource", by: Any, owner: Any, priority: int, amount: NumericType) -> None:
+            super().__init__(f'{owner} was preempted on {resource} by {by} (priority={priority}, amount={amount}).')
+            self.resource = resource
+            self.by = by
+            self.owner = owner
+            self.priority = priority
+            self.amount = amount
+
+    class _HoldContext:
+        def __init__(self, resource: "TinyPriorityResource") -> None:
+            self.resource = resource
+            self.owner = None
+            self._held_before: NumericType = 0
+
+        def __enter__(self) -> "TinyPriorityResource._HoldContext":
+            self.owner = self.resource.sim.pid
+            self._held_before = self.resource._held_amount(self.owner)
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+            if self.owner is None:
+                return
+            held_now = self.resource._held_amount(self.owner)
+            acquired_in_scope = held_now - self._held_before
+            if acquired_in_scope > 0:
+                self.resource.put_n_nowait(acquired_in_scope)
+
+    # ------------------------------------------------------------------
+    # Holder / preemption bookkeeping
+    # ------------------------------------------------------------------
+
+    def _held_amount(self, owner: Any) -> NumericType:
+        state = self._holders_by_owner.get(owner)
+        if state is None:
+            return 0
+        return state['amount']
+
+    def _remove_from_bucket(self, owner: Any, priority: int) -> None:
+        bucket = self._holders_by_priority.get(priority)
+        if bucket is None:
+            return
+        try:
+            bucket.remove(owner)
+        except ValueError:
+            return
+        if not bucket:
+            self._holders_by_priority.pop(priority, None)
+
+    def _set_holder_amount(self, owner: Any, amount: NumericType) -> None:
+        state = self._holders_by_owner.get(owner)
+        if state is None:
+            return
+        if amount <= 0:
+            self._remove_from_bucket(owner, state['priority'])
+            self._holders_by_owner.pop(owner, None)
+            return
+        state['amount'] = amount
+
+    def _remember_acquire(self, owner: Any, amount: NumericType, priority: int) -> None:
+        state = self._holders_by_owner.get(owner)
+        if state is None:
+            self._holders_by_owner[owner] = {'amount': amount, 'priority': priority}
+            bucket = self._holders_by_priority.setdefault(priority, [])
+            bucket.append(owner)
+            return
+
+        state['amount'] += amount
+        old_priority = state['priority']
+        new_priority = min(old_priority, priority)
+        if new_priority != old_priority:
+            self._remove_from_bucket(owner, old_priority)
+            state['priority'] = new_priority
+            self._holders_by_priority.setdefault(new_priority, []).append(owner)
+            return
+
+        # Same-priority re-acquire: refresh recency (newest at end).
+        bucket = self._holders_by_priority.setdefault(new_priority, [])
+        try:
+            bucket.remove(owner)
+        except ValueError:
+            pass
+        bucket.append(owner)
+
+    def _reclaim_from_victims(self, need: NumericType, requester: Any, priority: int) -> NumericType:
+        if need <= 0:
+            return 0
+        released = 0
+        # preempt weakest holders first:
+        # larger numeric priority first, and for equal priority newest first.
+        candidates = []
+        for holder_prio in sorted(self._holders_by_priority.keys(), reverse=True):
+            if holder_prio <= priority:
+                continue
+            bucket = self._holders_by_priority[holder_prio]
+            for owner in reversed(bucket):
+                candidates.append((holder_prio, owner))
+
+        for holder_prio, owner in candidates:
+            if need <= 0:
+                break
+            if owner is requester:
+                continue
+            state = self._holders_by_owner.get(owner)
+            if state is None:
+                continue
+            if state['priority'] <= priority:
+                continue
+            held = state['amount']
+            if held <= 0:
+                continue
+            taken = held if held <= need else need
+            self._set_holder_amount(owner, held - taken)
+            self._reclaimed[owner] = self._reclaimed.get(owner, 0) + taken
+            self.amount += taken
+            released += taken
+            need -= taken
+            self.sim.signal(self.Preempted(self, requester, owner, holder_prio, taken), owner)
+
+        if released > 0 and self._getters:
+            self._request_dispatch()
+        return released
+
+    def _consume_reclaimed_release(self, owner: Any, amount: NumericType) -> NumericType:
+        reclaimed = self._reclaimed.get(owner, 0)
+        if reclaimed <= 0:
+            return amount
+        consumed = reclaimed if reclaimed <= amount else amount
+        left = reclaimed - consumed
+        if left > 0:
+            self._reclaimed[owner] = left
+        else:
+            self._reclaimed.pop(owner, None)
+        return amount - consumed
+
+    def _make_priority_waiter(self, amount: NumericType, priority: int = 0) -> _PriorityWaiter:
+        waiter = _PriorityWaiter(self.sim._parent_process, amount, priority, self._prio_seq)
+        self._prio_seq += 1
+        return waiter
+
+    def _enqueue_getter(self, waiter: _Waiter, priority: int = 0, **policy_params: Any) -> None:
+        # Waiters are sorted by (priority asc, sequence asc).
+        pwaiter = waiter if isinstance(waiter, _PriorityWaiter) else _PriorityWaiter(waiter.subscriber, waiter.amount, priority, self._prio_seq)
+        if pwaiter is not waiter:
+            self._prio_seq += 1
+        idx = len(self._getters)
+        key = (pwaiter.priority, pwaiter.seq)
+        for i, current in enumerate(self._getters):
+            if key < (current.priority, current.seq):
+                idx = i
+                break
+        self._getters.insert(idx, pwaiter)
+
+    def _peek_getter(self) -> Optional[_Waiter]:
+        return self._getters[0] if self._getters else None
+
+    def _pop_getter(self) -> Optional[_Waiter]:
+        if not self._getters:
+            return None
+        return self._getters.pop(0)
+
+    def _remove_getter(self, waiter: _Waiter) -> bool:
+        try:
+            self._getters.remove(waiter)
+            return True
+        except ValueError:
+            return False
+
+    # ------------------------------------------------------------------
+    # Nowait operations
+    # ------------------------------------------------------------------
+
+    def get_nowait(self, priority: int = 0, **policy_params: Any) -> NumericType:
+        return self.get_n_nowait(1, priority=priority, **policy_params)
+
+    def get_n_nowait(self, amount: NumericType = 1, priority: int = 0, **policy_params: Any) -> NumericType:
+        retval = super().get_n_nowait(amount, **policy_params)
+        if retval > 0:
+            self._remember_acquire(self.sim.pid, retval, priority)
+        return retval
+
+    def put_n_nowait(self, amount: NumericType = 1) -> NumericType:
+        owner = self.sim.pid
+        accepted = 0
+        remaining = amount
+
+        # First release currently-held amount for this owner.
+        held = self._held_amount(owner)
+        to_release = held if held <= remaining else remaining
+        if to_release > 0:
+            released = super().put_n_nowait(to_release)
+            if released > 0:
+                accepted += released
+                remaining -= released
+                self._set_holder_amount(owner, held - released)
+
+        if remaining <= 0:
+            return accepted
+
+        # Then absorb stale release attempts for already-preempted allocations.
+        before = remaining
+        remaining = self._consume_reclaimed_release(owner, remaining)
+        accepted += before - remaining
+        if remaining <= 0:
+            return accepted
+
+        # Finally allow explicit external top-up behavior of Resource.
+        accepted += super().put_n_nowait(remaining)
+        return accepted
+
+    # ------------------------------------------------------------------
+    # Blocking generator operations
+    # ------------------------------------------------------------------
+
+    def gget_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        priority = policy_params.get('priority', 0)
+        preempt = policy_params.get('preempt', self.preemptive)
+        owner = self.sim.pid
+        if preempt and self.amount < amount:
+            self._reclaim_from_victims(amount - self.amount, owner, priority)
+        retval = self.get_n_nowait(amount, priority=priority)
+        if retval > 0:
+            return retval
+        waiter = self._make_priority_waiter(amount, priority=priority)
+        self._enqueue_getter(waiter, priority=priority)
+        if timeout != float('inf'):
+            self.sim.schedule_event(timeout, _WaitTimeout(waiter), self)
+        self._request_dispatch()
+        event = yield from self.sim.gwait()
+        got = 0 if event is None else event
+        if got > 0:
+            self._remember_acquire(owner, got, priority)
+        return got
+
+    # ------------------------------------------------------------------
+    # Blocking async operations
+    # ------------------------------------------------------------------
+
+    async def get_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
+        priority = policy_params.get('priority', 0)
+        preempt = policy_params.get('preempt', self.preemptive)
+        owner = self.sim.pid
+        if preempt and self.amount < amount:
+            self._reclaim_from_victims(amount - self.amount, owner, priority)
+        retval = self.get_n_nowait(amount, priority=priority)
+        if retval > 0:
+            return retval
+        waiter = self._make_priority_waiter(amount, priority=priority)
+        self._enqueue_getter(waiter, priority=priority)
+        if timeout != float('inf'):
+            self.sim.schedule_event(timeout, _WaitTimeout(waiter), self)
+        self._request_dispatch()
+        event = await self.sim.wait()
+        got = 0 if event is None else event
+        if got > 0:
+            self._remember_acquire(owner, got, priority)
+        return got
+
+    # ------------------------------------------------------------------
+    # Context helpers
+    # ------------------------------------------------------------------
+
+    def autorelease(self) -> "_HoldContext":
+        '''Context manager that auto-releases acquisitions done in this scope.
+
+        Typical usage:
+            with resource.autorelease():
+                got = yield from resource.gget(priority=1, preempt=True)
+                if got:
+                    yield from sim.gwait(5)
+            # released automatically here if still held
+        '''
+        return self._HoldContext(self)
+
+
+# In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
+class SimTinyResourceMixin:
+    def tiny_resource(self: Any, *args: Any, **kwargs: Any) -> TinyResource:
+        sim: 'DSSimulation' = kwargs.pop('sim', self)
+        if sim is not self:
+            raise ValueError('The parameter sim in tiny_resource() method should be set to the same simulation instance.')
+        return TinyResource(*args, **kwargs, sim=sim)
+
+    def tiny_priority_resource(self: Any, *args: Any, **kwargs: Any) -> TinyPriorityResource:
+        sim: 'DSSimulation' = kwargs.pop('sim', self)
+        if sim is not self:
+            raise ValueError('The parameter sim in tiny_priority_resource() method should be set to the same simulation instance.')
+        return TinyPriorityResource(*args, **kwargs, sim=sim)
