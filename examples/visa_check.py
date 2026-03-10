@@ -69,7 +69,10 @@ class VisaCheck(DSComponent):
                 first_person = q[0]['person']
             except Exception as e:
                 pass
-            print(f'{self.sim.time:<5} {self}: Waiting for a person; first one is {first_person}')
+            print(
+                f'{self.sim.time:<5} {self}: Waiting for a person '
+                f'(timeout {self.max_waiting_time}); first one is {first_person}'
+            )
             event = yield from self.queue.gget(cond=lambda e:e['person'].info in self.info, timeout=self.max_waiting_time)
             if event is None:
                 print(f'\033[0;31m{sim.time:<5} {self}: No person in the queue, closing.\033[0m')

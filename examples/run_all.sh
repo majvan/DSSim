@@ -44,7 +44,18 @@ python $SCRIPT_DIR/trajectory.py
 echo "UART physical"
 python $SCRIPT_DIR/uart_physical.py
 echo "VISA check"
-python $SCRIPT_DIR/visa_check.py
+visa_log="$(mktemp)"
+i=1
+while [ "$i" -le 20 ]; do
+    echo "VISA check run $i/20"
+    python "$SCRIPT_DIR/visa_check.py" | tee "$visa_log" | python "$SCRIPT_DIR/visa_check_parser.py" - || {
+        echo "VISA check parser: error found"
+        rm -f "$visa_log"
+        exit 1
+    }
+    i=$((i + 1))
+done
+rm -f "$visa_log"
 # The following are benchmark tests which take some time
 echo "Process events"
 python $SCRIPT_DIR/process_events.py
@@ -97,10 +108,24 @@ python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ reneging\ \(state\).py
 echo "Bank, 3 clerks reneging (store)"
 python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ reneging\ \(store\).py
 echo "Demo wait"
-python $SCRIPT_DIR/parity/Demo\ wait.py
+demo_wait_log="$(mktemp)"
+python "$SCRIPT_DIR/parity/Demo wait.py" | tee "$demo_wait_log" | python "$SCRIPT_DIR/demo_wait_parser.py" - || {
+    echo "Demo wait parser: error found"
+    rm -f "$demo_wait_log"
+    exit 1
+}
 echo "Demo wait (mutex)"
-python $SCRIPT_DIR/parity/Demo\ wait\ \(mutex\).py
+python "$SCRIPT_DIR/parity/Demo wait (mutex).py" | tee "$demo_wait_log" | python "$SCRIPT_DIR/demo_wait_parser.py" - || {
+    echo "Demo wait parser: error found"
+    rm -f "$demo_wait_log"
+    exit 1
+}
 echo "Demo wait (signal)"
-python $SCRIPT_DIR/parity/Demo\ wait\ \(signal\).py
+python "$SCRIPT_DIR/parity/Demo wait (signal).py" | tee "$demo_wait_log" | python "$SCRIPT_DIR/demo_wait_parser.py" - || {
+    echo "Demo wait parser: error found"
+    rm -f "$demo_wait_log"
+    exit 1
+}
+rm -f "$demo_wait_log"
 echo "Elevator"
 python $SCRIPT_DIR/parity/Elevator.py
