@@ -721,10 +721,10 @@ class TestNotifierPriority(unittest.TestCase):
         self.assertFalse(n.needs_cleanup)
         n.dec('a', priority=1), n.inc('b', priority=1)
         self.assertEqual(n.d, {1: {'a': 1, 'b': 2}, 2: {'a': 1}})
-        self.assertFalse(n.needs_cleanup)
+        self.assertFalse(n.needs_cleanup)  # no bucket added/removed
         n.dec('a', priority=1)
         self.assertEqual(n.d, {1: {'b': 2}, 2: {'a': 1}})
-        self.assertFalse(n.needs_cleanup)
+        self.assertFalse(n.needs_cleanup)  # no bucket added/removed
         n.dec('a', priority=2)
         self.assertEqual(n.d, {1: {'b': 2}})
         self.assertFalse(n.needs_cleanup)
@@ -751,7 +751,7 @@ class TestNotifierPriority(unittest.TestCase):
         self.assertFalse(n.needs_cleanup)
         self.assertEqual(n.d, {1: {'a': 2, 'b': 3}, 2: {'a': 1}})
         n.dec('a', priority=1), n.dec('a', priority=1)
-        self.assertFalse(n.needs_cleanup)
+        self.assertFalse(n.needs_cleanup)  # key removed, bucket remains
         self.assertEqual(n.d, {1: {'b': 3}, 2: {'a': 1}})
         n.cleanup()
         self.assertFalse(n.needs_cleanup)
@@ -810,3 +810,20 @@ class TestNotifierPriority(unittest.TestCase):
         it = iter(n)
         n.rewind()
         self.assertEqual(n.d, {2: {'c': 1, 'a': 2, 'b': 4}, 1: {'d': 12, 'e': 14}})
+
+    def test6_cached_sorted_priorities_updates_on_inc_dec(self):
+        n = NotifierPriority()
+        n.inc('a', priority=2)
+        n.inc('b', priority=1)
+        self.assertEqual(list(n), [('b', 1), ('a', 1)])
+        # Remove last key in priority 1 bucket -> key set changes.
+        n.dec('b', priority=1)
+        self.assertEqual(list(n), [('a', 1)])
+
+    def test7_cached_sorted_priorities_updates_on_direct_dict_replace(self):
+        n = NotifierPriority()
+        n.d = {3: {'x': 1}, 1: {'a': 1}}
+        self.assertEqual(list(n), [('a', 1), ('x', 1)])
+        # Replace dict directly with same length but different keys.
+        n.d = {4: {'z': 2}, 2: {'y': 3}}
+        self.assertEqual(list(n), [('y', 3), ('z', 2)])
