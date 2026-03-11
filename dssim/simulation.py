@@ -102,6 +102,13 @@ class SimWaitMixin:
         ''' Wait for up to *timeout* time units.
         Returns the first event delivered to the caller, or None on timeout.
         '''
+        # Fast path for the common TinyLayer2 pattern: unbounded wait.
+        # This avoids timeout bookkeeping and one extra call frame per wakeup.
+        if timeout == float('inf'):
+            event = yield None
+            if isinstance(event, Exception):
+                raise event
+            return event
         retval = yield from self._gwait_for_event(timeout)
         return retval
 
@@ -109,6 +116,13 @@ class SimWaitMixin:
         ''' Async variant of gwait.
         Returns the first event delivered to the caller, or None on timeout.
         '''
+        # Fast path for the common TinyLayer2 pattern: unbounded wait.
+        # This avoids timeout bookkeeping and one extra call frame per wakeup.
+        if timeout == float('inf'):
+            event = await _Awaitable(None)
+            if isinstance(event, Exception):
+                raise event
+            return event
         retval = await self._wait_for_event(timeout)
         return retval
 
