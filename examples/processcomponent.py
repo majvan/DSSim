@@ -11,8 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSSimulation, Queue, DSProcessComponent, PCGenerator
-from dssim.pubsub import DSPub, NotifierPriority
+from dssim import DSSimulation, DSProcessComponent, PCGenerator
+from dssim.pubsub import NotifierPriority
 from random import randint
 
 class Customer(DSProcessComponent):
@@ -49,7 +49,7 @@ class Clerk(DSProcessComponent):
 if __name__ == '__main__':
     sim = DSSimulation()
     # In the following we force the notifying endpoint with a special policy
-    waiting_line = Queue(capacity=5, nempty_ep=DSPub(notifier=NotifierPriority), name='waiting_line')
+    waiting_line = sim.queue(capacity=5, nempty_ep=sim.publisher(notifier=NotifierPriority), name='waiting_line')
     PCGenerator(Customer, lambda last: 7, name='CustomerGenerator')
     stat = {'balked': 0, 'reneged': 0}
     clerks = [Clerk() for i in range(3)]

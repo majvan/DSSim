@@ -14,7 +14,7 @@
 '''
 An example taken from salabim showing a parity with the framework.
 '''
-from dssim import DSSimulation, DSProcessComponent, Resource
+from dssim import DSSimulation, DSProcessComponent
 from random import randint
 
 GAS_STATION_SIZE = 200.0  # liters
@@ -77,8 +77,8 @@ class CarGenerator(DSProcessComponent):
 if __name__ == '__main__':
     # Create environment and start processes
     sim = DSSimulation()
-    gas_station = Resource(2, name="Gas station places", sim=sim)  # 2 places in gas station
-    fuel_pump = Resource(capacity=GAS_STATION_SIZE, name="Gas station fuel", sim=sim)
+    gas_station = sim.resource(2, name="Gas station places")  # 2 places in gas station
+    fuel_pump = sim.resource(capacity=GAS_STATION_SIZE, name="Gas station fuel")
     tank_truck = TankTruck(sim=sim)
     CarGenerator(sim=sim)
 
