@@ -16,8 +16,9 @@ A resource is an object representing a pool of abstract resources with amount fi
 Compared to queue, resource works with non-integer amounts but it does not contain object
 in the pool, just an abstract pool level information (e.g. amount of water in a tank).
 '''
-from typing import Any, Generator, TYPE_CHECKING, Optional, Dict, List
+from typing import Any, Generator, TYPE_CHECKING, Optional
 from dssim.base import NumericType, TimeType, EventType, DSComponentSingleton
+from dssim.base_components import DSResource, DSPriorityResource, DSPriorityPreemption
 from dssim.components.base import DSStatefulComponent
 from dssim.pubsub import DSProducer, NotifierPriority
 from dssim.pubsub_base import ICondition, CallableConditionMixin
@@ -73,10 +74,7 @@ class Resource(DSStatefulComponent):
         Amount is initial amount of the resources.
         '''
         super().__init__(*args, **kwargs)
-        if amount > capacity:
-            raise ValueError('Initial amount of the resource is greater than capacity.')
-        self.amount = amount
-        self.capacity = capacity
+        self._resource = DSResource(amount=amount, capacity=capacity, owner=self)
         self.tx_nempty = nempty_ep if nempty_ep is not None else self.sim.producer(name=self.name + '.tx_nempty')
         self.tx_nfull = nfull_ep if nfull_ep is not None else self.sim.producer(name=self.name + '.tx_nfull')
 
@@ -119,28 +117,22 @@ class Resource(DSStatefulComponent):
 
     def put_n_nowait(self, amount: NumericType) -> NumericType:
         ''' Put amount units into the resource pool immediately. '''
-        if self.amount + amount > self.capacity:
-            retval: NumericType = 0
-        else:
-            self.amount += amount
+        retval = self._resource.put_n_nowait(amount)
+        if retval > 0:
             self._fire_nempty()
             self._fire_changed()
-            retval = amount
         return retval
 
-    def get_nowait(self) -> NumericType:
+    def get_nowait(self, **policy_params: Any) -> NumericType:
         ''' Get 1 unit from the resource pool immediately. '''
-        return self.get_n_nowait(1)
+        return self.get_n_nowait(1, **policy_params)
 
-    def get_n_nowait(self, amount: NumericType = 1) -> NumericType:
+    def get_n_nowait(self, amount: NumericType = 1, **policy_params: Any) -> NumericType:
         ''' Get amount units from the resource pool immediately. '''
-        if amount > self.amount:
-            retval: NumericType = 0
-        else:
-            self.amount -= amount
+        retval = self._resource.get_n_nowait(amount)
+        if retval > 0:
             self._fire_nfull()
             self._fire_changed()
-            retval = amount
         return retval
 
     # ------------------------------------------------------------------
@@ -158,10 +150,10 @@ class Resource(DSStatefulComponent):
         if obj is None:
             retval: NumericType = 0
         else:
-            self.amount += amount
-            self._fire_nempty()
-            self._fire_changed()
-            retval = amount
+            retval = self._resource.put_n_nowait(amount)
+            if retval > 0:
+                self._fire_nempty()
+                self._fire_changed()
         return retval
 
     def gget(self, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
@@ -175,10 +167,10 @@ class Resource(DSStatefulComponent):
         if obj is None:
             retval: NumericType = 0
         else:
-            self.amount -= amount
-            self._fire_nfull()
-            self._fire_changed()
-            retval = amount
+            retval = self._resource.get_n_nowait(amount)
+            if retval > 0:
+                self._fire_nfull()
+                self._fire_changed()
         return retval
 
     # ------------------------------------------------------------------
@@ -196,10 +188,10 @@ class Resource(DSStatefulComponent):
         if obj is None:
             retval: NumericType = 0
         else:
-            self.amount += amount
-            self._fire_nempty()
-            self._fire_changed()
-            retval = amount
+            retval = self._resource.put_n_nowait(amount)
+            if retval > 0:
+                self._fire_nempty()
+                self._fire_changed()
         return retval
 
     async def get(self, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
@@ -213,10 +205,10 @@ class Resource(DSStatefulComponent):
         if obj is None:
             retval: NumericType = 0
         else:
-            self.amount -= amount
-            self._fire_nfull()
-            self._fire_changed()
-            retval = amount
+            retval = self._resource.get_n_nowait(amount)
+            if retval > 0:
+                self._fire_nfull()
+                self._fire_changed()
         return retval
 
 
@@ -258,12 +250,12 @@ class PriorityResource(Resource):
             **kwargs,
         )
         self.preemptive = preemptive
-        # Dual-index holder state:
-        # - by owner: fast release/update for current process
-        # - by priority buckets: efficient preemption candidate ordering
-        self._holders_by_owner: Dict[Any, Dict[str, Any]] = {}
-        self._holders_by_priority: Dict[int, List[Any]] = {}
-        self._reclaimed: Dict[Any, NumericType] = {}
+        self._priority = DSPriorityResource()
+        self._preemption = DSPriorityPreemption(self._priority)
+        # Backward-compatible aliases for existing tests/debug tooling.
+        self._holders_by_owner = self._priority.holders_by_owner
+        self._holders_by_priority = self._priority.holders_by_priority
+        self._reclaimed = self._priority.reclaimed
 
     class Preempted(Exception):
         def __init__(self, resource: "PriorityResource", by: Any, owner: Any, priority: int, amount: NumericType) -> None:
@@ -297,112 +289,44 @@ class PriorityResource(Resource):
     # Holder / preemption bookkeeping
     # ------------------------------------------------------------------
 
+    def _on_reclaimed(self, released: NumericType) -> None:
+        self._fire_nempty()
+        self._fire_changed()
+
     def _held_amount(self, owner: Any) -> NumericType:
-        state = self._holders_by_owner.get(owner)
-        if state is None:
-            return 0
-        return state['amount']
+        return self._priority.held_amount(owner)
 
     def held_amount(self, owner: Any) -> NumericType:
         '''Public introspection helper: amount currently held by *owner*.'''
         return self._held_amount(owner)
 
     def _remove_from_bucket(self, owner: Any, priority: int) -> None:
-        bucket = self._holders_by_priority.get(priority)
-        if bucket is None:
-            return
-        try:
-            bucket.remove(owner)
-        except ValueError:
-            return
-        if not bucket:
-            self._holders_by_priority.pop(priority, None)
+        self._priority.remove_from_bucket(owner, priority)
 
     def _set_holder_amount(self, owner: Any, amount: NumericType) -> None:
-        state = self._holders_by_owner.get(owner)
-        if state is None:
-            return
-        if amount <= 0:
-            self._remove_from_bucket(owner, state['priority'])
-            self._holders_by_owner.pop(owner, None)
-            return
-        state['amount'] = amount
+        self._priority.set_holder_amount(owner, amount)
 
     def _remember_acquire(self, owner: Any, amount: NumericType, priority: int) -> None:
-        state = self._holders_by_owner.get(owner)
-        if state is None:
-            self._holders_by_owner[owner] = {'amount': amount, 'priority': priority}
-            bucket = self._holders_by_priority.setdefault(priority, [])
-            bucket.append(owner)
-            return
-
-        state['amount'] += amount
-        old_priority = state['priority']
-        new_priority = min(old_priority, priority)
-        if new_priority != old_priority:
-            self._remove_from_bucket(owner, old_priority)
-            state['priority'] = new_priority
-            self._holders_by_priority.setdefault(new_priority, []).append(owner)
-            return
-
-        # Same-priority re-acquire: refresh recency (newest at end).
-        bucket = self._holders_by_priority.setdefault(new_priority, [])
-        try:
-            bucket.remove(owner)
-        except ValueError:
-            pass
-        bucket.append(owner)
+        self._priority.remember_acquire(owner, amount, priority)
 
     def _reclaim_from_victims(self, need: NumericType, requester: Any, priority: int) -> NumericType:
-        if need <= 0:
-            return 0
-        released = 0
-        # preempt weakest holders first:
-        # larger numeric priority first, and for equal priority newest first.
-        candidates = []
-        for holder_prio in sorted(self._holders_by_priority.keys(), reverse=True):
-            if holder_prio <= priority:
-                continue
-            bucket = self._holders_by_priority[holder_prio]
-            for owner in reversed(bucket):
-                candidates.append((holder_prio, owner))
-
-        for holder_prio, owner in candidates:
-            if need <= 0:
-                break
-            if owner is requester:
-                continue
-            state = self._holders_by_owner.get(owner)
-            if state is None:
-                continue
-            if state['priority'] <= priority:
-                continue
-            held = state['amount']
-            if held <= 0:
-                continue
-            taken = held if held <= need else need
-            self._set_holder_amount(owner, held - taken)
-            self._reclaimed[owner] = self._reclaimed.get(owner, 0) + taken
+        def on_take(taken: NumericType) -> None:
             self.amount += taken
-            released += taken
-            need -= taken
+
+        def on_preempted(owner: Any, holder_prio: int, taken: NumericType) -> None:
             self.sim.signal(self.Preempted(self, requester, owner, holder_prio, taken), owner)
-        if released > 0:
-            self._fire_nempty()
-            self._fire_changed()
-        return released
+
+        return self._preemption.reclaim_from_victims(
+            need=need,
+            requester=requester,
+            req_priority=priority,
+            on_take=on_take,
+            on_preempted=on_preempted,
+            on_reclaimed=self._on_reclaimed,
+        )
 
     def _consume_reclaimed_release(self, owner: Any, amount: NumericType) -> NumericType:
-        reclaimed = self._reclaimed.get(owner, 0)
-        if reclaimed <= 0:
-            return amount
-        consumed = reclaimed if reclaimed <= amount else amount
-        left = reclaimed - consumed
-        if left > 0:
-            self._reclaimed[owner] = left
-        else:
-            self._reclaimed.pop(owner, None)
-        return amount - consumed
+        return self._priority.consume_reclaimed_release(owner, amount)
 
     # ------------------------------------------------------------------
     # Nowait operations
