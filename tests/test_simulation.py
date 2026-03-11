@@ -441,7 +441,7 @@ class TestSimLiteQueueMixin(unittest.TestCase):
 
     def test1_queue_returns_lite_queue_instance(self):
         ''' sim.queue() on LiteLayer2 returns a LiteQueue bound to the sim. '''
-        from dssim.components.litequeue import LiteQueue
+        from dssim.lite.components.litequeue import LiteQueue
         sim = DSSimulation(layer2=LiteLayer2)
         q = sim.queue()
         self.assertIsInstance(q, LiteQueue)

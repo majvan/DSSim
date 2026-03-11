@@ -17,13 +17,13 @@ The salabim-like API export.
 from dssim import DSSimulation, DSComponent as component
 from dssim import DSSchedulable, DSProcess, DSCallback, DSAbsTime, DSAbortException
 from dssim import DSPub, DSFilter
-from dssim.processcomponent import DSProcessComponent as Component
-from dssim.processcomponent import PCGenerator as ComponentGenerator
+from dssim.pubsub.processcomponent import DSProcessComponent as Component
+from dssim.pubsub.processcomponent import PCGenerator as ComponentGenerator
 
-from dssim.components.container import Container as Store
-from dssim.components.queue import Queue
-from dssim.components.resource import Resource
-from dssim.components.state import State
+from dssim.pubsub.components.container import Container as Store
+from dssim.pubsub.components.queue import Queue
+from dssim.pubsub.components.resource import Resource
+from dssim.pubsub.components.state import State
 
 class Environment(DSSimulation):
     def now(self):

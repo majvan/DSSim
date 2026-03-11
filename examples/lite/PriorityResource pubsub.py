@@ -3,7 +3,7 @@
 # LiteLayer2 counterpart of examples/pubsub/PriorityResource pubsub.py.
 #
 # Uses LitePriorityResource (priority + optional preemption) available in
-# dssim.components.literesource via sim.priority_resource(...).
+# dssim.lite.components.literesource via sim.priority_resource(...).
 from dssim import DSSimulation, LiteLayer2
 
 

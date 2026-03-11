@@ -194,7 +194,7 @@ def dssim_bounded(n):
 # DSSim LiteQueue (LiteLayer2)
 # ===========================================================================
 from dssim.simulation import LiteLayer2
-from dssim.components.litequeue import LiteQueue
+from dssim.lite.components.litequeue import LiteQueue
 
 
 def _make_lite_queue(capacity=float('inf')):

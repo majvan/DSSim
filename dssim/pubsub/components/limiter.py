@@ -16,9 +16,9 @@ Simple controllable bottleneck components
 '''
 from typing import Any, List
 from dssim.base import EventType, DSComponent
-from dssim.pubsub_base import AlwaysTrue
-from dssim.pubsub import DSCallback, DSPub
-from dssim.process import DSProcess
+from dssim.pubsub.base import AlwaysTrue
+from dssim.pubsub.pubsub import DSCallback, DSPub
+from dssim.pubsub.process import DSProcess
 
 
 class IntegralLimiter(DSComponent):

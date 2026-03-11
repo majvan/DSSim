@@ -16,9 +16,9 @@ The file implements the Queue simulation component.
 '''
 from typing import Any, List, Iterator, Optional, Generator, TYPE_CHECKING
 from dssim.base import NumericType, TimeType, EventType, SignalMixin
-from dssim.pubsub_base import CondType, DSAbortException, AlwaysTrue
-from dssim.components.base import DSStatefulComponent
-from dssim.pubsub import DSPub
+from dssim.pubsub.base import CondType, DSAbortException, AlwaysTrue
+from dssim.pubsub.components.base import DSStatefulComponent
+from dssim.pubsub.pubsub import DSPub
 from dssim.base_components import DSQueue, DSLifoQueue, DSKeyQueue
 
 

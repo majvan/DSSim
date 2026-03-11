@@ -21,15 +21,15 @@ from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Opti
 from dssim.timequeue import TimeQueue, ZeroTimeQueue
 from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, DSComponentSingleton, ISubscriber, IFuture
 from dssim.pubsub import SimPubsubMixin
-from dssim.future import SimFutureMixin
-from dssim.process import SimProcessMixin
-from dssim.components.container import SimContainerMixin
-from dssim.components.queue import SimQueueMixin
-from dssim.components.litequeue import SimLiteQueueMixin
-from dssim.components.literesource import SimLiteResourceMixin
-from dssim.components.resource import SimResourceMixin
-from dssim.components.state import SimStateMixin
-from dssim.cond import SimFilterMixin
+from dssim.pubsub.future import SimFutureMixin
+from dssim.pubsub.process import SimProcessMixin
+from dssim.pubsub.components.container import SimContainerMixin
+from dssim.pubsub.components.queue import SimQueueMixin
+from dssim.lite.components.litequeue import SimLiteQueueMixin
+from dssim.lite.components.literesource import SimLiteResourceMixin
+from dssim.pubsub.components.resource import SimResourceMixin
+from dssim.pubsub.components.state import SimStateMixin
+from dssim.pubsub.cond import SimFilterMixin
 
 
 class VoidSubscriber(ISubscriber):

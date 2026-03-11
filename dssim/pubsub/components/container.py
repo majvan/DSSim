@@ -16,8 +16,8 @@ The file implements the Container simulation component.
 '''
 from typing import Any, List, Dict, Iterator, Optional, Generator, TYPE_CHECKING
 from dssim.base import TimeType, EventType, SignalMixin
-from dssim.pubsub_base import CondType, DSAbortException, AlwaysTrue
-from dssim.components.base import DSStatefulComponent
+from dssim.pubsub.base import CondType, DSAbortException, AlwaysTrue
+from dssim.pubsub.components.base import DSStatefulComponent
 
 if TYPE_CHECKING:
     from dssim.simulation import DSSimulation

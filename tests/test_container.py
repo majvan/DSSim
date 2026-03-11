@@ -18,7 +18,7 @@ retrieval, all_or_nothing mode, and tx_nempty / tx_changed signal routing.
 '''
 import unittest
 from dssim import DSSimulation
-from dssim.components.container import Container
+from dssim.pubsub.components.container import Container
 
 
 # ---------------------------------------------------------------------------

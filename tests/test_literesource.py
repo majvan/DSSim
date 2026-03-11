@@ -17,7 +17,7 @@ Tests for LiteResource / LitePriorityResource (LiteLayer2-only components).
 import unittest
 
 from dssim.simulation import DSSimulation, LiteLayer2
-from dssim.components.literesource import LiteResource, LitePriorityResource
+from dssim.lite.components.literesource import LiteResource, LitePriorityResource
 
 
 def _make(amount=0, capacity=float('inf')):

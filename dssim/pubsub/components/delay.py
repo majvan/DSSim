@@ -17,7 +17,7 @@ producer output.
 '''
 from typing import Any
 from dssim.base import EventType, DSComponent
-from dssim.pubsub import DSCallback, DSPub
+from dssim.pubsub.pubsub import DSCallback, DSPub
 
 
 class Delay(DSComponent):

@@ -20,7 +20,7 @@ import unittest
 from unittest.mock import Mock, call
 from dssim import DSAbsTime, DSSimulation, DSAbortException
 from dssim import DSSchedulable, DSProcess, DSCallback
-from dssim.process import DSSubscriberContextManager, DSTimeoutContext, DSTimeoutContextError
+from dssim.pubsub.process import DSSubscriberContextManager, DSTimeoutContext, DSTimeoutContextError
 from dssim import DSPub
 
 
