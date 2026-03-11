@@ -3,52 +3,55 @@
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]:-$0}"; )" &> /dev/null && pwd 2> /dev/null; )";
 export PYTHONPATH="$SCRIPT_DIR/.."
 
-echo "Coro schedule"
-python $SCRIPT_DIR/coro_schedule.py
-echo "Process schedule"
-python $SCRIPT_DIR/process_schedule.py
-echo "Process return value"
-python $SCRIPT_DIR/process_retval.py
-echo "Consumer ordering (default, round robin, priority...)"
-python $SCRIPT_DIR/consumer_ordering.py
-echo "Running bottleneck"
-python $SCRIPT_DIR/bottleneck.py
-echo "Running bottleneck controller"
-python $SCRIPT_DIR/bottleneck_controller.py
-echo "Running circuits callback"
-python $SCRIPT_DIR/circuits_callback.py
-echo "Running conditions"
-python $SCRIPT_DIR/conditions.py
-echo "Running conditions generator"
-python $SCRIPT_DIR/conditions_generator.py
-echo "Running conditions async"
-python $SCRIPT_DIR/conditions_async.py
-echo "Running conditions futures"
-python $SCRIPT_DIR/conditions_futures.py
-echo "Running conditions process"
-python $SCRIPT_DIR/conditions_process.py
-echo "Running gas station"
-python $SCRIPT_DIR/gasstation.py
-echo "Running interruptible context"
-python $SCRIPT_DIR/interruptible_context.py
-echo "Processcomponent"
-python $SCRIPT_DIR/processcomponent.py
-echo "Queue"
-python $SCRIPT_DIR/queue.py
-echo "School"
-python $SCRIPT_DIR/school.py
-echo "Studio"
-python $SCRIPT_DIR/studio.py
-echo "Trajectory"
-python $SCRIPT_DIR/trajectory.py
-echo "UART physical"
-python $SCRIPT_DIR/uart_physical.py
+if command -v python >/dev/null 2>&1; then
+    PYTHON_BIN=python
+elif command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN=python3
+else
+    echo "No python interpreter found (python/python3)." >&2
+    exit 1
+fi
+
+run_py() {
+    echo "$1"
+    "$PYTHON_BIN" "$2"
+}
+
+echo "Lite layer examples"
+run_py "Coro schedule" "$SCRIPT_DIR/lite/coro_schedule.py"
+run_py "Process events lite" "$SCRIPT_DIR/lite/process_events_lite.py"
+
+echo "PubSub layer examples"
+run_py "Process schedule" "$SCRIPT_DIR/pubsub/process_schedule.py"
+run_py "Process return value" "$SCRIPT_DIR/pubsub/process_retval.py"
+run_py "Consumer ordering (default, round robin, priority...)" "$SCRIPT_DIR/pubsub/consumer_ordering.py"
+run_py "Running bottleneck" "$SCRIPT_DIR/pubsub/bottleneck.py"
+run_py "Running bottleneck controller" "$SCRIPT_DIR/pubsub/bottleneck_controller.py"
+run_py "Running circuits callback" "$SCRIPT_DIR/pubsub/circuits_callback.py"
+run_py "Running conditions" "$SCRIPT_DIR/pubsub/conditions.py"
+run_py "Running conditions generator" "$SCRIPT_DIR/pubsub/conditions_generator.py"
+run_py "Running conditions async" "$SCRIPT_DIR/pubsub/conditions_async.py"
+run_py "Running conditions futures" "$SCRIPT_DIR/pubsub/conditions_futures.py"
+run_py "Running conditions process" "$SCRIPT_DIR/pubsub/conditions_process.py"
+run_py "Running gas station" "$SCRIPT_DIR/pubsub/gasstation.py"
+run_py "Running interruptible context" "$SCRIPT_DIR/pubsub/interruptible_context.py"
+run_py "Processcomponent" "$SCRIPT_DIR/pubsub/processcomponent.py"
+run_py "Queue" "$SCRIPT_DIR/pubsub/queue.py"
+run_py "School" "$SCRIPT_DIR/pubsub/school.py"
+run_py "Studio" "$SCRIPT_DIR/pubsub/studio.py"
+run_py "Trajectory" "$SCRIPT_DIR/pubsub/trajectory.py"
+run_py "UART physical" "$SCRIPT_DIR/pubsub/uart_physical.py"
+run_py "UART loop" "$SCRIPT_DIR/pubsub/uart_loop.py"
+run_py "Producer to process" "$SCRIPT_DIR/pubsub/producer_to_process.py"
+run_py "Priority resources" "$SCRIPT_DIR/pubsub/priority_resources.py"
+run_py "Priority resources parity (pubsub)" "$SCRIPT_DIR/pubsub/PriorityResource pubsub.py"
+
 echo "VISA check"
 visa_log="$(mktemp)"
 i=1
 while [ "$i" -le 20 ]; do
     echo "VISA check run $i/20"
-    python "$SCRIPT_DIR/visa_check.py" | tee "$visa_log" | python "$SCRIPT_DIR/visa_check_parser.py" - || {
+    "$PYTHON_BIN" "$SCRIPT_DIR/pubsub/visa_check.py" | tee "$visa_log" | "$PYTHON_BIN" "$SCRIPT_DIR/output_parser/visa_check_parser.py" - || {
         echo "VISA check parser: error found"
         rm -f "$visa_log"
         exit 1
@@ -56,78 +59,51 @@ while [ "$i" -le 20 ]; do
     i=$((i + 1))
 done
 rm -f "$visa_log"
-# The following are benchmark tests which take some time
-echo "Process events"
-python $SCRIPT_DIR/process_events.py
-echo "Process events lite"
-python $SCRIPT_DIR/process_events_lite.py
-echo "UART loop"
-python $SCRIPT_DIR/uart_loop.py
 
-echo "Asyncio chained"
-python $SCRIPT_DIR/asyncio/chained.py
-echo "Asyncio count"
-python $SCRIPT_DIR/asyncio/countasync.py
-echo "Asyncio rand"
-python $SCRIPT_DIR/asyncio/rand.py
-echo "Asyncio task"
-python $SCRIPT_DIR/asyncio/test_asyncio_task.py
-echo "Asyncio taskgroup"
-python $SCRIPT_DIR/asyncio/test_asyncio_taskgroup.py
-echo "Asyncio cancel"
-python $SCRIPT_DIR/asyncio/test_cancel.py
-echo "Asyncio future"
-python $SCRIPT_DIR/asyncio/test_future.py
-echo "Asyncio gather"
-python $SCRIPT_DIR/asyncio/test_gather.py
-echo "Asyncio timeout"
-python $SCRIPT_DIR/asyncio/test_timeout.py
+run_py "Process events" "$SCRIPT_DIR/pubsub/process_events.py"
 
-echo "Bank, 1 clerk"
-python $SCRIPT_DIR/parity/Bank,\ 1\ clerk.py
-echo "Bank, 3 clerks"
-python $SCRIPT_DIR/parity/Bank,\ 3\ clerks.py
-echo "Bank, 3 clerks (resources)"
-python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(resources\).py
-echo "Bank, 3 clerks (signal)"
-python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(signal\).py
-echo "Bank, 3 clerks (state)"
-python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(state\).py
-echo "Bank, 3 clerks (store)"
-python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(store\).py
-echo "Bank, 3 clerks (with ComponentGenerator)"
-python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ \(with\ ComponentGenerator\).py
-echo "Bank, 3 clerks reneging"
-python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ reneging.py
-echo "Bank, 3 clerks reneging (resources)"
-python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ reneging\ \(resources\).py
-echo "Bank, 3 clerks reneging (signal)"
-python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ reneging\ \(signal\).py
-echo "Bank, 3 clerks reneging (state)"
-python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ reneging\ \(state\).py
-echo "Bank, 3 clerks reneging (store)"
-python $SCRIPT_DIR/parity/Bank,\ 3\ clerks\ reneging\ \(store\).py
+run_py "Asyncio chained" "$SCRIPT_DIR/pubsub/asyncio/chained.py"
+run_py "Asyncio count" "$SCRIPT_DIR/pubsub/asyncio/countasync.py"
+run_py "Asyncio rand" "$SCRIPT_DIR/pubsub/asyncio/rand.py"
+run_py "Asyncio task" "$SCRIPT_DIR/pubsub/asyncio/test_asyncio_task.py"
+run_py "Asyncio taskgroup" "$SCRIPT_DIR/pubsub/asyncio/test_asyncio_taskgroup.py"
+run_py "Asyncio cancel" "$SCRIPT_DIR/pubsub/asyncio/test_cancel.py"
+run_py "Asyncio future" "$SCRIPT_DIR/pubsub/asyncio/test_future.py"
+run_py "Asyncio gather" "$SCRIPT_DIR/pubsub/asyncio/test_gather.py"
+run_py "Asyncio timeout" "$SCRIPT_DIR/pubsub/asyncio/test_timeout.py"
+
+run_py "Bank, 1 clerk" "$SCRIPT_DIR/pubsub/Bank, 1 clerk.py"
+run_py "Bank, 3 clerks" "$SCRIPT_DIR/pubsub/Bank, 3 clerks.py"
+run_py "Bank, 3 clerks (resources)" "$SCRIPT_DIR/pubsub/Bank, 3 clerks (resources).py"
+run_py "Bank, 3 clerks (signal)" "$SCRIPT_DIR/pubsub/Bank, 3 clerks (signal).py"
+run_py "Bank, 3 clerks (state)" "$SCRIPT_DIR/pubsub/Bank, 3 clerks (state).py"
+run_py "Bank, 3 clerks (store)" "$SCRIPT_DIR/pubsub/Bank, 3 clerks (store).py"
+run_py "Bank, 3 clerks (with ComponentGenerator)" "$SCRIPT_DIR/pubsub/Bank, 3 clerks (with ComponentGenerator).py"
+run_py "Bank, 3 clerks reneging" "$SCRIPT_DIR/pubsub/Bank, 3 clerks reneging.py"
+run_py "Bank, 3 clerks reneging (resources)" "$SCRIPT_DIR/pubsub/Bank, 3 clerks reneging (resources).py"
+run_py "Bank, 3 clerks reneging (signal)" "$SCRIPT_DIR/pubsub/Bank, 3 clerks reneging (signal).py"
+run_py "Bank, 3 clerks reneging (state)" "$SCRIPT_DIR/pubsub/Bank, 3 clerks reneging (state).py"
+run_py "Bank, 3 clerks reneging (store)" "$SCRIPT_DIR/pubsub/Bank, 3 clerks reneging (store).py"
+
 echo "Demo wait"
 demo_wait_log="$(mktemp)"
-python "$SCRIPT_DIR/parity/Demo wait.py" | tee "$demo_wait_log" | python "$SCRIPT_DIR/demo_wait_parser.py" - || {
+"$PYTHON_BIN" "$SCRIPT_DIR/pubsub/Demo wait.py" | tee "$demo_wait_log" | "$PYTHON_BIN" "$SCRIPT_DIR/output_parser/demo_wait_parser.py" - || {
     echo "Demo wait parser: error found"
     rm -f "$demo_wait_log"
     exit 1
 }
 echo "Demo wait (mutex)"
-python "$SCRIPT_DIR/parity/Demo wait (mutex).py" | tee "$demo_wait_log" | python "$SCRIPT_DIR/demo_wait_parser.py" - || {
+"$PYTHON_BIN" "$SCRIPT_DIR/pubsub/Demo wait (mutex).py" | tee "$demo_wait_log" | "$PYTHON_BIN" "$SCRIPT_DIR/output_parser/demo_wait_parser.py" - || {
     echo "Demo wait parser: error found"
     rm -f "$demo_wait_log"
     exit 1
 }
 echo "Demo wait (signal)"
-python "$SCRIPT_DIR/parity/Demo wait (signal).py" | tee "$demo_wait_log" | python "$SCRIPT_DIR/demo_wait_parser.py" - || {
+"$PYTHON_BIN" "$SCRIPT_DIR/pubsub/Demo wait (signal).py" | tee "$demo_wait_log" | "$PYTHON_BIN" "$SCRIPT_DIR/output_parser/demo_wait_parser.py" - || {
     echo "Demo wait parser: error found"
     rm -f "$demo_wait_log"
     exit 1
 }
 rm -f "$demo_wait_log"
-echo "Elevator"
-python $SCRIPT_DIR/parity/Elevator.py
-echo "Priority resources"
-python "$SCRIPT_DIR/parity/PriorityResource pubsub.py"
+
+run_py "Elevator parity sample" "$SCRIPT_DIR/pubsub/Elevator.py"

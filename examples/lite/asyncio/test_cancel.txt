@@ -1,0 +1,5 @@
+LiteLayer2 notes for examples/pubsub/asyncio/test_cancel.py
+
+LiteLayer2 is missing required features:
+- Asyncio parity layer (Task/Future, gather, timeout, cancellation)
+- PubSub-backed process/future integration required by dssim.parity.asyncio

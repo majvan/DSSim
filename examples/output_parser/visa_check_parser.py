@@ -11,8 +11,8 @@ Detected issues:
 5) waiting clerk closing after timeout
 
 Usage:
-  PYTHONPATH=. python3 examples/visa_check.py > /tmp/visa.log
-  python3 examples/visa_check_parser.py /tmp/visa.log
+  PYTHONPATH=. python3 examples/pubsub/visa_check.py > /tmp/visa.log
+  python3 examples/output_parser/visa_check_parser.py /tmp/visa.log
 """
 
 from __future__ import annotations
