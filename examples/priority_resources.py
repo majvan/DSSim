@@ -46,8 +46,7 @@ def main() -> None:
         # Phase 1: OR filtering; should be immediate (0 wait)
         # ------------------------------------------------------------------
         t0 = sim.time
-        with sim.consume(cpu.tx_nempty), sim.consume(io.tx_nempty):
-            got_or = await sim.check_and_wait(5, cond=f_cpu | f_io)
+        got_or = await (f_cpu | f_io).check_and_wait(5)
         wait_or = sim.time - t0
 
         assert wait_or == 0, f'OR wait expected 0, got {wait_or}'
@@ -63,8 +62,7 @@ def main() -> None:
         # Keep this first resource held: the AND phase reuses the same filter
         # instance/state and only needs to acquire the second resource.
         t1 = sim.time
-        with sim.consume(cpu.tx_nempty), sim.consume(io.tx_nempty):
-            got_and = await sim.check_and_wait(10, cond=f_cpu & f_io)
+        got_and = await (f_cpu & f_io).check_and_wait(10)
         wait_and = sim.time - t1
 
         assert wait_and == 3, f'AND wait expected 3, got {wait_and}'
@@ -106,8 +104,7 @@ def main() -> None:
         f_cpu = sim.filter(cpu.take_cond(priority=1, preempt=True))
         f_io = sim.filter(io.take_cond(priority=1, preempt=True))
         t2 = sim.time
-        with sim.consume(cpu.tx_nempty), sim.consume(io.tx_nempty):
-            got_or_blocked = await sim.check_and_wait(10, cond=f_cpu | f_io)
+        got_or_blocked = await (f_cpu | f_io).check_and_wait(10)
         wait_or_blocked = sim.time - t2
 
         assert wait_or_blocked == 2, f'Blocked OR wait expected 2, got {wait_or_blocked}'

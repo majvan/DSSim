@@ -26,7 +26,7 @@ from dssim.pubsub_base import StackedCond
 
 
 class FutureMock(Mock):
-    def get_future_eps(self):
+    def get_eps(self):
         return {self,}
 
 class SomeObj:

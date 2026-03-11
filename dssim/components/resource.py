@@ -57,6 +57,10 @@ class Resource(DSStatefulComponent):
         def cond_value(self) -> NumericType:
             return self.value
 
+        def get_eps(self):
+            # Waiting on take_cond should wake on "resource became non-empty".
+            return {self.resource.tx_nempty}
+
         def __str__(self) -> str:
             return f'{self.resource}.take_cond(amount={self.amount}, policy={self.policy_params})'
 
@@ -105,9 +109,8 @@ class Resource(DSStatefulComponent):
         '''Return condition object that tries to acquire during condition checks.
 
         Typical usage:
-            cond = resource.take_cond(amount=1, priority=prio, preempt=True)
-            with sim.consume(resource.tx_nempty):
-                got = yield from sim.gwait(10, cond=cond)
+            f = sim.filter(resource.take_cond(amount=1, priority=prio, preempt=True))
+            got = yield from f.check_and_gwait(10)
         '''
         return self._TakeCond(self, amount, owner=self.sim.pid, **policy_params)
 

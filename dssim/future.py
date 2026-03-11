@@ -41,7 +41,7 @@ class DSFuture(DSSub, SignalMixin, IFuture):
         self.meta.cond.push(self)  # sending to self => signaling the end of future
         return self.meta
 
-    def get_future_eps(self) -> Set[DSPub]:
+    def get_eps(self) -> Set[DSPub]:
         return {self._finish_tx,}
 
     def finished(self) -> bool:

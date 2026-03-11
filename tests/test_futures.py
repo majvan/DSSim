@@ -28,7 +28,7 @@ class SimMockWithObserveContext(Mock):
         return contextmanager(None)
 
 class FutureMock(Mock):
-    def get_future_eps(self):
+    def get_eps(self):
         return {self,}
 
 class TestDSFuture(unittest.TestCase):
@@ -36,7 +36,7 @@ class TestDSFuture(unittest.TestCase):
     def test1_future_eps(self):
         sim = DSSimulation()
         fut = DSFuture(sim=sim)
-        endpoints = fut.get_future_eps()
+        endpoints = fut.get_eps()
         self.assertEqual(endpoints, {fut._finish_tx})
     
     def test2_future_finish(self):
