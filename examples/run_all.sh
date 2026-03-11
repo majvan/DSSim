@@ -33,6 +33,8 @@ echo "Running interruptible context"
 python $SCRIPT_DIR/interruptible_context.py
 echo "Processcomponent"
 python $SCRIPT_DIR/processcomponent.py
+echo "Priority resources"
+python $SCRIPT_DIR/priority_resources.py
 echo "Queue"
 python $SCRIPT_DIR/queue.py
 echo "School"

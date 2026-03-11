@@ -436,6 +436,111 @@ class TestPriorityResource(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Resource take_cond condition helper
+# ---------------------------------------------------------------------------
+
+class TestResourceTakeCond(unittest.TestCase):
+
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    def test1_take_cond_acquires_on_nempty_signal(self):
+        r = Resource(amount=0, capacity=1, sim=self.sim)
+        out = []
+
+        def consumer():
+            cond = r.take_cond()
+            with self.sim.consume(r.tx_nempty):
+                got = yield from self.sim.gwait(10, cond=cond)
+            out.append((self.sim.time, got))
+
+        def producer():
+            yield from self.sim.gwait(4)
+            r.put_nowait()
+
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+
+        self.assertEqual(out, [(4, 1)])
+        self.assertEqual(r.amount, 0)
+
+    def test2_take_cond_check_and_gwait_precheck(self):
+        r = Resource(amount=2, capacity=2, sim=self.sim)
+        out = []
+
+        def consumer():
+            cond = r.take_cond(amount=2)
+            got = yield from self.sim.check_and_gwait(10, cond=cond)
+            out.append((self.sim.time, got))
+
+        self.sim.schedule(0, consumer())
+        self.sim.run(5)
+
+        self.assertEqual(out, [(0, 2)])
+        self.assertEqual(r.amount, 0)
+
+    def test3_take_cond_composes_with_two_resources_via_dscircuit(self):
+        r0 = Resource(amount=0, capacity=1, sim=self.sim)
+        r1 = Resource(amount=0, capacity=1, sim=self.sim)
+        out = []
+
+        def consumer():
+            f0 = self.sim.filter(r0.take_cond())
+            f1 = self.sim.filter(r1.take_cond())
+            with self.sim.consume(r0.tx_nempty), self.sim.consume(r1.tx_nempty):
+                got = yield from self.sim.gwait(20, cond=f0 & f1)
+            out.append((self.sim.time, got))
+
+        def producer():
+            yield from self.sim.gwait(3)
+            r0.put_nowait()
+            yield from self.sim.gwait(2)
+            r1.put_nowait()
+
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(30)
+
+        self.assertEqual(out[0][0], 5)
+        self.assertEqual(set(out[0][1].values()), {r0.tx_nempty, r1.tx_nempty})
+        self.assertEqual(r0.amount, 0)
+        self.assertEqual(r1.amount, 0)
+
+    def test4_priority_take_cond_supports_preempt(self):
+        r = PriorityResource(amount=1, capacity=1, preemptive=True, sim=self.sim)
+        out = []
+
+        def low():
+            got = yield from r.gget(priority=5, preempt=True)
+            self.assertEqual(got, 1)
+            out.append(('low_start', self.sim.time))
+            try:
+                yield from self.sim.gwait(10)
+            except DSResourcePreempted:
+                out.append(('low_preempted', self.sim.time))
+
+        def high():
+            yield from self.sim.gwait(3)
+            cond = r.take_cond(priority=1, preempt=True)
+            with self.sim.consume(r.tx_nempty):
+                got = yield from self.sim.check_and_gwait(5, cond=cond)
+            out.append(('high_got', self.sim.time, got))
+            r.put_nowait()
+
+        self.sim.schedule(0, low())
+        self.sim.schedule(0, high())
+        self.sim.run(20)
+
+        self.assertEqual(out, [
+            ('low_start', 0),
+            ('high_got', 3, 1),
+            ('low_preempted', 3),
+        ])
+        self.assertEqual(r.amount, 1)
+
+
+# ---------------------------------------------------------------------------
 # Blocking get — async variants
 # ---------------------------------------------------------------------------
 

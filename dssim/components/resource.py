@@ -20,6 +20,7 @@ from typing import Any, Generator, TYPE_CHECKING, Optional, Dict, List
 from dssim.base import NumericType, TimeType, EventType, DSComponentSingleton
 from dssim.components.base import DSStatefulComponent
 from dssim.pubsub import DSProducer, NotifierPriority
+from dssim.pubsub_base import ICondition, CallableConditionMixin
 
 
 if TYPE_CHECKING:
@@ -34,6 +35,30 @@ class Resource(DSStatefulComponent):
 
     Unlike TinyResource, wakeups are pubsub-driven via ``tx_nempty``/``tx_nfull``.
     '''
+
+    class _TakeCond(ICondition, CallableConditionMixin):
+        '''Condition helper that tries immediate resource acquisition on check().'''
+
+        def __init__(self, resource: "Resource", amount: NumericType = 1, owner: Any = None, **policy_params: Any) -> None:
+            self.resource = resource
+            self.amount = amount
+            self.owner = resource.sim.pid if owner is None else owner
+            self.policy_params = policy_params
+            self.value: NumericType = 0
+
+        def check(self, event: EventType) -> tuple[bool, NumericType]:
+            got = self.resource._try_take_n_nowait(self.amount, owner=self.owner, **self.policy_params)
+            if got > 0:
+                self.value = got
+                return True, got
+            return False, 0
+
+        def cond_value(self) -> NumericType:
+            return self.value
+
+        def __str__(self) -> str:
+            return f'{self.resource}.take_cond(amount={self.amount}, policy={self.policy_params})'
+
     def __init__(
         self,
         amount: NumericType = 0,
@@ -59,6 +84,9 @@ class Resource(DSStatefulComponent):
     # Internal notification hooks
     # ------------------------------------------------------------------
 
+    def _try_take_n_nowait(self, amount: NumericType = 1, owner: Any = None, **policy_params: Any) -> NumericType:
+        return self.get_n_nowait(amount)
+
     def _fire_nempty(self) -> None:
         if self.tx_nempty.has_subscribers():
             self.sim.signal(self.tx_nempty, self.tx_nempty)
@@ -74,6 +102,16 @@ class Resource(DSStatefulComponent):
     # ------------------------------------------------------------------
     # Nowait operations
     # ------------------------------------------------------------------
+
+    def take_cond(self, amount: NumericType = 1, **policy_params: Any) -> "_TakeCond":
+        '''Return condition object that tries to acquire during condition checks.
+
+        Typical usage:
+            cond = resource.take_cond(amount=1, priority=prio, preempt=True)
+            with sim.consume(resource.tx_nempty):
+                got = yield from sim.gwait(10, cond=cond)
+        '''
+        return self._TakeCond(self, amount, owner=self.sim.pid, **policy_params)
 
     def put_nowait(self) -> NumericType:
         ''' Put 1 unit into the resource pool immediately. '''
@@ -265,6 +303,10 @@ class PriorityResource(Resource):
             return 0
         return state['amount']
 
+    def held_amount(self, owner: Any) -> NumericType:
+        '''Public introspection helper: amount currently held by *owner*.'''
+        return self._held_amount(owner)
+
     def _remove_from_bucket(self, owner: Any, priority: int) -> None:
         bucket = self._holders_by_priority.get(priority)
         if bucket is None:
@@ -366,14 +408,25 @@ class PriorityResource(Resource):
     # Nowait operations
     # ------------------------------------------------------------------
 
+    def _try_take_n_nowait(self, amount: NumericType = 1, owner: Any = None, **policy_params: Any) -> NumericType:
+        priority = policy_params.get('priority', 0)
+        preempt = policy_params.get('preempt', self.preemptive)
+        owner = self.sim.pid if owner is None else owner
+        if preempt and self.amount < amount:
+            self._reclaim_from_victims(amount - self.amount, owner, priority)
+        return self._get_n_nowait_for_owner(owner, amount, priority)
+
+    def _get_n_nowait_for_owner(self, owner: Any, amount: NumericType = 1, priority: int = 0) -> NumericType:
+        retval = super().get_n_nowait(amount)
+        if retval > 0:
+            self._remember_acquire(owner, retval, priority)
+        return retval
+
     def get_nowait(self, priority: int = 0) -> NumericType:
         return self.get_n_nowait(1, priority=priority)
 
     def get_n_nowait(self, amount: NumericType = 1, priority: int = 0) -> NumericType:
-        retval = super().get_n_nowait(amount)
-        if retval > 0:
-            self._remember_acquire(self.sim.pid, retval, priority)
-        return retval
+        return self._get_n_nowait_for_owner(self.sim.pid, amount, priority)
 
     def put_n_nowait(self, amount: NumericType = 1) -> NumericType:
         owner = self.sim.pid
