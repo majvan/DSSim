@@ -15,21 +15,8 @@
 Tests for simulation module
 '''
 import unittest
-from contextlib import contextmanager
-from unittest.mock import Mock, MagicMock, call
+from unittest.mock import MagicMock
 from dssim import DSSimulation, DSFuture, DSAbortException
-
-class SimMockWithObserveContext(Mock):
-    def __init__(self, *args, **kwargs):
-        self.registered_endpoints = []
-
-    def observe_pre(self, endpoint):
-        self.registered_endpoints.append(endpoint)
-        return contextmanager(None)
-
-class FutureMock(Mock):
-    def get_eps(self):
-        return {self,}
 
 class TestDSFuture(unittest.TestCase):
 
@@ -107,3 +94,105 @@ class TestDSFuture(unittest.TestCase):
             retval = e.value
         sim.gwait.assert_called_once_with(cond=fut)
         self.assertIsNone(retval)
+
+    def test8_future_gwait_waits_for_finish(self):
+        sim = DSSimulation()
+        fut = DSFuture(sim=sim)
+        out = []
+
+        def waiter():
+            retval = yield from fut.gwait(10)
+            out.append((sim.time, retval))
+
+        def finisher():
+            yield from sim.gwait(3)
+            fut.finish('done')
+
+        sim.schedule(0, waiter())
+        sim.schedule(0, finisher())
+        sim.run(20)
+        self.assertEqual(out, [(3, fut)])
+
+    def test9_future_wait_waits_for_finish(self):
+        sim = DSSimulation()
+        fut = DSFuture(sim=sim)
+        out = []
+
+        async def waiter():
+            retval = await fut.wait(10)
+            out.append((sim.time, retval))
+
+        def finisher():
+            yield from sim.gwait(4)
+            fut.finish('done')
+
+        sim.schedule(0, waiter())
+        sim.schedule(0, finisher())
+        sim.run(20)
+        self.assertEqual(out, [(4, fut)])
+
+    def test10_future_check_and_gwait_waits_for_finish(self):
+        sim = DSSimulation()
+        fut = DSFuture(sim=sim)
+        out = []
+
+        def waiter():
+            retval = yield from fut.check_and_gwait(10)
+            out.append((sim.time, retval))
+
+        def finisher():
+            yield from sim.gwait(2)
+            fut.finish('done')
+
+        sim.schedule(0, waiter())
+        sim.schedule(0, finisher())
+        sim.run(20)
+        self.assertEqual(out, [(2, fut)])
+
+    def test11_future_check_and_wait_waits_for_finish(self):
+        sim = DSSimulation()
+        fut = DSFuture(sim=sim)
+        out = []
+
+        async def waiter():
+            retval = await fut.check_and_wait(10)
+            out.append((sim.time, retval))
+
+        def finisher():
+            yield from sim.gwait(2)
+            fut.finish('done')
+
+        sim.schedule(0, waiter())
+        sim.schedule(0, finisher())
+        sim.run(20)
+        self.assertEqual(out, [(2, fut)])
+
+    def test12_future_check_and_gwait_precheck_finished(self):
+        sim = DSSimulation()
+        fut = DSFuture(sim=sim)
+        fut.finish('done')
+        out = []
+
+        def waiter():
+            retval = yield from fut.check_and_gwait(10)
+            out.append((sim.time, retval))
+
+        sim.schedule(0, waiter())
+        sim.run(20)
+        self.assertEqual(out, [(0, fut)])
+
+    def test13_future_check_and_wait_precheck_failed_raises(self):
+        sim = DSSimulation()
+        fut = DSFuture(sim=sim)
+        fut.fail(RuntimeError('boom'))
+        out = []
+
+        async def waiter():
+            try:
+                await fut.check_and_wait(10)
+            except RuntimeError as exc:
+                out.append((sim.time, str(exc)))
+
+        sim.schedule(0, waiter())
+        sim.run(20)
+        self.assertEqual(out, [(0, 'boom')])

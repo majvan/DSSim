@@ -15,8 +15,7 @@
 This file implements future class (see the paradigm in async programming).
 '''
 from typing import Any, Set, Optional, Generator, TYPE_CHECKING
-from contextlib import contextmanager
-from dssim.base import EventType, SignalMixin, IFuture
+from dssim.base import TimeType, EventType, EventRetType, SignalMixin, IFuture
 from dssim.pubsub_base import DSAbortException, SubscriberMetadata
 from dssim.pubsub import DSSub, DSPub, TrackEvent
 
@@ -62,6 +61,48 @@ class DSFuture(DSSub, SignalMixin, IFuture):
         retval = None
         if not self.finished():
             retval = yield from self.sim.gwait(cond=self)
+        if self.exc is not None:
+            raise self.exc
+        return retval
+
+    def gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+        if self.finished():
+            if self.exc is not None:
+                raise self.exc
+            return self
+        retval = yield from self.sim.gwait(timeout=timeout, cond=self, val=val)
+        if self.exc is not None:
+            raise self.exc
+        return retval
+
+    async def wait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> EventType:
+        if self.finished():
+            if self.exc is not None:
+                raise self.exc
+            return self
+        retval = await self.sim.wait(timeout=timeout, cond=self, val=val)
+        if self.exc is not None:
+            raise self.exc
+        return retval
+
+    def check_and_gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+        if self.finished():
+            if self.exc is not None:
+                raise self.exc
+            return self
+        with self.sim.observe_pre(self):
+            retval = yield from self.sim.check_and_gwait(timeout=timeout, cond=self, val=val)
+        if self.exc is not None:
+            raise self.exc
+        return retval
+
+    async def check_and_wait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> EventType:
+        if self.finished():
+            if self.exc is not None:
+                raise self.exc
+            return self
+        with self.sim.observe_pre(self):
+            retval = await self.sim.check_and_wait(timeout=timeout, cond=self, val=val)
         if self.exc is not None:
             raise self.exc
         return retval
