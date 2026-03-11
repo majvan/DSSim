@@ -10,14 +10,14 @@ This demonstrates two phases using check_and_wait + filter circuits:
 The resources are preemptive PriorityResource instances.
 '''
 
-from dssim import DSSimulation, PriorityResource, DSResourcePreempted, Queue
+from dssim import DSSimulation, DSResourcePreempted
 from dssim.process import _TestObject
 
 
 def main() -> None:
     sim = DSSimulation()
-    cpu = PriorityResource(amount=1, capacity=1, preemptive=True, name='cpu', sim=sim)
-    io = PriorityResource(amount=1, capacity=1, preemptive=True, name='io', sim=sim)
+    cpu = sim.priority_resource(amount=1, capacity=1, preemptive=True, name='cpu')
+    io = sim.priority_resource(amount=1, capacity=1, preemptive=True, name='io')
     preempted_at = {'time': None}
 
     async def cpu_low_holder():
@@ -81,7 +81,7 @@ def main() -> None:
         # ------------------------------------------------------------------
         # Phase 3: OR filtering; blocked wait with exact non-zero delta
         # ------------------------------------------------------------------
-        ready = Queue(sim=sim)
+        ready = sim.queue()
 
         async def cpu_blocker():
             with cpu.autorelease():

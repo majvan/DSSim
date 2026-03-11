@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSAbortException, DSSchedulable, DSComponent, DSSimulation, Queue
+from dssim import DSAbortException, DSSchedulable, DSComponent, DSSimulation
 from random import randint
 
 SIM_TIME = 60 * 10
@@ -137,7 +137,7 @@ def alien_person_generator():
 if __name__ == '__main__':
     sim = DSSimulation()
 
-    q = Queue(capacity=12, name='queue')
+    q = sim.queue(capacity=12, name='queue')
 
     persons = sim.schedule(0, eu_person_generator())
     persons = sim.schedule(0, ww_person_generator())

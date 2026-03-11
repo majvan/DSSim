@@ -1,5 +1,5 @@
 # Copyright 2026- majvan (majvan@gmail.com)
-from dssim import DSProcessComponent, PCGenerator, Queue, DSSimulation
+from dssim import DSProcessComponent, PCGenerator, DSSimulation
 import random
 sim = DSSimulation()
 
@@ -15,11 +15,10 @@ class Product(DSProcessComponent):
         await sim.wait(3)
         self.leave(c1)
 
-c0 = Queue(1)
-i0 = Queue(1)
-c1 = Queue(1)
+c0 = sim.queue(1)
+i0 = sim.queue(1)
+c1 = sim.queue(1)
 gen = PCGenerator(Product, lambda p: random.uniform(5, 15))
 time, ev = sim.run(150)
 assert 135 < time <= 150, f"Unexpected value of the time of last event the simulation: {time}"
 assert 74 < ev <= 90, f"Unexpected number of events: {ev}"
-

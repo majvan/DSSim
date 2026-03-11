@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSSimulation, Queue
+from dssim import DSSimulation
 import inspect
 
 def do_somethingA():
@@ -65,7 +65,7 @@ def do_somethingB():
 
 if __name__ == '__main__':
     sim = DSSimulation()
-    q_ab, q_ba = Queue(sim=sim), Queue(sim=sim)
+    q_ab, q_ba = sim.queue(), sim.queue()
     process_a, process_b = do_somethingA(), do_somethingB()
     sim.schedule(0, process_a)
     sim.schedule(0, process_b)
