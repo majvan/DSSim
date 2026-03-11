@@ -371,7 +371,7 @@ class DSSubscriberContextManager:
         eps = set()
         for c in components:
             if isinstance(c, DSFuture):
-                eps |= set(c.get_future_eps())
+                eps |= set(c.get_eps())
             else:  # component is DSPub
                 eps.add(c)
         Phase = DSPub.Phase

@@ -32,7 +32,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertFalse(fa.pulse)
         self.assertFalse(fa.forward_events)
         self.assertTrue(fa.cond == 'a')
-        self.assertTrue(fa.get_future_eps() == {fa._finish_tx,})
+        self.assertTrue(fa.get_eps() == {fa._finish_tx,})
         self.assertTrue(isinstance(fa, DSFuture))
         self.assertEqual(str(fa), "DSFilter(a)")
 
@@ -43,7 +43,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertFalse(fb.pulse)
         self.assertFalse(fb.forward_events)
         self.assertTrue(fb.cond == 'b')
-        self.assertTrue(fb.get_future_eps() == {fb._finish_tx,})
+        self.assertTrue(fb.get_eps() == {fb._finish_tx,})
         self.assertTrue(isinstance(fb, DSFuture))
         self.assertEqual(str(fb), "DSFilter(b)")
 
@@ -54,7 +54,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fc.pulse)
         self.assertFalse(fc.forward_events)
         self.assertTrue(fc.cond == 'c')
-        self.assertTrue(fc.get_future_eps() == {fc._finish_tx,})
+        self.assertTrue(fc.get_eps() == {fc._finish_tx,})
         self.assertTrue(isinstance(fc, DSFuture))
         self.assertEqual(str(fc), "DSFilter(c)")
 
@@ -63,7 +63,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fna.expression == _f.ONE_LINER)
         self.assertFalse(fna.positive)
         self.assertTrue(fna.pulse)
-        self.assertTrue(fna.get_future_eps() == {fna._finish_tx,})
+        self.assertTrue(fna.get_eps() == {fna._finish_tx,})
         self.assertTrue(isinstance(fna, DSFuture))
         self.assertEqual(str(fna), "-DSFilter(a)")
 
@@ -81,7 +81,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertFalse(fa.pulse)
         self.assertFalse(fa.forward_events)
         self.assertTrue(fa.cond == l)
-        self.assertTrue(fa.get_future_eps() == {fa._finish_tx})
+        self.assertTrue(fa.get_eps() == {fa._finish_tx})
         self.assertTrue(isinstance(fa, DSFuture))
         self.assertEqual(str(fa), f"DSFilter({l})")
 
@@ -93,7 +93,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertFalse(fb.pulse)
         self.assertFalse(fb.forward_events)
         self.assertTrue(fb.cond == l)
-        self.assertTrue(fb.get_future_eps() == {fb._finish_tx})
+        self.assertTrue(fb.get_eps() == {fb._finish_tx})
         self.assertTrue(isinstance(fb, DSFuture))
         self.assertEqual(str(fb), f"DSFilter({l})")
 
@@ -105,7 +105,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fc.pulse)
         self.assertFalse(fc.forward_events)
         self.assertTrue(fc.cond == l)
-        self.assertTrue(fc.get_future_eps() == {fc._finish_tx})
+        self.assertTrue(fc.get_eps() == {fc._finish_tx})
         self.assertTrue(isinstance(fc, DSFuture))
         self.assertEqual(str(fc), f"DSFilter({l})")
 
@@ -114,7 +114,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fna.expression == _f.ONE_LINER)
         self.assertFalse(fna.positive)
         self.assertTrue(fna.pulse)
-        self.assertTrue(fna.get_future_eps() == {fna._finish_tx,})
+        self.assertTrue(fna.get_eps() == {fna._finish_tx,})
         self.assertTrue(isinstance(fna, DSFuture))
         self.assertEqual(str(fna), f"-DSFilter({fa.cond})")
 
@@ -132,7 +132,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertFalse(fa.pulse)
         self.assertFalse(fa.forward_events)
         self.assertTrue(fa.cond == fut)
-        self.assertTrue(fa.get_future_eps() == {fa._finish_tx, fut._finish_tx})
+        self.assertTrue(fa.get_eps() == {fa._finish_tx, fut._finish_tx})
         self.assertTrue(isinstance(fa, DSFuture))
         self.assertEqual(str(fa), f"DSFilter({fut})")
 
@@ -144,7 +144,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertFalse(fb.pulse)
         self.assertFalse(fb.forward_events)
         self.assertTrue(fb.cond == fut)
-        self.assertTrue(fb.get_future_eps() == {fb._finish_tx, fut._finish_tx})
+        self.assertTrue(fb.get_eps() == {fb._finish_tx, fut._finish_tx})
         self.assertTrue(isinstance(fb, DSFuture))
         self.assertEqual(str(fb), f"DSFilter({fut})")
 
@@ -156,7 +156,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fc.pulse)
         self.assertFalse(fc.forward_events)
         self.assertTrue(fc.cond == fut)
-        self.assertTrue(fc.get_future_eps() == {fc._finish_tx, fut._finish_tx})
+        self.assertTrue(fc.get_eps() == {fc._finish_tx, fut._finish_tx})
         self.assertTrue(isinstance(fc, DSFuture))
         self.assertEqual(str(fc), f"DSFilter({fut})")
 
@@ -165,7 +165,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fna.expression == _f.ONE_LINER)
         self.assertFalse(fna.positive)
         self.assertTrue(fna.pulse)
-        self.assertTrue(fna.get_future_eps() == {fna._finish_tx, fna.cond._finish_tx})
+        self.assertTrue(fna.get_eps() == {fna._finish_tx, fna.cond._finish_tx})
         self.assertTrue(isinstance(fna, DSFuture))
         self.assertEqual(str(fna), f"-DSFilter({fa.cond})")
 
@@ -186,7 +186,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertFalse(fa.pulse)
         self.assertTrue(fa.forward_events)
         self.assertTrue(fa.cond.generator == g)
-        self.assertTrue(fa.get_future_eps() == {fa._finish_tx, fa.cond._finish_tx})
+        self.assertTrue(fa.get_eps() == {fa._finish_tx, fa.cond._finish_tx})
         self.assertTrue(isinstance(fa, DSFuture))
         self.assertEqual(str(fa), f"DSFilter({fa.cond})")
 
@@ -198,7 +198,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertFalse(fb.pulse)
         self.assertTrue(fb.forward_events)
         self.assertTrue(fb.cond.generator == g)
-        self.assertTrue(fb.get_future_eps() == {fb._finish_tx, fb.cond._finish_tx})
+        self.assertTrue(fb.get_eps() == {fb._finish_tx, fb.cond._finish_tx})
         self.assertTrue(isinstance(fb, DSFuture))
         self.assertEqual(str(fb), f"DSFilter({fb.cond})")
 
@@ -210,7 +210,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fc.pulse)
         self.assertTrue(fc.forward_events)
         self.assertTrue(fc.cond.generator == g)
-        self.assertTrue(fc.get_future_eps() == {fc._finish_tx, fc.cond._finish_tx})
+        self.assertTrue(fc.get_eps() == {fc._finish_tx, fc.cond._finish_tx})
         self.assertTrue(isinstance(fc, DSFuture))
         self.assertEqual(str(fc), f"DSFilter({fc.cond})")
 
@@ -219,7 +219,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fna.expression == _f.ONE_LINER)
         self.assertFalse(fna.positive)
         self.assertTrue(fna.pulse)
-        self.assertTrue(fna.get_future_eps() == {fna._finish_tx, fna.cond._finish_tx})
+        self.assertTrue(fna.get_eps() == {fna._finish_tx, fna.cond._finish_tx})
         self.assertTrue(isinstance(fna, DSFuture))
         self.assertEqual(str(fna), f"-DSFilter({fa.cond})")
 
@@ -250,7 +250,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertFalse(fa.pulse)
         self.assertTrue(fa.forward_events)
         self.assertTrue(fa.cond.generator == g)
-        self.assertTrue(fa.get_future_eps() == {fa._finish_tx, fa.cond._finish_tx})
+        self.assertTrue(fa.get_eps() == {fa._finish_tx, fa.cond._finish_tx})
         self.assertTrue(isinstance(fa, DSFuture))
         self.assertEqual(str(fa), f"DSFilter({fa.cond})")
 
@@ -262,7 +262,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertFalse(fb.pulse)
         self.assertTrue(fb.forward_events)
         self.assertTrue(fb.cond.generator == g)
-        self.assertTrue(fb.get_future_eps() == {fb._finish_tx, fb.cond._finish_tx})
+        self.assertTrue(fb.get_eps() == {fb._finish_tx, fb.cond._finish_tx})
         self.assertTrue(isinstance(fb, DSFuture))
         self.assertEqual(str(fb), f"DSFilter({fb.cond})")
 
@@ -274,7 +274,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fc.pulse)
         self.assertTrue(fc.forward_events)
         self.assertTrue(fc.cond.generator == g)
-        self.assertTrue(fc.get_future_eps() == {fc._finish_tx, fc.cond._finish_tx})
+        self.assertTrue(fc.get_eps() == {fc._finish_tx, fc.cond._finish_tx})
         self.assertTrue(isinstance(fc, DSFuture))
         self.assertEqual(str(fc), f"DSFilter({fc.cond})")
 
@@ -283,7 +283,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fna.expression == _f.ONE_LINER)
         self.assertFalse(fna.positive)
         self.assertTrue(fna.pulse)
-        self.assertTrue(fna.get_future_eps() == {fna._finish_tx, fna.cond._finish_tx})
+        self.assertTrue(fna.get_eps() == {fna._finish_tx, fna.cond._finish_tx})
         self.assertTrue(isinstance(fna, DSFuture))
         self.assertEqual(str(fna), f"-DSFilter({fa.cond})")
 
@@ -310,7 +310,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertFalse(fa.pulse)
         self.assertFalse(fa.forward_events)  # process is like future and does not forward events unless explicitly requested
         self.assertTrue(fa.cond == p)
-        self.assertTrue(fa.get_future_eps() == {fa._finish_tx, p._finish_tx})
+        self.assertTrue(fa.get_eps() == {fa._finish_tx, p._finish_tx})
         self.assertTrue(isinstance(fa, DSFuture))
         self.assertEqual(str(fa), f"DSFilter({p})")
 
@@ -322,7 +322,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertFalse(fb.pulse)
         self.assertFalse(fb.forward_events)  # process is like future and does not forward events unless explicitly requested
         self.assertTrue(fb.cond == p)
-        self.assertTrue(fb.get_future_eps() == {fb._finish_tx, p._finish_tx})
+        self.assertTrue(fb.get_eps() == {fb._finish_tx, p._finish_tx})
         self.assertTrue(isinstance(fb, DSFuture))
         self.assertEqual(str(fb), f"DSFilter({p})")
 
@@ -334,7 +334,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fc.pulse)
         self.assertFalse(fc.forward_events)  # process is like future and does not forward events unless explicitly requested
         self.assertTrue(fc.cond == p)
-        self.assertTrue(fc.get_future_eps() == {fc._finish_tx, p._finish_tx})
+        self.assertTrue(fc.get_eps() == {fc._finish_tx, p._finish_tx})
         self.assertTrue(isinstance(fc, DSFuture))
         self.assertEqual(str(fc), f"DSFilter({p})")
 
@@ -343,7 +343,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fna.expression == _f.ONE_LINER)
         self.assertFalse(fna.positive)
         self.assertTrue(fna.pulse)
-        self.assertTrue(fna.get_future_eps() == {fna._finish_tx, fna.cond._finish_tx})
+        self.assertTrue(fna.get_eps() == {fna._finish_tx, fna.cond._finish_tx})
         self.assertTrue(isinstance(fna, DSFuture))
         self.assertEqual(str(fna), f"-DSFilter({fa.cond})")
 
@@ -882,7 +882,7 @@ class TestDSCircuit(unittest.TestCase):
         self.assertTrue(isinstance(c, DSFuture))
         self.assertTrue(c.expression == any)
         self.assertTrue(c.positive)
-        self.assertTrue(c.get_future_eps() == {fa._finish_tx, fb._finish_tx,})
+        self.assertTrue(c.get_eps() == {fa._finish_tx, fb._finish_tx,})
         self.assertEqual(repr(c), "<class 'dssim.cond.DSCircuit'>0")
         self.assertEqual(str(c), "(DSFilter(a) | DSFilter(b))")
         self.assertTrue((c.setters, c.resetters) == ([fa, fb], []))
@@ -890,7 +890,7 @@ class TestDSCircuit(unittest.TestCase):
         self.assertTrue(isinstance(d, DSFuture))
         self.assertTrue(d.expression == any)
         self.assertTrue(d.positive)
-        self.assertTrue(d.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
+        self.assertTrue(d.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
         self.assertEqual(repr(d), "<class 'dssim.cond.DSCircuit'>1")
         self.assertEqual(str(d), "(DSFilter(a) | DSFilter(b) | DSFilter(c))")
         self.assertTrue((d.setters, d.resetters) == ([fa, fb, fc], []))
@@ -899,7 +899,7 @@ class TestDSCircuit(unittest.TestCase):
         self.assertTrue(isinstance(c, DSFuture))
         self.assertTrue(c.expression == all)
         self.assertTrue(c.positive)
-        self.assertTrue(c.get_future_eps() == {fa._finish_tx, fb._finish_tx,})
+        self.assertTrue(c.get_eps() == {fa._finish_tx, fb._finish_tx,})
         self.assertEqual(repr(c), "<class 'dssim.cond.DSCircuit'>2")
         self.assertEqual(str(c), "(DSFilter(a) & DSFilter(b))")
         self.assertTrue((c.setters, c.resetters) == ([fa, fb], []))
@@ -907,7 +907,7 @@ class TestDSCircuit(unittest.TestCase):
         self.assertTrue(isinstance(d, DSFuture))
         self.assertTrue(d.expression == all)
         self.assertTrue(d.positive)
-        self.assertTrue(d.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
+        self.assertTrue(d.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
         self.assertEqual(repr(d), "<class 'dssim.cond.DSCircuit'>3")
         self.assertEqual(str(d), "(DSFilter(a) & DSFilter(b) & DSFilter(c))")
         self.assertTrue((d.setters, d.resetters) == ([fa, fb, fc], []))
@@ -916,13 +916,13 @@ class TestDSCircuit(unittest.TestCase):
         c = fa & fb | fc
         self.assertTrue(c.expression == any)
         self.assertTrue(c.positive)
-        self.assertTrue(c.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
+        self.assertTrue(c.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
         self.assertEqual(str(c), "((DSFilter(a) & DSFilter(b)) | DSFilter(c))")
         self.assertTrue((len(c.setters), len(c.resetters)) == (2, 0))
         c = fa | fb & fc
         self.assertTrue(c.expression == any)
         self.assertTrue(c.positive)
-        self.assertTrue(d.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
+        self.assertTrue(d.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
         self.assertEqual(str(c), "(DSFilter(a) | (DSFilter(b) & DSFilter(c)))")
         self.assertTrue((len(c.setters), len(c.resetters)) == (2, 0))
 
@@ -930,14 +930,14 @@ class TestDSCircuit(unittest.TestCase):
         c = fa | fb & fc
         self.assertTrue(c.expression == any)
         self.assertTrue(c.positive)
-        self.assertTrue(c.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
+        self.assertTrue(c.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
         self.assertEqual(str(c), "(DSFilter(a) | (DSFilter(b) & DSFilter(c)))")
         self.assertTrue((len(c.setters), len(c.resetters)) == (2, 0))
         d = c | fd
         self.assertTrue(d is c)  # the filter was just updated with a new expression
         self.assertTrue(d.expression == any)
         self.assertTrue(d.positive)
-        self.assertTrue(d.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx, fd._finish_tx})
+        self.assertTrue(d.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx, fd._finish_tx})
         self.assertEqual(str(d), "(DSFilter(a) | (DSFilter(b) & DSFilter(c)) | DSFilter(d))")
         self.assertTrue((len(d.setters), len(d.resetters)) == (3, 0))
         c = fa | fb & fc
@@ -945,21 +945,21 @@ class TestDSCircuit(unittest.TestCase):
         self.assertTrue(d is c)  # the filter was just updated with a new expression
         self.assertTrue(d.expression == any)
         self.assertTrue(d.positive)
-        self.assertTrue(d.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx, fd._finish_tx})
+        self.assertTrue(d.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx, fd._finish_tx})
         self.assertEqual(str(d), "(DSFilter(a) | (DSFilter(b) & DSFilter(c)) | DSFilter(d))")
         self.assertTrue((len(d.setters), len(d.resetters)) == (3, 0))
 
         c = fa & (fb | fc)
         self.assertTrue(c.expression == all)
         self.assertTrue(c.positive)
-        self.assertTrue(c.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
+        self.assertTrue(c.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
         self.assertEqual(str(c), "(DSFilter(a) & (DSFilter(b) | DSFilter(c)))")
         self.assertTrue((len(c.setters), len(c.resetters)) == (2, 0))
         d = c & fd
         self.assertTrue(d is c)  # the filter was just updated with a new expression
         self.assertTrue(d.expression == all)
         self.assertTrue(d.positive)
-        self.assertTrue(d.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx, fd._finish_tx})
+        self.assertTrue(d.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx, fd._finish_tx})
         self.assertEqual(str(d), "(DSFilter(a) & (DSFilter(b) | DSFilter(c)) & DSFilter(d))")
         self.assertTrue((len(d.setters), len(d.resetters)) == (3, 0))
         c = fa & (fb | fc)
@@ -967,14 +967,14 @@ class TestDSCircuit(unittest.TestCase):
         self.assertTrue(d is c)  # the filter was just updated with a new expression
         self.assertTrue(d.expression == all)
         self.assertTrue(d.positive)
-        self.assertTrue(d.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx, fd._finish_tx})
+        self.assertTrue(d.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx, fd._finish_tx})
         self.assertEqual(str(d), "(DSFilter(a) & (DSFilter(b) | DSFilter(c)) & DSFilter(d))")
         self.assertTrue((len(d.setters), len(d.resetters)) == (3, 0))
 
         c = -(fa & fb)
         self.assertTrue(c.expression == all)
         self.assertTrue(not c.positive)
-        self.assertTrue(c.get_future_eps() == {fa._finish_tx, fb._finish_tx})
+        self.assertTrue(c.get_eps() == {fa._finish_tx, fb._finish_tx})
         self.assertEqual(str(c), "-(DSFilter(a) & DSFilter(b))")
         self.assertTrue((len(c.setters), len(c.resetters)) == (2, 0))
 
@@ -986,44 +986,44 @@ class TestDSCircuit(unittest.TestCase):
         c = fna | fb
         self.assertTrue(isinstance(c, DSFuture))
         self.assertTrue(c.expression == any)
-        self.assertTrue(c.get_future_eps() == {fna._finish_tx, fb._finish_tx})
+        self.assertTrue(c.get_eps() == {fna._finish_tx, fb._finish_tx})
         self.assertEqual(str(c), "(DSFilter(b) | -DSFilter(a))")
         self.assertTrue((c.setters, c.resetters) == ([fb], [fna]))
         d = fna | fb | fc
         self.assertTrue(isinstance(d, DSFuture))
         self.assertTrue(d.expression == any)
-        self.assertTrue(d.get_future_eps() == {fna._finish_tx, fb._finish_tx, fc._finish_tx})
+        self.assertTrue(d.get_eps() == {fna._finish_tx, fb._finish_tx, fc._finish_tx})
         self.assertEqual(str(d), "(DSFilter(b) | DSFilter(c) | -DSFilter(a))")
         self.assertTrue((d.setters, d.resetters) == ([fb, fc], [fna]))
         d = fna | fc | fd | fnb
         self.assertTrue(isinstance(d, DSFuture))
         self.assertTrue(d.expression == any)
-        self.assertTrue(d.get_future_eps() == {fna._finish_tx, fc._finish_tx, fd._finish_tx, fnb._finish_tx})
+        self.assertTrue(d.get_eps() == {fna._finish_tx, fc._finish_tx, fd._finish_tx, fnb._finish_tx})
         self.assertEqual(str(d), "(DSFilter(c) | DSFilter(d) | -DSFilter(a) | -DSFilter(b))")
         self.assertTrue((d.setters, d.resetters) == ([fc, fd], [fna, fnb]))
 
         c = fna & fb
         self.assertTrue(isinstance(c, DSFuture))
         self.assertTrue(c.expression == all)
-        self.assertTrue(c.get_future_eps() == {fna._finish_tx, fb._finish_tx,})
+        self.assertTrue(c.get_eps() == {fna._finish_tx, fb._finish_tx,})
         self.assertEqual(str(c), "(DSFilter(b) & -DSFilter(a))")
         self.assertTrue((c.setters, c.resetters) == ([fb], [fna]))
         d = fna & fb & fc
         self.assertTrue(isinstance(d, DSFuture))
         self.assertTrue(d.expression == all)
-        self.assertTrue(d.get_future_eps() == {fna._finish_tx, fb._finish_tx, fc._finish_tx})
+        self.assertTrue(d.get_eps() == {fna._finish_tx, fb._finish_tx, fc._finish_tx})
         self.assertEqual(str(d), "(DSFilter(b) & DSFilter(c) & -DSFilter(a))")
         self.assertTrue((d.setters, d.resetters) == ([fb, fc], [fna]))
         d = fna & fc & fd & fnb
         self.assertTrue(isinstance(d, DSFuture))
         self.assertTrue(d.expression == all)
-        self.assertTrue(d.get_future_eps() == {fna._finish_tx, fc._finish_tx, fd._finish_tx, fnb._finish_tx})
+        self.assertTrue(d.get_eps() == {fna._finish_tx, fc._finish_tx, fd._finish_tx, fnb._finish_tx})
         self.assertEqual(str(d), "(DSFilter(c) & DSFilter(d) & -DSFilter(a) & -DSFilter(b))")
         self.assertTrue((d.setters, d.resetters) == ([fc, fd], [fna, fnb]))
 
         c = -(fa & fb) & fc
         self.assertTrue(c.expression == all)
         self.assertTrue(c.positive)
-        self.assertTrue(c.get_future_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx})
+        self.assertTrue(c.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx})
         self.assertEqual(str(c), "(DSFilter(c) & -(DSFilter(a) & DSFilter(b)))")
         self.assertTrue((len(c.setters), len(c.resetters)) == (1, 1))

@@ -15,11 +15,11 @@
 This file implements advanced logic - with overloading operators
 to be able create advanced expressions for conditions.
 '''
-from typing import List, Set, Any, Dict, Tuple, Union, Optional, Callable, Iterable, TYPE_CHECKING
+from typing import List, Set, Any, Dict, Tuple, Union, Optional, Callable, Iterable, Generator, TYPE_CHECKING
 import inspect
 import copy
 from enum import Enum
-from dssim.base import EventType
+from dssim.base import TimeType, EventType, EventRetType
 from dssim.pubsub_base import CondType, ICondition, CallableConditionMixin, SubscriberMetadata
 from dssim.future import DSFuture
 from dssim.process import DSProcess
@@ -34,7 +34,26 @@ FilterExpression = Callable[[Iterable[object]], bool]
 SignalType = Union["DSFilter", "DSCircuit"]
 SignalList = List[SignalType]
 
-class DSFilter(DSFuture, ICondition, CallableConditionMixin):
+
+class _ConditionWaitMixin:
+    def gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+        retval = yield from self.sim.gwait(timeout=timeout, cond=self, val=val)
+        return retval
+
+    async def wait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> EventType:
+        return await self.sim.wait(timeout=timeout, cond=self, val=val)
+
+    def check_and_gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+        with self.sim.observe_pre(self):
+            retval = yield from self.sim.check_and_gwait(timeout=timeout, cond=self, val=val)
+        return retval
+
+    async def check_and_wait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> EventType:
+        with self.sim.observe_pre(self):
+            return await self.sim.check_and_wait(timeout=timeout, cond=self, val=val)
+
+
+class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin):
     ''' A future which can be used in the circuit. It can be used as a signal to a
     circuit.
 
@@ -148,10 +167,11 @@ class DSFilter(DSFuture, ICondition, CallableConditionMixin):
             return True, self.cond_value()
         return False, None
 
-    def get_future_eps(self) -> Set["DSPub"]:
+    def get_eps(self) -> Set["DSPub"]:
         retval = {self._finish_tx,}
-        if isinstance(self.cond, DSFuture):
-            retval |= self.cond.get_future_eps()
+        get_eps = getattr(self.cond, 'get_eps', None)
+        if callable(get_eps):
+            retval |= set(get_eps())
         return retval
 
     def finish(self, value: EventType) -> None:
@@ -174,7 +194,7 @@ class DSFilter(DSFuture, ICondition, CallableConditionMixin):
         return self.cond if isinstance(self.cond, DSProcess) else None
 
 
-class DSCircuit(DSFuture, ICondition, CallableConditionMixin):
+class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin):
     ''' DSCircuit aggregates several DSFutures / DSCircuits into logical
     circuit (AND / OR).
 
@@ -264,14 +284,14 @@ class DSCircuit(DSFuture, ICondition, CallableConditionMixin):
                 retval.append(fut.finished())
         return retval
 
-    def get_future_eps(self) -> Set["DSPub"]:
+    def get_eps(self) -> Set["DSPub"]:
         retval = set()
         # Including self._finish_tx would create loop dependency when waiting on self (i.e. await self):
         # 1. When this is finished, it would signal _finish_tx
         # 2. _finish_tx would produce an event which would be caught by self and self would signal again
         # Another solution for this is not to produce signaled state if the event comes from self._finish_tx
         for s in self.signals:
-            retval |= s.get_future_eps()
+            retval |= s.get_eps()
         return retval
 
     def check(self, event: EventType) -> Tuple[bool, EventType]:

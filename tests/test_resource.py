@@ -480,7 +480,7 @@ class TestResourceTakeCond(unittest.TestCase):
         self.assertEqual(out, [(0, 2)])
         self.assertEqual(r.amount, 0)
 
-    def test3_take_cond_composes_with_two_resources_via_dscircuit(self):
+    def test3_take_cond_composes_with_two_resources_via_dscircuit_without_consume(self):
         r0 = Resource(amount=0, capacity=1, sim=self.sim)
         r1 = Resource(amount=0, capacity=1, sim=self.sim)
         out = []
@@ -488,8 +488,7 @@ class TestResourceTakeCond(unittest.TestCase):
         def consumer():
             f0 = self.sim.filter(r0.take_cond())
             f1 = self.sim.filter(r1.take_cond())
-            with self.sim.consume(r0.tx_nempty), self.sim.consume(r1.tx_nempty):
-                got = yield from self.sim.gwait(20, cond=f0 & f1)
+            got = yield from (f0 & f1).check_and_gwait(20)
             out.append((self.sim.time, got))
 
         def producer():
@@ -538,6 +537,30 @@ class TestResourceTakeCond(unittest.TestCase):
             ('low_preempted', 3),
         ])
         self.assertEqual(r.amount, 1)
+
+    def test5_take_cond_composes_with_two_resources_async_without_consume(self):
+        r0 = Resource(amount=0, capacity=1, sim=self.sim)
+        r1 = Resource(amount=0, capacity=1, sim=self.sim)
+        out = []
+        filters = {}
+
+        async def consumer():
+            filters['f0'] = self.sim.filter(r0.take_cond())
+            filters['f1'] = self.sim.filter(r1.take_cond())
+            got = await (filters['f0'] | filters['f1']).check_and_wait(20)
+            out.append((self.sim.time, got))
+
+        async def producer():
+            await self.sim.wait(4)
+            r1.put_nowait()
+
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(30)
+
+        self.assertEqual(out, [(4, {filters['f1']: r1.tx_nempty})])
+        self.assertEqual(r0.amount, 0)
+        self.assertEqual(r1.amount, 0)
 
 
 # ---------------------------------------------------------------------------
