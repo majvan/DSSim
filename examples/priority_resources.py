@@ -11,7 +11,7 @@ The resources are preemptive PriorityResource instances.
 '''
 
 from dssim import DSSimulation, DSResourcePreempted
-from dssim.process import _TestObject
+from dssim.process import TestObject
 
 
 def main() -> None:
@@ -51,8 +51,8 @@ def main() -> None:
         wait_or = sim.time - t0
 
         assert wait_or == 0, f'OR wait expected 0, got {wait_or}'
-        assert got_or == {f_cpu: _TestObject}, f'Unexpected OR result: {got_or}'
-        assert got_or[f_cpu] is _TestObject
+        assert got_or == {f_cpu: TestObject}, f'Unexpected OR result: {got_or}'
+        assert got_or[f_cpu] is TestObject
         resource_or = f_cpu.cond.resource
         assert resource_or is cpu
         assert resource_or.held_amount(sim.pid) == 1
@@ -70,7 +70,7 @@ def main() -> None:
         assert wait_and == 3, f'AND wait expected 3, got {wait_and}'
         assert preempted_at['time'] is not None, 'Expected low holder to be preempted.'
         assert preempted_at['time'] == 1, f'Expected preemption at t=1, got {preempted_at["time"]}'
-        assert got_and == {f_cpu: _TestObject, f_io: io.tx_nempty}, f'Unexpected AND result: {got_and}'
+        assert got_and == {f_cpu: TestObject, f_io: io.tx_nempty}, f'Unexpected AND result: {got_and}'
         resources_and = {flt.cond.resource for flt in got_and.keys()}
         assert resources_and == {cpu, io}
         assert cpu.held_amount(sim.pid) == 1
