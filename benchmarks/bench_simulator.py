@@ -2,7 +2,7 @@
 '''
 Benchmark: DSSim simulator core throughput
 
-Four scenarios
+Five scenarios
 --------------
 1. timed-callbacks : N events at strictly increasing timestamps dispatched to
                      one generator; stresses schedule_event + time_queue pop/dispatch
@@ -12,6 +12,8 @@ Four scenarios
                      stresses zero-time dispatch with dynamic event generation
 4. generator-wakeup: a generator yields N times, woken by N zero-time events from a
                      producer generator; stresses coroutine send path in the loop
+5. cross-signal    : two waiting processes alternately wake each other with zero-time
+                     signals; stresses mutual blocking/unblocking dispatch path
 
 Each scenario is measured for three DSSim configurations:
   - raw        : DSSimulation(layer2=None), schedule_event(), plain yield
@@ -166,6 +168,41 @@ def dssim_raw_generator_wakeup(n):
     assert received == n, f'raw generator-wakeup: expected {n}, got {received}'
 
 
+def dssim_raw_cross_signal(n):
+    '''
+    Two generators wait on each other and alternately wake each other via
+    signal.  Each received signal counts as one step; total steps == N.
+    '''
+    sim = DSSimulation(layer2=None)
+    total = 0
+    a_cb = None
+    b_cb = None
+
+    def proc_a():
+        nonlocal total, b_cb
+        while True:
+            yield
+            total += 1
+            if total < n:
+                sim.signal(None, b_cb)
+
+    def proc_b():
+        nonlocal total, a_cb
+        while True:
+            yield
+            total += 1
+            if total < n:
+                sim.signal(None, a_cb)
+
+    a_cb = proc_a()
+    b_cb = proc_b()
+    sim.schedule_event(0, None, a_cb)  # prime to first yield
+    sim.schedule_event(0, None, b_cb)  # prime to first yield
+    sim.signal(None, a_cb)             # seed ping-pong
+    sim.run()
+    assert total == n, f'raw cross-signal: expected {n}, got {total}'
+
+
 # ===========================================================================
 # DSSim — TinyLayer2
 # ===========================================================================
@@ -269,6 +306,41 @@ def dssim_tiny_generator_wakeup(n):
     assert received == n, f'tiny generator-wakeup: expected {n}, got {received}'
 
 
+def dssim_tiny_cross_signal(n):
+    '''
+    Two TinyLayer2 generators alternately wake each other via signal while
+    both spend most of their time blocked in gwait().
+    '''
+    sim = DSSimulation(layer2=TinyLayer2)
+    total = 0
+    a_cb = None
+    b_cb = None
+
+    def proc_a():
+        nonlocal total, b_cb
+        while True:
+            yield from sim.gwait()
+            total += 1
+            if total < n:
+                sim.signal(None, b_cb)
+
+    def proc_b():
+        nonlocal total, a_cb
+        while True:
+            yield from sim.gwait()
+            total += 1
+            if total < n:
+                sim.signal(None, a_cb)
+
+    a_cb = proc_a()
+    b_cb = proc_b()
+    sim.schedule(0, a_cb)  # prime to first gwait
+    sim.schedule(0, b_cb)  # prime to first gwait
+    sim.signal(None, a_cb) # seed ping-pong
+    sim.run()
+    assert total == n, f'tiny cross-signal: expected {n}, got {total}'
+
+
 # ===========================================================================
 # DSSim — PubSubLayer2
 # ===========================================================================
@@ -369,6 +441,41 @@ def dssim_pubsub_generator_wakeup(n):
     assert received == n, f'pubsub generator-wakeup: expected {n}, got {received}'
 
 
+def dssim_pubsub_cross_signal(n):
+    '''
+    Two DSProcesses alternately wake each other via signal while both block
+    in gwait(cond=AlwaysTrue) between wakeups.
+    '''
+    sim = DSSimulation(layer2=PubSubLayer2)
+    total = 0
+    a_proc = None
+    b_proc = None
+
+    def proc_a():
+        nonlocal total, b_proc
+        while True:
+            yield from sim.gwait(cond=AlwaysTrue)
+            total += 1
+            if total < n:
+                sim.signal(None, b_proc)
+
+    def proc_b():
+        nonlocal total, a_proc
+        while True:
+            yield from sim.gwait(cond=AlwaysTrue)
+            total += 1
+            if total < n:
+                sim.signal(None, a_proc)
+
+    a_proc = sim.schedule(0, proc_a())      # prime to first gwait
+    b_proc = sim.schedule(0, proc_b())      # prime to first gwait
+    # Seed via time-queue at t=0 (inserted after starters) so both DSProcesses
+    # are initialized before the first cross-signal is delivered.
+    sim.schedule_event(0, None, a_proc)
+    sim.run()
+    assert total == n, f'pubsub cross-signal: expected {n}, got {total}'
+
+
 # ===========================================================================
 # SimPy
 # ===========================================================================
@@ -460,6 +567,42 @@ def simpy_process_wakeup(n):
     env.process(producer())
     env.run()
     assert received == n, f'simpy process-wakeup: expected {n}, got {received}'
+
+
+def simpy_cross_signal(n):
+    '''
+    Two SimPy processes alternately wake each other by succeeding each
+    other's event, then block again on a fresh event.
+    '''
+    env = _simpy.Environment()
+    total = {'n': 0}
+    wake = {'a': env.event(), 'b': env.event()}
+
+    def proc_a():
+        while True:
+            yield wake['a']
+            wake['a'] = env.event()
+            total['n'] += 1
+            if total['n'] < n:
+                wake['b'].succeed(None)
+            else:
+                break
+
+    def proc_b():
+        while True:
+            yield wake['b']
+            wake['b'] = env.event()
+            total['n'] += 1
+            if total['n'] < n:
+                wake['a'].succeed(None)
+            else:
+                break
+
+    env.process(proc_a())
+    env.process(proc_b())
+    wake['a'].succeed(None)  # seed ping-pong
+    env.run()
+    assert total['n'] == n, f'simpy cross-signal: expected {n}, got {total["n"]}'
 
 
 # ===========================================================================
@@ -572,6 +715,52 @@ def salabim_generator_wakeup(n):
     assert received[0] == n, f'salabim generator-wakeup: expected {n}, got {received[0]}'
 
 
+def salabim_cross_signal(n):
+    '''
+    Two components passivate and alternately activate each other; each
+    activation counts as one step until N total steps.
+    '''
+    env = _salabim.Environment(trace=False)
+    total = [0]
+    a_ref = [None]
+    b_ref = [None]
+
+    class A(_salabim.Component):
+        def process(self):
+            while True:
+                yield self.passivate()
+                total[0] += 1
+                if total[0] < n:
+                    b_ref[0].activate()
+                else:
+                    break
+
+    class B(_salabim.Component):
+        def process(self):
+            while True:
+                yield self.passivate()
+                total[0] += 1
+                if total[0] < n:
+                    a_ref[0].activate()
+                else:
+                    break
+
+    if n <= 0:
+        return
+
+    class Seeder(_salabim.Component):
+        def process(self):
+            # Let A and B reach passivate() first, then seed the first wakeup.
+            yield self.hold(0)
+            a_ref[0].activate()
+
+    a_ref[0] = A(env=env)
+    b_ref[0] = B(env=env)
+    Seeder(env=env)
+    env.run()
+    assert total[0] == n, f'salabim cross-signal: expected {n}, got {total[0]}'
+
+
 # ===========================================================================
 # main
 # ===========================================================================
@@ -610,5 +799,13 @@ if __name__ == '__main__':
     report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_generator_wakeup, N_EVENTS))
     report('SimPy            ', N_EVENTS, *bench(simpy_process_wakeup,           N_EVENTS))
     report('salabim          ', N_EVENTS, *bench(salabim_generator_wakeup,       N_EVENTS))
+
+    # ---- scenario 5 --------------------------------------------------------
+    print(f'\n=== Scenario 5: cross-signal  (2 waiting peers ping-pong, N={N_EVENTS:,}) ===')
+    report('DSSim raw        ', N_EVENTS, *bench(dssim_raw_cross_signal,    N_EVENTS))
+    report('DSSim TinyLayer2 ', N_EVENTS, *bench(dssim_tiny_cross_signal,   N_EVENTS))
+    report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_cross_signal, N_EVENTS))
+    report('SimPy            ', N_EVENTS, *bench(simpy_cross_signal,         N_EVENTS))
+    report('salabim          ', N_EVENTS, *bench(salabim_cross_signal,       N_EVENTS))
 
     print()
