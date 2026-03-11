@@ -13,5 +13,9 @@ venv*/
 .venv*/
 # Coverage output
 .coverage
-
-
+# MkDocs output
+site/
+# Docs build output (MkDocs/Sphinx)
+docs/site/
+docs/_build/
+docs/source/_build/
