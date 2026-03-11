@@ -34,7 +34,7 @@ class Resource(DSStatefulComponent):
     * ``get`` consumes amount from the pool.
     * ``put`` adds amount to the pool.
 
-    Unlike TinyResource, wakeups are pubsub-driven via ``tx_nempty``/``tx_nfull``.
+    Unlike LiteResource, wakeups are pubsub-driven via ``tx_nempty``/``tx_nfull``.
     '''
 
     class _TakeCond(ICondition, CallableConditionMixin):

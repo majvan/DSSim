@@ -25,7 +25,7 @@ Key difference from process_schedule.py:
   process_schedule.py  ->  DSComponent + SimProcessMixin.gwait (condition-aware)
   coro_schedule.py     ->  standalone generators + SimWaitMixin.gwait (timeout only)
 '''
-from dssim import DSSimulation, TinyLayer2
+from dssim import DSSimulation, LiteLayer2
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +105,7 @@ async def do_somethingC_async(sim, taskA, taskB):
 
 
 if __name__ == '__main__':
-    sim = DSSimulation(layer2=TinyLayer2)
+    sim = DSSimulation(layer2=LiteLayer2)
 
     # --- generator set ---
     print('=== generator variant ===')

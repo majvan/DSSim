@@ -12,17 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Tests for TinyQueue — a minimal queue for TinyLayer2 simulations.
+Tests for LiteQueue — a minimal queue for LiteLayer2 simulations.
 '''
 import unittest
-from dssim.simulation import DSSimulation, TinyLayer2
-from dssim.components.tinyqueue import TinyQueue
+from dssim.simulation import DSSimulation, LiteLayer2
+from dssim.components.litequeue import LiteQueue
 
 
 def _make(capacity=float('inf')):
-    '''Return a fresh (sim, TinyQueue) pair.'''
-    sim = DSSimulation(layer2=TinyLayer2)
-    q = TinyQueue(capacity=capacity, sim=sim)
+    '''Return a fresh (sim, LiteQueue) pair.'''
+    sim = DSSimulation(layer2=LiteLayer2)
+    q = LiteQueue(capacity=capacity, sim=sim)
     return sim, q
 
 
@@ -30,8 +30,8 @@ def _make(capacity=float('inf')):
 # Sequence protocol (no simulation loop needed)
 # ---------------------------------------------------------------------------
 
-class TestTinyQueueSequenceProtocol(unittest.TestCase):
-    '''TinyQueue exposes len / bool / iter / contains like a container.'''
+class TestLiteQueueSequenceProtocol(unittest.TestCase):
+    '''LiteQueue exposes len / bool / iter / contains like a container.'''
 
     def setUp(self):
         _, self.q = _make()
@@ -40,7 +40,7 @@ class TestTinyQueueSequenceProtocol(unittest.TestCase):
         self.assertEqual(len(self.q), 0)
 
     def test2_bool_always_true(self):
-        '''TinyQueue is always truthy — even when its buffer is empty.
+        '''LiteQueue is always truthy — even when its buffer is empty.
 
         Python falls back to __len__ when __bool__ is absent, which would make
         an empty queue falsy and break signal's
@@ -76,7 +76,7 @@ class TestTinyQueueSequenceProtocol(unittest.TestCase):
 # Nowait operations (no simulation loop needed)
 # ---------------------------------------------------------------------------
 
-class TestTinyQueueNowait(unittest.TestCase):
+class TestLiteQueueNowait(unittest.TestCase):
     '''put_nowait / get_nowait bypass the simulation event loop.'''
 
     def test1_put_nowait_returns_item(self):
@@ -133,7 +133,7 @@ class TestTinyQueueNowait(unittest.TestCase):
 # Blocking get (gget)
 # ---------------------------------------------------------------------------
 
-class TestTinyQueueGget(unittest.TestCase):
+class TestLiteQueueGget(unittest.TestCase):
 
     def test1_gget_returns_immediately_when_nonempty(self):
         '''gget on a non-empty queue never suspends the caller.'''
@@ -209,7 +209,7 @@ class TestTinyQueueGget(unittest.TestCase):
 # Blocking put (gput)
 # ---------------------------------------------------------------------------
 
-class TestTinyQueueGput(unittest.TestCase):
+class TestLiteQueueGput(unittest.TestCase):
 
     def test1_gput_returns_immediately_when_space_available(self):
         '''gput on a queue with space never suspends the caller.'''
@@ -289,7 +289,7 @@ class TestTinyQueueGput(unittest.TestCase):
 # Mixed / stress scenarios
 # ---------------------------------------------------------------------------
 
-class TestTinyQueueMixed(unittest.TestCase):
+class TestLiteQueueMixed(unittest.TestCase):
 
     def test1_multiple_getters_multiple_putters_bounded(self):
         '''N producers and N consumers on a capacity=1 queue exchange N items.'''

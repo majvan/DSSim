@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Benchmark: DSSim generator vs coroutine dispatch (raw + TinyLayer2)
+Benchmark: DSSim generator vs coroutine dispatch (raw + LiteLayer2)
 
 Goal
 ----
 Compare generator consumers against coroutine consumers in:
 1. raw DSSim (``layer2=None``)
-2. TinyLayer2 DSSim (``layer2=TinyLayer2``)
+2. LiteLayer2 DSSim (``layer2=LiteLayer2``)
 
 Both variants use object event delivery (``schedule_event`` / ``signal``).
 
@@ -42,7 +42,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from dssim import DSSimulation, TinyLayer2
+from dssim import DSSimulation, LiteLayer2
 
 
 # ---------------------------------------------------------------------------
@@ -135,8 +135,8 @@ def raw_timed_coroutine(n):
     assert last_event is payload, 'timed coroutine: final payload mismatch'
 
 
-def tiny_timed_generator(n):
-    sim = DSSimulation(layer2=TinyLayer2)
+def lite_timed_generator(n):
+    sim = DSSimulation(layer2=LiteLayer2)
     payload = {'kind': 'timed'}
     handled = 0
     last_event = None
@@ -154,12 +154,12 @@ def tiny_timed_generator(n):
         sim.schedule_event(i + 1, payload, consumer)
     sim.run()
 
-    assert handled == n, f'tiny timed generator: expected {n}, got {handled}'
-    assert last_event is payload, 'tiny timed generator: final payload mismatch'
+    assert handled == n, f'lite timed generator: expected {n}, got {handled}'
+    assert last_event is payload, 'lite timed generator: final payload mismatch'
 
 
-def tiny_timed_coroutine(n):
-    sim = DSSimulation(layer2=TinyLayer2)
+def lite_timed_coroutine(n):
+    sim = DSSimulation(layer2=LiteLayer2)
     payload = {'kind': 'timed'}
     handled = 0
     last_event = None
@@ -177,8 +177,8 @@ def tiny_timed_coroutine(n):
         sim.schedule_event(i + 1, payload, consumer)
     sim.run()
 
-    assert handled == n, f'tiny timed coroutine: expected {n}, got {handled}'
-    assert last_event is payload, 'tiny timed coroutine: final payload mismatch'
+    assert handled == n, f'lite timed coroutine: expected {n}, got {handled}'
+    assert last_event is payload, 'lite timed coroutine: final payload mismatch'
 
 
 # ---------------------------------------------------------------------------
@@ -231,8 +231,8 @@ def raw_now_burst_coroutine(n):
     assert last_event is payload, 'now-burst coroutine: final payload mismatch'
 
 
-def tiny_now_burst_generator(n):
-    sim = DSSimulation(layer2=TinyLayer2)
+def lite_now_burst_generator(n):
+    sim = DSSimulation(layer2=LiteLayer2)
     payload = {'kind': 'now'}
     handled = 0
     last_event = None
@@ -250,12 +250,12 @@ def tiny_now_burst_generator(n):
         sim.signal(payload, consumer)
     sim.run()
 
-    assert handled == n, f'tiny now-burst generator: expected {n}, got {handled}'
-    assert last_event is payload, 'tiny now-burst generator: final payload mismatch'
+    assert handled == n, f'lite now-burst generator: expected {n}, got {handled}'
+    assert last_event is payload, 'lite now-burst generator: final payload mismatch'
 
 
-def tiny_now_burst_coroutine(n):
-    sim = DSSimulation(layer2=TinyLayer2)
+def lite_now_burst_coroutine(n):
+    sim = DSSimulation(layer2=LiteLayer2)
     payload = {'kind': 'now'}
     handled = 0
     last_event = None
@@ -273,8 +273,8 @@ def tiny_now_burst_coroutine(n):
         sim.signal(payload, consumer)
     sim.run()
 
-    assert handled == n, f'tiny now-burst coroutine: expected {n}, got {handled}'
-    assert last_event is payload, 'tiny now-burst coroutine: final payload mismatch'
+    assert handled == n, f'lite now-burst coroutine: expected {n}, got {handled}'
+    assert last_event is payload, 'lite now-burst coroutine: final payload mismatch'
 
 
 if __name__ == '__main__':
@@ -284,24 +284,24 @@ if __name__ == '__main__':
     print(f'=== Scenario 1: timed-dispatch (N={N_EVENTS:,}) ===')
     g1 = bench(raw_timed_generator, N_EVENTS)
     c1 = bench(raw_timed_coroutine, N_EVENTS)
-    tg1 = bench(tiny_timed_generator, N_EVENTS)
-    tc1 = bench(tiny_timed_coroutine, N_EVENTS)
+    tg1 = bench(lite_timed_generator, N_EVENTS)
+    tc1 = bench(lite_timed_coroutine, N_EVENTS)
     report('DSSim raw generator', N_EVENTS, *g1)
     report('DSSim raw coroutine', N_EVENTS, *c1)
-    report('DSSim tiny generator', N_EVENTS, *tg1)
-    report('DSSim tiny coroutine', N_EVENTS, *tc1)
+    report('DSSim lite generator', N_EVENTS, *tg1)
+    report('DSSim lite coroutine', N_EVENTS, *tc1)
     print(f'  raw  coroutine/generator mean ratio: {c1[1] / g1[1]:.3f}x')
-    print(f'  tiny coroutine/generator mean ratio: {tc1[1] / tg1[1]:.3f}x')
+    print(f'  lite coroutine/generator mean ratio: {tc1[1] / tg1[1]:.3f}x')
 
     print(f'\n=== Scenario 2: now-burst (N={N_EVENTS:,}) ===')
     g2 = bench(raw_now_burst_generator, N_EVENTS)
     c2 = bench(raw_now_burst_coroutine, N_EVENTS)
-    tg2 = bench(tiny_now_burst_generator, N_EVENTS)
-    tc2 = bench(tiny_now_burst_coroutine, N_EVENTS)
+    tg2 = bench(lite_now_burst_generator, N_EVENTS)
+    tc2 = bench(lite_now_burst_coroutine, N_EVENTS)
     report('DSSim raw generator', N_EVENTS, *g2)
     report('DSSim raw coroutine', N_EVENTS, *c2)
-    report('DSSim TinyLayer2 generator', N_EVENTS, *tg2)
-    report('DSSim TinyLayer2 coroutine', N_EVENTS, *tc2)
+    report('DSSim LiteLayer2 generator', N_EVENTS, *tg2)
+    report('DSSim LiteLayer2 coroutine', N_EVENTS, *tc2)
     print(f'  raw  coroutine/generator mean ratio: {c2[1] / g2[1]:.3f}x')
-    print(f'  tiny coroutine/generator mean ratio: {tc2[1] / tg2[1]:.3f}x')
+    print(f'  lite coroutine/generator mean ratio: {tc2[1] / tg2[1]:.3f}x')
     print()

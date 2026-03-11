@@ -220,20 +220,20 @@ def dssim_cross_notify(n, k, capacity):
 
 
 # ===========================================================================
-# DSSim TinyQueue  (TinyLayer2)
+# DSSim LiteQueue  (LiteLayer2)
 # ===========================================================================
-from dssim.simulation import TinyLayer2
-from dssim.components.tinyqueue import TinyQueue
+from dssim.simulation import LiteLayer2
+from dssim.components.litequeue import LiteQueue
 
 
-def tiny_free_flow(n):
+def lite_free_flow(n):
     '''
-    Unbounded TinyQueue.  Items are pre-filled via put_nowait before the sim
+    Unbounded LiteQueue.  Items are pre-filled via put_nowait before the sim
     starts (equivalent to the DSSim Queue producer which also uses put_nowait
     without blocking).  Consumer drains via gget inside the sim loop.
     '''
-    sim = DSSimulation(layer2=TinyLayer2)
-    q = TinyQueue(sim=sim)
+    sim = DSSimulation(layer2=LiteLayer2)
+    q = LiteQueue(sim=sim)
     got = 0
 
     for i in range(n):
@@ -247,16 +247,16 @@ def tiny_free_flow(n):
 
     sim.schedule(0, consumer())
     sim.run()
-    assert got == n, f'tiny free-flow: expected {n}, got {got}'
+    assert got == n, f'lite free-flow: expected {n}, got {got}'
 
 
-def tiny_backpressure(n, capacity):
+def lite_backpressure(n, capacity):
     '''
-    Bounded TinyQueue (capacity).  Producer uses gput (blocks when full);
+    Bounded LiteQueue (capacity).  Producer uses gput (blocks when full);
     consumer uses gget (blocks when empty).  Models tight put/get alternation.
     '''
-    sim = DSSimulation(layer2=TinyLayer2)
-    q = TinyQueue(capacity=capacity, sim=sim)
+    sim = DSSimulation(layer2=LiteLayer2)
+    q = LiteQueue(capacity=capacity, sim=sim)
     got = 0
 
     def producer():
@@ -272,17 +272,17 @@ def tiny_backpressure(n, capacity):
     sim.schedule(0, producer())
     sim.schedule(0, consumer())
     sim.run()
-    assert got == n, f'tiny backpressure: expected {n}, got {got}'
+    assert got == n, f'lite backpressure: expected {n}, got {got}'
 
 
-def tiny_many_workers(n, k):
+def lite_many_workers(n, k):
     '''
-    K producers + K consumers sharing one unbounded TinyQueue.  Producers use
+    K producers + K consumers sharing one unbounded LiteQueue.  Producers use
     put_nowait and yield once so consumers get a chance to run, matching the
     SimPy and DSSim Queue approach.
     '''
-    sim = DSSimulation(layer2=TinyLayer2)
-    q = TinyQueue(sim=sim)
+    sim = DSSimulation(layer2=LiteLayer2)
+    q = LiteQueue(sim=sim)
     per = n // k
     got = 0
 
@@ -301,17 +301,17 @@ def tiny_many_workers(n, k):
         sim.schedule(0, producer())
         sim.schedule(0, consumer())
     sim.run()
-    assert got == n, f'tiny many-workers: expected {n}, got {got}'
+    assert got == n, f'lite many-workers: expected {n}, got {got}'
 
 
-def tiny_blocked_getters(n, k):
+def lite_blocked_getters(n, k):
     '''
-    K getters all block on an empty TinyQueue before the producer starts.
+    K getters all block on an empty LiteQueue before the producer starts.
     Producer puts N items one at a time with gwait(0) between each so
     exactly one getter wakes per item.  Stresses the _GET_READY cascade path.
     '''
-    sim = DSSimulation(layer2=TinyLayer2)
-    q = TinyQueue(sim=sim)
+    sim = DSSimulation(layer2=LiteLayer2)
+    q = LiteQueue(sim=sim)
     per = n // k
     got = 0
 
@@ -330,17 +330,17 @@ def tiny_blocked_getters(n, k):
         sim.schedule(0, getter())    # getters first → all block before producer
     sim.schedule(0, producer())
     sim.run()
-    assert got == n, f'tiny blocked-getters: expected {n}, got {got}'
+    assert got == n, f'lite blocked-getters: expected {n}, got {got}'
 
 
-def tiny_cross_notify(n, k, capacity):
+def lite_cross_notify(n, k, capacity):
     '''
     K consumers scheduled before K producers; capacity=1 keeps the queue
     almost always full or empty.  Stresses the put/get interleaving path in
-    TinyQueue's send() dispatcher.
+    LiteQueue's send() dispatcher.
     '''
-    sim = DSSimulation(layer2=TinyLayer2)
-    q = TinyQueue(capacity=capacity, sim=sim)
+    sim = DSSimulation(layer2=LiteLayer2)
+    q = LiteQueue(capacity=capacity, sim=sim)
     per = n // k
     got = 0
 
@@ -358,7 +358,7 @@ def tiny_cross_notify(n, k, capacity):
         sim.schedule(0, consumer())  # consumers first → subscribe before producers
         sim.schedule(0, producer())
     sim.run()
-    assert got == n, f'tiny cross-notify: expected {n}, got {got}'
+    assert got == n, f'lite cross-notify: expected {n}, got {got}'
 
 
 # ===========================================================================
@@ -666,35 +666,35 @@ if __name__ == '__main__':
     # ---- scenario 1 --------------------------------------------------------
     print(f'=== Scenario 1: free-flow  (unbounded, 1P + 1C, N={N_EVENTS:,}) ===')
     report('DSSim  Queue',     N_EVENTS, *bench(dssim_free_flow,  N_EVENTS))
-    report('DSSim  TinyQueue', N_EVENTS, *bench(tiny_free_flow,   N_EVENTS))
+    report('DSSim  LiteQueue', N_EVENTS, *bench(lite_free_flow,   N_EVENTS))
     report('SimPy  Store',     N_EVENTS, *bench(simpy_free_flow,  N_EVENTS))
     report('salabim Store',    N_EVENTS, *bench(sal_free_flow,    N_EVENTS))
 
     # ---- scenario 2 --------------------------------------------------------
     print(f'\n=== Scenario 2: backpressure  (capacity={CAPACITY}, 1P + 1C, N={N_EVENTS:,}) ===')
     report('DSSim  Queue',     N_EVENTS, *bench(dssim_backpressure, N_EVENTS, CAPACITY))
-    report('DSSim  TinyQueue', N_EVENTS, *bench(tiny_backpressure,  N_EVENTS, CAPACITY))
+    report('DSSim  LiteQueue', N_EVENTS, *bench(lite_backpressure,  N_EVENTS, CAPACITY))
     report('SimPy  Store',     N_EVENTS, *bench(simpy_backpressure, N_EVENTS, CAPACITY))
     report('salabim Store',    N_EVENTS, *bench(sal_backpressure,   N_EVENTS, CAPACITY))
 
     # ---- scenario 3 --------------------------------------------------------
     print(f'\n=== Scenario 3: many-workers  ({N_WORKERS}P + {N_WORKERS}C, N={N_EVENTS:,}) ===')
     report('DSSim  Queue',     N_EVENTS, *bench(dssim_many_workers, N_EVENTS, N_WORKERS))
-    report('DSSim  TinyQueue', N_EVENTS, *bench(tiny_many_workers,  N_EVENTS, N_WORKERS))
+    report('DSSim  LiteQueue', N_EVENTS, *bench(lite_many_workers,  N_EVENTS, N_WORKERS))
     report('SimPy  Store',     N_EVENTS, *bench(simpy_many_workers, N_EVENTS, N_WORKERS))
     report('salabim Store',    N_EVENTS, *bench(sal_many_workers,   N_EVENTS, N_WORKERS))
 
     # ---- scenario 4 --------------------------------------------------------
     print(f'\n=== Scenario 4: blocked-getters  ({N_WORKERS} getters, 1P, N={N_EVENTS:,}) ===')
     report('DSSim  Queue',     N_EVENTS, *bench(dssim_blocked_getters, N_EVENTS, N_WORKERS))
-    report('DSSim  TinyQueue', N_EVENTS, *bench(tiny_blocked_getters,  N_EVENTS, N_WORKERS))
+    report('DSSim  LiteQueue', N_EVENTS, *bench(lite_blocked_getters,  N_EVENTS, N_WORKERS))
     report('SimPy  Store',     N_EVENTS, *bench(simpy_blocked_getters, N_EVENTS, N_WORKERS))
     report('salabim Store',    N_EVENTS, *bench(sal_blocked_getters,   N_EVENTS, N_WORKERS))
 
     # ---- scenario 5 --------------------------------------------------------
     print(f'\n=== Scenario 5: cross-notify  ({CROSS_WORKERS}P + {CROSS_WORKERS}C, capacity=1, N={N_EVENTS:,}) ===')
     report('DSSim  Queue',     N_EVENTS, *bench(dssim_cross_notify, N_EVENTS, CROSS_WORKERS, 1))
-    report('DSSim  TinyQueue', N_EVENTS, *bench(tiny_cross_notify,  N_EVENTS, CROSS_WORKERS, 1))
+    report('DSSim  LiteQueue', N_EVENTS, *bench(lite_cross_notify,  N_EVENTS, CROSS_WORKERS, 1))
     report('SimPy  Store',     N_EVENTS, *bench(simpy_cross_notify, N_EVENTS, CROSS_WORKERS, 1))
     report('salabim Store',    N_EVENTS, *bench(sal_cross_notify,   N_EVENTS, CROSS_WORKERS, 1))
 

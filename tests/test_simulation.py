@@ -17,7 +17,7 @@ No DSProcess, DSPub or DSSub objects are used here.
 '''
 import unittest
 from unittest.mock import Mock, call
-from dssim import DSAbsTime, DSSimulation, DSSchedulable, TinyLayer2
+from dssim import DSAbsTime, DSSimulation, DSSchedulable, LiteLayer2
 from dssim.simulation import VoidSubscriber, void_subscriber
 
 
@@ -296,12 +296,12 @@ class TestVoidSubscriber(unittest.TestCase):
 
     def test6_simulation_parent_process_defaults_to_void_subscriber(self):
         ''' After construction, sim._parent_process is the void_subscriber singleton. '''
-        sim = DSSimulation(layer2=TinyLayer2)
+        sim = DSSimulation(layer2=LiteLayer2)
         self.assertIs(sim._parent_process, void_subscriber)
 
     def test7_simulation_restart_restores_void_subscriber(self):
         ''' restart() resets _parent_process back to void_subscriber. '''
-        sim = DSSimulation(layer2=TinyLayer2)
+        sim = DSSimulation(layer2=LiteLayer2)
         sim._parent_process = Mock()
         sim.restart()
         self.assertIs(sim._parent_process, void_subscriber)
@@ -320,8 +320,8 @@ class TestSimWaitMixin(unittest.TestCase):
     wrapping generators in DSProcess or overriding the wait methods. '''
 
     def _make_sim(self):
-        ''' Minimal simulation: TinyLayer2 only (SimWaitMixin + SimScheduleMixin). '''
-        return DSSimulation(layer2=TinyLayer2)
+        ''' Minimal simulation: LiteLayer2 only (SimWaitMixin + SimScheduleMixin). '''
+        return DSSimulation(layer2=LiteLayer2)
 
     def test1_gwait_returns_none_on_timeout(self):
         ''' gwait(timeout) returns None when the timeout fires with no prior event. '''
@@ -397,37 +397,37 @@ class TestSimWaitMixin(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# SimTinyQueueMixin — factory method available on TinyLayer2 simulations
+# SimLiteQueueMixin — factory method available on LiteLayer2 simulations
 # ---------------------------------------------------------------------------
 
-class TestSimTinyQueueMixin(unittest.TestCase):
-    ''' Tests for SimTinyQueueMixin.tiny_queue() factory. '''
+class TestSimLiteQueueMixin(unittest.TestCase):
+    ''' Tests for SimLiteQueueMixin.lite_queue() factory. '''
 
-    def test1_tiny_queue_returns_tiny_queue_instance(self):
-        ''' sim.tiny_queue() returns a TinyQueue bound to the sim. '''
-        from dssim.components.tinyqueue import TinyQueue
-        sim = DSSimulation(layer2=TinyLayer2)
-        q = sim.tiny_queue()
-        self.assertIsInstance(q, TinyQueue)
+    def test1_lite_queue_returns_lite_queue_instance(self):
+        ''' sim.lite_queue() returns a LiteQueue bound to the sim. '''
+        from dssim.components.litequeue import LiteQueue
+        sim = DSSimulation(layer2=LiteLayer2)
+        q = sim.lite_queue()
+        self.assertIsInstance(q, LiteQueue)
         self.assertIs(q.sim, sim)
 
-    def test2_tiny_queue_passes_capacity(self):
-        ''' Capacity keyword argument is forwarded to TinyQueue. '''
-        sim = DSSimulation(layer2=TinyLayer2)
-        q = sim.tiny_queue(capacity=3)
+    def test2_lite_queue_passes_capacity(self):
+        ''' Capacity keyword argument is forwarded to LiteQueue. '''
+        sim = DSSimulation(layer2=LiteLayer2)
+        q = sim.lite_queue(capacity=3)
         self.assertEqual(q.capacity, 3)
 
-    def test3_tiny_queue_wrong_sim_raises(self):
+    def test3_lite_queue_wrong_sim_raises(self):
         ''' Passing a different sim instance raises ValueError. '''
-        sim1 = DSSimulation(layer2=TinyLayer2)
-        sim2 = DSSimulation(layer2=TinyLayer2)
+        sim1 = DSSimulation(layer2=LiteLayer2)
+        sim2 = DSSimulation(layer2=LiteLayer2)
         with self.assertRaises(ValueError):
-            sim1.tiny_queue(sim=sim2)
+            sim1.lite_queue(sim=sim2)
 
-    def test4_tiny_queue_not_available_without_tiny_layer2(self):
-        ''' tiny_queue() is not present on a default (PubSubLayer2) simulation. '''
+    def test4_lite_queue_not_available_without_lite_layer2(self):
+        ''' lite_queue() is not present on a default (PubSubLayer2) simulation. '''
         sim = DSSimulation()
-        self.assertFalse(hasattr(sim, 'tiny_queue'))
+        self.assertFalse(hasattr(sim, 'lite_queue'))
 
 
 if __name__ == '__main__':

@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Benchmark: Priority queue throughput — DSSim vs TinyQueue vs SimPy
+Benchmark: Priority queue throughput — DSSim vs LiteQueue vs SimPy
 
 Three scenarios stress different parts of the priority queue path:
 
 1. fill-drain    : N items inserted in worst-case priority order (largest key
                    first so every heappush must sift), then fully drained.
-                   DSSim and TinyQueue use put_nowait + get_nowait — no
+                   DSSim and LiteQueue use put_nowait + get_nowait — no
                    simulation loop at all.  SimPy has no nowait API; even a
                    simple bulk insert must go through the event machinery
                    (process + env.run()).
@@ -28,7 +28,7 @@ Three scenarios stress different parts of the priority queue path:
                    simulation loop.  The producer inserts N items back-to-back
                    (queue has unlimited capacity so puts never block); the
                    consumer drains them one-by-one.
-                   DSSim/TinyQueue are shown in two variants:
+                   DSSim/LiteQueue are shown in two variants:
                      put_nowait + gget  — producer bypasses simulation loop
                      gput       + gget  — producer uses the blocking-put API
                                           (gput still returns immediately since
@@ -191,16 +191,16 @@ def dssim_bounded(n):
 
 
 # ===========================================================================
-# DSSim TinyQueue (TinyLayer2)
+# DSSim LiteQueue (LiteLayer2)
 # ===========================================================================
-from dssim.simulation import TinyLayer2
-from dssim.components.tinyqueue import TinyQueue
+from dssim.simulation import LiteLayer2
+from dssim.components.litequeue import LiteQueue
 
 
-def _make_tiny_queue(capacity=float('inf')):
-    '''Return (sim, TinyQueue) with DSKeyQueue keyed on item[0], using TinyLayer2.'''
-    sim = DSSimulation(layer2=TinyLayer2)
-    q = TinyQueue(capacity=capacity,
+def _make_lite_queue(capacity=float('inf')):
+    '''Return (sim, LiteQueue) with DSKeyQueue keyed on item[0], using LiteLayer2.'''
+    sim = DSSimulation(layer2=LiteLayer2)
+    q = LiteQueue(capacity=capacity,
                   policy=DSKeyQueue(key=lambda x: x[0]),
                   sim=sim)
     return sim, q
@@ -208,29 +208,29 @@ def _make_tiny_queue(capacity=float('inf')):
 
 # --- Scenario 1 : fill-drain (no simulation loop) --------------------------
 
-def tiny_fill_drain(n):
+def lite_fill_drain(n):
     '''
     put_nowait N items in worst-case order, then drain all with get_nowait.
     No sim.run() call — identical path to dssim_fill_drain but through
-    TinyLayer2 infrastructure.
+    LiteLayer2 infrastructure.
     '''
-    _, q = _make_tiny_queue()
+    _, q = _make_lite_queue()
     for i in range(n):
         q.put_nowait((n - i, i))
     drained = 0
     while q.get_nowait() is not None:
         drained += 1
-    assert drained == n, f'tiny fill-drain: {drained} != {n}'
+    assert drained == n, f'lite fill-drain: {drained} != {n}'
 
 
 # --- Scenario 2a : burst with put_nowait + gget ----------------------------
 
-def tiny_burst_nowait_put(n):
+def lite_burst_nowait_put(n):
     '''
     Pre-fill queue via put_nowait (no simulation overhead for the producer),
     then let the consumer drain it inside sim.run() via gget.
     '''
-    sim, q = _make_tiny_queue()
+    sim, q = _make_lite_queue()
     received = 0
 
     for i in range(n):
@@ -244,18 +244,18 @@ def tiny_burst_nowait_put(n):
 
     sim.schedule(0, consumer())
     sim.run()
-    assert received == n, f'tiny burst-nowait-put: {received} != {n}'
+    assert received == n, f'lite burst-nowait-put: {received} != {n}'
 
 
 # --- Scenario 2b : burst with gput + gget ----------------------------------
 
-def tiny_burst_gput(n):
+def lite_burst_gput(n):
     '''
     Both producer (gput) and consumer (gget) run as simulation processes.
     Capacity is unlimited so gput never actually blocks, but it still goes
-    through TinyLayer2 event dispatch on every call.
+    through LiteLayer2 event dispatch on every call.
     '''
-    sim, q = _make_tiny_queue()
+    sim, q = _make_lite_queue()
     received = 0
 
     def producer():
@@ -271,17 +271,17 @@ def tiny_burst_gput(n):
     sim.schedule(0, producer())
     sim.schedule(0, consumer())
     sim.run()
-    assert received == n, f'tiny burst-gput: {received} != {n}'
+    assert received == n, f'lite burst-gput: {received} != {n}'
 
 
 # --- Scenario 3 : bounded (capacity = 1) -----------------------------------
 
-def tiny_bounded(n):
+def lite_bounded(n):
     '''
     Capacity = 1 forces strict put / get alternation.  Each gput blocks until
     the consumer takes the previous item.
     '''
-    sim, q = _make_tiny_queue(capacity=1)
+    sim, q = _make_lite_queue(capacity=1)
     received = 0
 
     def producer():
@@ -297,7 +297,7 @@ def tiny_bounded(n):
     sim.schedule(0, producer())
     sim.schedule(0, consumer())
     sim.run()
-    assert received == n, f'tiny bounded: {received} != {n}'
+    assert received == n, f'lite bounded: {received} != {n}'
 
 
 # ===========================================================================
@@ -494,9 +494,9 @@ if __name__ == '__main__':
 
     # ---- scenario 1 --------------------------------------------------------
     print(f'=== Scenario 1: fill-drain  (N={N_EVENTS:,}) ===')
-    print(f'  DSSim/TinyQueue/salabim use a nowait path; SimPy always goes through event machinery.')
+    print(f'  DSSim/LiteQueue/salabim use a nowait path; SimPy always goes through event machinery.')
     report('DSSim  Queue',          N_EVENTS, *bench(dssim_fill_drain, N_EVENTS))
-    report('DSSim  TinyQueue',      N_EVENTS, *bench(tiny_fill_drain, N_EVENTS))
+    report('DSSim  LiteQueue',      N_EVENTS, *bench(lite_fill_drain, N_EVENTS))
     report('SimPy  PriorityStore',  N_EVENTS, *bench(simpy_fill_drain, N_EVENTS))
     report('salabim Store',         N_EVENTS, *bench(salabim_fill_drain, N_EVENTS))
 
@@ -504,15 +504,15 @@ if __name__ == '__main__':
     print(f'\n=== Scenario 2: burst  (unlimited capacity, N={N_EVENTS:,}) ===')
     report('DSSim  Queue     put_nowait + gget', N_EVENTS, *bench(dssim_burst_nowait_put, N_EVENTS))
     report('DSSim  Queue     gput       + gget', N_EVENTS, *bench(dssim_burst_gput, N_EVENTS))
-    report('DSSim  TinyQueue put_nowait + gget', N_EVENTS, *bench(tiny_burst_nowait_put, N_EVENTS))
-    report('DSSim  TinyQueue gput       + gget', N_EVENTS, *bench(tiny_burst_gput, N_EVENTS))
+    report('DSSim  LiteQueue put_nowait + gget', N_EVENTS, *bench(lite_burst_nowait_put, N_EVENTS))
+    report('DSSim  LiteQueue gput       + gget', N_EVENTS, *bench(lite_burst_gput, N_EVENTS))
     report('SimPy  PriorityStore put    + get ', N_EVENTS, *bench(simpy_burst, N_EVENTS))
     report('salabim Store to_store + from_store', N_EVENTS, *bench(salabim_burst, N_EVENTS))
 
     # ---- scenario 3 --------------------------------------------------------
     print(f'\n=== Scenario 3: bounded  (capacity=1, alternating put/get, N={N_EVENTS:,}) ===')
     report('DSSim  Queue     gput + gget',        N_EVENTS, *bench(dssim_bounded, N_EVENTS))
-    report('DSSim  TinyQueue gput + gget',        N_EVENTS, *bench(tiny_bounded, N_EVENTS))
+    report('DSSim  LiteQueue gput + gget',        N_EVENTS, *bench(lite_bounded, N_EVENTS))
     report('SimPy  PriorityStore put + get',      N_EVENTS, *bench(simpy_bounded, N_EVENTS))
     report('salabim Store to_store + from_store', N_EVENTS, *bench(salabim_bounded, N_EVENTS))
 

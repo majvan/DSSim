@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-TinyResource / TinyPriorityResource for TinyLayer2.
+LiteResource / LitePriorityResource for LiteLayer2.
 
-These components avoid pubsub/conditions and rely only on TinyLayer2 primitives:
+These components avoid pubsub/conditions and rely only on LiteLayer2 primitives:
   - sim.signal(event, subscriber)
   - yield from sim.gwait(...)
   - await sim.wait(...)
@@ -60,8 +60,8 @@ class _WaitTimeout:
         self.waiter = waiter
 
 
-class TinyResource(DSComponent, ISubscriber):
-    '''Minimal resource for TinyLayer2 simulations.
+class LiteResource(DSComponent, ISubscriber):
+    '''Minimal resource for LiteLayer2 simulations.
 
     * ``get`` consumes amount from the pool.
     * ``put`` adds amount to the pool.
@@ -77,7 +77,7 @@ class TinyResource(DSComponent, ISubscriber):
         self._dispatch_scheduled = False
 
     # ------------------------------------------------------------------
-    # Internal queue policy hooks (TinyPriorityResource overrides getter policy)
+    # Internal queue policy hooks (LitePriorityResource overrides getter policy)
     # ------------------------------------------------------------------
 
     def _enqueue_getter(self, waiter: _Waiter, **policy_params: Any) -> None:
@@ -231,7 +231,7 @@ class TinyResource(DSComponent, ISubscriber):
         return 0 if event is None else event
 
     # ------------------------------------------------------------------
-    # Blocking async operations (for coroutine schedulables in TinyLayer2)
+    # Blocking async operations (for coroutine schedulables in LiteLayer2)
     # ------------------------------------------------------------------
 
     async def put(self, timeout: TimeType = float('inf')) -> NumericType:
@@ -265,8 +265,8 @@ class TinyResource(DSComponent, ISubscriber):
         return 0 if event is None else event
 
 
-class TinyPriorityResource(TinyResource):
-    '''TinyResource variant with priority-ordered getter wakeups.
+class LitePriorityResource(LiteResource):
+    '''LiteResource variant with priority-ordered getter wakeups.
 
     Lower numeric priority value is served first. Same priority preserves FIFO.
     '''
@@ -280,7 +280,7 @@ class TinyPriorityResource(TinyResource):
         self._preemption = DSPriorityPreemption(self._priority)
 
     class Preempted(Exception):
-        def __init__(self, resource: "TinyPriorityResource", by: Any, owner: Any, priority: int, amount: NumericType) -> None:
+        def __init__(self, resource: "LitePriorityResource", by: Any, owner: Any, priority: int, amount: NumericType) -> None:
             super().__init__(f'{owner} was preempted on {resource} by {by} (priority={priority}, amount={amount}).')
             self.resource = resource
             self.by = by
@@ -289,12 +289,12 @@ class TinyPriorityResource(TinyResource):
             self.amount = amount
 
     class _HoldContext:
-        def __init__(self, resource: "TinyPriorityResource") -> None:
+        def __init__(self, resource: "LitePriorityResource") -> None:
             self.resource = resource
             self.owner = None
             self._held_before: NumericType = 0
 
-        def __enter__(self) -> "TinyPriorityResource._HoldContext":
+        def __enter__(self) -> "LitePriorityResource._HoldContext":
             self.owner = self.resource.sim.pid
             self._held_before = self.resource._held_amount(self.owner)
             return self
@@ -487,15 +487,15 @@ class TinyPriorityResource(TinyResource):
 
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
-class SimTinyResourceMixin:
-    def tiny_resource(self: Any, *args: Any, **kwargs: Any) -> TinyResource:
+class SimLiteResourceMixin:
+    def lite_resource(self: Any, *args: Any, **kwargs: Any) -> LiteResource:
         sim: 'DSSimulation' = kwargs.pop('sim', self)
         if sim is not self:
-            raise ValueError('The parameter sim in tiny_resource() method should be set to the same simulation instance.')
-        return TinyResource(*args, **kwargs, sim=sim)
+            raise ValueError('The parameter sim in lite_resource() method should be set to the same simulation instance.')
+        return LiteResource(*args, **kwargs, sim=sim)
 
-    def tiny_priority_resource(self: Any, *args: Any, **kwargs: Any) -> TinyPriorityResource:
+    def lite_priority_resource(self: Any, *args: Any, **kwargs: Any) -> LitePriorityResource:
         sim: 'DSSimulation' = kwargs.pop('sim', self)
         if sim is not self:
-            raise ValueError('The parameter sim in tiny_priority_resource() method should be set to the same simulation instance.')
-        return TinyPriorityResource(*args, **kwargs, sim=sim)
+            raise ValueError('The parameter sim in lite_priority_resource() method should be set to the same simulation instance.')
+        return LitePriorityResource(*args, **kwargs, sim=sim)
