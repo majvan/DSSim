@@ -21,13 +21,13 @@ import inspect
 import copy
 from enum import Enum
 from dssim.base import EventType
-from dssim.pubsub_base import CondType, ICondition, CallableConditionMixin, ConsumerMetadata
+from dssim.pubsub_base import CondType, ICondition, CallableConditionMixin, SubscriberMetadata
 from dssim.future import DSFuture
 from dssim.process import DSProcess
 
 
 if TYPE_CHECKING:
-    from dssim.pubsub import DSProducer
+    from dssim.pubsub import DSPub
     from dssim.simulation import DSSimulation
 
 
@@ -83,8 +83,8 @@ class DSFilter(DSFuture, ICondition, CallableConditionMixin):
         else:
             self.forward_events = (forward_events == True)  # True => True, None => False, False => False
 
-    def create_metadata(self, **kwargs: Any) -> ConsumerMetadata:
-        self.meta = ConsumerMetadata()
+    def create_metadata(self, **kwargs: Any) -> SubscriberMetadata:
+        self.meta = SubscriberMetadata()
         # A condition accepts any event 
         self.meta.cond.push(lambda e:True)
         return self.meta
@@ -149,7 +149,7 @@ class DSFilter(DSFuture, ICondition, CallableConditionMixin):
             return True, self.cond_value()
         return False, None
 
-    def get_future_eps(self) -> Set["DSProducer"]:
+    def get_future_eps(self) -> Set["DSPub"]:
         retval = {self._finish_tx,}
         if isinstance(self.cond, DSFuture):
             retval |= self.cond.get_future_eps()
@@ -265,7 +265,7 @@ class DSCircuit(DSFuture, ICondition, CallableConditionMixin):
                 retval.append(fut.finished())
         return retval
 
-    def get_future_eps(self) -> Set["DSProducer"]:
+    def get_future_eps(self) -> Set["DSPub"]:
         retval = set()
         # Including self._finish_tx would create loop dependency when waiting on self (i.e. await self):
         # 1. When this is finished, it would signal _finish_tx

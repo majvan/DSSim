@@ -20,7 +20,7 @@ from typing import Any, Generator, TYPE_CHECKING, Optional
 from dssim.base import NumericType, TimeType, EventType, DSComponentSingleton
 from dssim.base_components import DSResource, DSPriorityResource, DSPriorityPreemption
 from dssim.components.base import DSStatefulComponent
-from dssim.pubsub import DSProducer, NotifierPriority
+from dssim.pubsub import DSPub, NotifierPriority
 from dssim.pubsub_base import ICondition, CallableConditionMixin
 
 
@@ -65,8 +65,8 @@ class Resource(DSStatefulComponent):
         amount: NumericType = 0,
         capacity: NumericType = float('inf'),
         *args: Any,
-        nempty_ep: Optional[DSProducer] = None,
-        nfull_ep: Optional[DSProducer] = None,
+        nempty_ep: Optional[DSPub] = None,
+        nfull_ep: Optional[DSPub] = None,
         **kwargs: Any,
     ) -> None:
         ''' Init Resource component.
@@ -75,8 +75,8 @@ class Resource(DSStatefulComponent):
         '''
         super().__init__(*args, **kwargs)
         self._resource = DSResource(amount=amount, capacity=capacity, owner=self)
-        self.tx_nempty = nempty_ep if nempty_ep is not None else self.sim.producer(name=self.name + '.tx_nempty')
-        self.tx_nfull = nfull_ep if nfull_ep is not None else self.sim.producer(name=self.name + '.tx_nfull')
+        self.tx_nempty = nempty_ep if nempty_ep is not None else self.sim.publisher(name=self.name + '.tx_nempty')
+        self.tx_nfull = nfull_ep if nfull_ep is not None else self.sim.publisher(name=self.name + '.tx_nfull')
 
     # ------------------------------------------------------------------
     # Internal notification hooks
@@ -225,9 +225,9 @@ class PriorityResource(Resource):
         amount: NumericType = 0,
         capacity: NumericType = float('inf'),
         preemptive: bool = False,
-        nempty_ep: Optional[DSProducer] = None,
-        nfull_ep: Optional[DSProducer] = None,
-        change_ep: Optional[DSProducer] = None,
+        nempty_ep: Optional[DSPub] = None,
+        nfull_ep: Optional[DSPub] = None,
+        change_ep: Optional[DSPub] = None,
         *args: Any,
         **kwargs: Any,
     ) -> None:
@@ -235,11 +235,11 @@ class PriorityResource(Resource):
         if sim is None:
             raise ValueError('PriorityResource requires a simulation instance (sim=...).')
         if change_ep is None:
-            change_ep = sim.producer(notifier=NotifierPriority)
+            change_ep = sim.publisher(notifier=NotifierPriority)
         if nempty_ep is None:
-            nempty_ep = sim.producer(notifier=NotifierPriority)
+            nempty_ep = sim.publisher(notifier=NotifierPriority)
         if nfull_ep is None:
-            nfull_ep = sim.producer(notifier=NotifierPriority)
+            nfull_ep = sim.publisher(notifier=NotifierPriority)
         super().__init__(
             amount=amount,
             capacity=capacity,
@@ -252,10 +252,6 @@ class PriorityResource(Resource):
         self.preemptive = preemptive
         self._priority = DSPriorityResource()
         self._preemption = DSPriorityPreemption(self._priority)
-        # Backward-compatible aliases for existing tests/debug tooling.
-        self._holders_by_owner = self._priority.holders_by_owner
-        self._holders_by_priority = self._priority.holders_by_priority
-        self._reclaimed = self._priority.reclaimed
 
     class Preempted(Exception):
         def __init__(self, resource: "PriorityResource", by: Any, owner: Any, priority: int, amount: NumericType) -> None:

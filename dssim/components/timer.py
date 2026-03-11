@@ -18,7 +18,7 @@ Periodic timer with on/off control
 from typing import Any, Optional
 from enum import Enum
 from dssim.base import EventType, DSComponent
-from dssim.pubsub import DSProducer
+from dssim.pubsub import DSPub
 from dssim.process import DSProcess
 
 
@@ -34,7 +34,7 @@ class Timer(DSComponent):
         self.period = period
         self.counter: float = repeats or float('inf')
         self.status: Timer.Status = Timer.Status.STOPPED
-        self.tx = self.sim.producer(name=self.name + '.tx')
+        self.tx = self.sim.publisher(name=self.name + '.tx')
         self.proc = self.sim.process(self.process(), name=self.name+'.process').schedule(0)
 
     async def process(self) -> EventType:

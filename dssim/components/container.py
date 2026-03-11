@@ -38,7 +38,7 @@ class Container(DSStatefulComponent, SignalMixin):
         # Targeted producers: getters waiting for any object subscribe to tx_nempty;
         # putters and complex-condition getters subscribe to tx_changed.
         # self.tx_changed already defined
-        self.tx_nempty = self.sim.producer(name=self.name + '.tx_nempty')
+        self.tx_nempty = self.sim.publisher(name=self.name + '.tx_nempty')
         self.LAMBDA1 = lambda _: self.size >= 1
 
     def _available(self, num_items: int) -> bool:

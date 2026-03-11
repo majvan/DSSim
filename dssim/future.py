@@ -17,15 +17,15 @@ This file implements future class (see the paradigm in async programming).
 from typing import Any, Set, Optional, Generator, TYPE_CHECKING
 from contextlib import contextmanager
 from dssim.base import EventType, SignalMixin, IFuture
-from dssim.pubsub_base import DSAbortException, ConsumerMetadata
-from dssim.pubsub import DSConsumer, DSProducer, TrackEvent
+from dssim.pubsub_base import DSAbortException, SubscriberMetadata
+from dssim.pubsub import DSSub, DSPub, TrackEvent
 
 
 if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
-class DSFuture(DSConsumer, SignalMixin, IFuture):
+class DSFuture(DSSub, SignalMixin, IFuture):
     ''' Typical future which can be used in the simulations.
     A future can be 'signaled', i.e. finished.
     '''
@@ -34,14 +34,14 @@ class DSFuture(DSConsumer, SignalMixin, IFuture):
         # We store the latest value or excpetion. Useful to check the status after finish.
         self.value: Any = None
         self.exc: Optional[Exception] = None
-        self._finish_tx = DSProducer(name=self.name+'.future', sim=self.sim)
+        self._finish_tx = DSPub(name=self.name+'.future', sim=self.sim)
     
-    def create_metadata(self, **kwargs) -> ConsumerMetadata:
-        self.meta = ConsumerMetadata()
+    def create_metadata(self, **kwargs) -> SubscriberMetadata:
+        self.meta = SubscriberMetadata()
         self.meta.cond.push(self)  # sending to self => signaling the end of future
         return self.meta
 
-    def get_future_eps(self) -> Set[DSProducer]:
+    def get_future_eps(self) -> Set[DSPub]:
         return {self._finish_tx,}
 
     def finished(self) -> bool:

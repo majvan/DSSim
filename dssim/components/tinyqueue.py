@@ -32,7 +32,7 @@ Two singleton sentinels drive all wakeups:
   waiting putter's item, then wakes that putter.
 
 Because TinyQueue itself is the ISubscriber target for both sentinels,
-:meth:`send` acts as the internal dispatcher — no separate DSProducer or
+:meth:`send` acts as the internal dispatcher — no separate DSPub or
 pubsub fan-out is involved.
 
 Cascading wakeups
@@ -98,9 +98,9 @@ class TinyQueue(DSComponent, ISubscriber):
         Waiters are plain generators already suspended at ``yield from
         sim.gwait()``.  We wake them directly via ``sim.send_object()``
         instead of re-scheduling through the now-queue — this avoids
-        routing the item through ``sim.signal(event, consumer)``
-        where the ``consumer or _parent_process`` fallback could misbehave
-        if ``consumer`` (i.e. ``self``) evaluates as falsy.
+        routing the item through ``sim.signal(event, subscriber)``
+        where the ``subscriber or _parent_process`` fallback could misbehave
+        if ``subscriber`` (i.e. ``self``) evaluates as falsy.
         '''
         if event is _GET_READY:
             # A getter is waiting and an item is available.
@@ -222,7 +222,7 @@ class TinyQueue(DSComponent, ISubscriber):
         # Must be True regardless of buffer contents — TinyQueue is a simulation
         # component, not a plain container.  Python would otherwise fall back to
         # __len__ and treat an empty queue as falsy, which breaks the
-        # `consumer or self._parent_process` fallback inside sim.signal.
+        # `subscriber or self._parent_process` fallback inside sim.signal.
         return True
 
     def __iter__(self) -> Iterator:

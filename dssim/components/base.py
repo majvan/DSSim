@@ -17,16 +17,16 @@ The provides basic classes for the components.
 from typing import Any, Optional, Generator
 from dssim.base import TimeType, EventType, DSComponent
 from dssim.pubsub_base import CondType
-from dssim.pubsub import DSProducer
+from dssim.pubsub import DSPub
 
 
 class DSStatefulComponent(DSComponent):
     ''' The base class which adds tx_changed endpoint which sends event
     upon a change of the component.
     '''
-    def __init__(self, change_ep: Optional[DSProducer] = None, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, change_ep: Optional[DSPub] = None, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.tx_changed = change_ep if change_ep is not None else self.sim.producer(name=self.name+'.tx')
+        self.tx_changed = change_ep if change_ep is not None else self.sim.publisher(name=self.name+'.tx')
     
     def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> EventType:
         ''' Wait for change in the state and returns when the condition is met '''

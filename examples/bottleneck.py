@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSComponent, DSCallback, DSSimulation, DSProducer, Limiter
+from dssim import DSComponent, DSCallback, DSSimulation, DSPub, Limiter
 from random import uniform
 
 
@@ -20,7 +20,7 @@ class MCU(DSComponent):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         limiter = Limiter(1, name=self.name + '.(internal) limiter0', sim=self.sim)
-        self._producer = self.sim.producer(name=self.name + '.(internal) event producer')
+        self._producer = self.sim.publisher(name=self.name + '.(internal) event producer')
         self._producer.add_subscriber(limiter.rx)
         consumer = self.sim.callback(self._on_output, name=self.name+'.(internal) output')
         limiter.tx.add_subscriber(consumer)
