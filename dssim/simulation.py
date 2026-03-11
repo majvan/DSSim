@@ -25,8 +25,8 @@ from dssim.future import SimFutureMixin
 from dssim.process import SimProcessMixin
 from dssim.components.container import SimContainerMixin
 from dssim.components.queue import SimQueueMixin
-from dssim.components.tinyqueue import SimTinyQueueMixin
-from dssim.components.tinyresource import SimTinyResourceMixin
+from dssim.components.litequeue import SimLiteQueueMixin
+from dssim.components.literesource import SimLiteResourceMixin
 from dssim.components.resource import SimResourceMixin
 from dssim.components.state import SimStateMixin
 from dssim.cond import SimFilterMixin
@@ -101,7 +101,7 @@ class SimWaitMixin:
         ''' Wait for up to *timeout* time units.
         Returns the first event delivered to the caller, or None on timeout.
         '''
-        # Fast path for the common TinyLayer2 pattern: unbounded wait.
+        # Fast path for the common LiteLayer2 pattern: unbounded wait.
         # This avoids timeout bookkeeping and one extra call frame per wakeup.
         if timeout == float('inf'):
             event = yield None
@@ -115,7 +115,7 @@ class SimWaitMixin:
         ''' Async variant of gwait.
         Returns the first event delivered to the caller, or None on timeout.
         '''
-        # Fast path for the common TinyLayer2 pattern: unbounded wait.
+        # Fast path for the common LiteLayer2 pattern: unbounded wait.
         # This avoids timeout bookkeeping and one extra call frame per wakeup.
         if timeout == float('inf'):
             event = await _Awaitable(None)
@@ -145,11 +145,11 @@ class SimScheduleMixin:
 
 # Minimal layer2: plain-generator / coroutine scheduling with timeout-only
 # gwait/wait.  No pubsub, no DSProcess.
-TinyLayer2 = (
+LiteLayer2 = (
     SimWaitMixin,
     SimScheduleMixin,
-    SimTinyQueueMixin,
-    SimTinyResourceMixin,
+    SimLiteQueueMixin,
+    SimLiteResourceMixin,
 )
 
 # Default layer2 mixins — loaded when layer2 is not explicitly overridden.

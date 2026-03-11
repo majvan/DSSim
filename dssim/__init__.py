@@ -20,11 +20,11 @@ from dssim.pubsub import DSCallback, DSKWCallback, DSSub, DSPub, DSTrackableEven
 from dssim.pubsub import NotifierDict, NotifierRoundRobin, NotifierPriority
 from dssim.future import DSFuture
 from dssim.process import DSProcess
-from dssim.simulation import DSSchedulable, TinyLayer2, PubSubLayer2
+from dssim.simulation import DSSchedulable, LiteLayer2, PubSubLayer2
 from dssim.process import DSInterruptibleContextError, DSTransferableCondition, DSTimeoutContextError
 from dssim.cond import DSFilter
 from dssim.processcomponent import DSProcessComponent, PCGenerator
 from dssim.simulation import DSSimulation
 
-from dssim.components import DSQueue, DSLifoQueue, DSKeyQueue, DSResource, DSPriorityResource, DSPriorityPreemption, Queue, TinyResource, TinyPriorityResource, Resource, PriorityResource, DSResourcePreempted, Mutex, State
+from dssim.components import DSQueue, DSLifoQueue, DSKeyQueue, DSResource, DSPriorityResource, DSPriorityPreemption, Queue, LiteResource, LitePriorityResource, Resource, PriorityResource, DSResourcePreempted, Mutex, State
 from dssim.components import Timer, Delay, Limiter

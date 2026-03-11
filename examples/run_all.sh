@@ -61,8 +61,8 @@ rm -f "$visa_log"
 # The following are benchmark tests which take some time
 echo "Process events"
 python $SCRIPT_DIR/process_events.py
-echo "Process events tiny"
-python $SCRIPT_DIR/process_events_tiny.py
+echo "Process events lite"
+python $SCRIPT_DIR/process_events_lite.py
 echo "UART loop"
 python $SCRIPT_DIR/uart_loop.py
 

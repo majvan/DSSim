@@ -21,7 +21,7 @@ Key differences from the DSSim version:
   sim.signal() / DSProcess signalling.
 * _wait_for_code() manually implements condition-filtered timeout wait via
   env.any_of([mailbox.get(), env.timeout()]), discarding wrong codes in a
-  loop with a shrinking deadline — the same approach as process_events_tiny.py.
+  loop with a shrinking deadline — the same approach as process_events_lite.py.
 '''
 import simpy
 from random import randint

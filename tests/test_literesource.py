@@ -12,27 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Tests for TinyResource / TinyPriorityResource (TinyLayer2-only components).
+Tests for LiteResource / LitePriorityResource (LiteLayer2-only components).
 '''
 import unittest
 
-from dssim.simulation import DSSimulation, TinyLayer2
-from dssim.components.tinyresource import TinyResource, TinyPriorityResource
+from dssim.simulation import DSSimulation, LiteLayer2
+from dssim.components.literesource import LiteResource, LitePriorityResource
 
 
 def _make(amount=0, capacity=float('inf')):
-    sim = DSSimulation(layer2=TinyLayer2)
-    r = TinyResource(amount=amount, capacity=capacity, sim=sim)
+    sim = DSSimulation(layer2=LiteLayer2)
+    r = LiteResource(amount=amount, capacity=capacity, sim=sim)
     return sim, r
 
 
 def _make_prio(amount=0, capacity=float('inf'), preemptive=False):
-    sim = DSSimulation(layer2=TinyLayer2)
-    r = TinyPriorityResource(amount=amount, capacity=capacity, preemptive=preemptive, sim=sim)
+    sim = DSSimulation(layer2=LiteLayer2)
+    r = LitePriorityResource(amount=amount, capacity=capacity, preemptive=preemptive, sim=sim)
     return sim, r
 
 
-class TestTinyResourceNowait(unittest.TestCase):
+class TestLiteResourceNowait(unittest.TestCase):
     def test1_put_get_nowait(self):
         _, r = _make(amount=1, capacity=3)
         self.assertEqual(r.put_nowait(), 1)
@@ -46,7 +46,7 @@ class TestTinyResourceNowait(unittest.TestCase):
         self.assertEqual(r.get_n_nowait(2), 0)  # insufficient amount
 
 
-class TestTinyResourceBlockingGenerators(unittest.TestCase):
+class TestLiteResourceBlockingGenerators(unittest.TestCase):
     def test1_gget_blocks_and_wakes_on_put(self):
         sim, r = _make(amount=0, capacity=1)
         out = []
@@ -106,7 +106,7 @@ class TestTinyResourceBlockingGenerators(unittest.TestCase):
         self.assertEqual(out, [(4, 0)])
 
 
-class TestTinyResourceAsync(unittest.TestCase):
+class TestLiteResourceAsync(unittest.TestCase):
     def test1_async_get_waits_for_put(self):
         sim, r = _make(amount=0, capacity=1)
         out = []
@@ -125,7 +125,7 @@ class TestTinyResourceAsync(unittest.TestCase):
         self.assertEqual(out, [(2, 1)])
 
 
-class TestTinyPriorityResource(unittest.TestCase):
+class TestLitePriorityResource(unittest.TestCase):
     def test1_priority_serves_lower_numeric_first(self):
         sim, r = _make_prio(amount=0, capacity=2)
         out = []
@@ -177,7 +177,7 @@ class TestTinyPriorityResource(unittest.TestCase):
                 yield from sim.gwait(10)
                 out.append(('low_no_preempt', sim.time))
                 r.put_nowait()
-            except TinyPriorityResource.Preempted as exc:
+            except LitePriorityResource.Preempted as exc:
                 out.append(('low_preempted', sim.time, exc.amount))
                 got2 = yield from r.gget(priority=5, preempt=False)
                 self.assertEqual(got2, 1)
@@ -240,33 +240,33 @@ class TestTinyPriorityResource(unittest.TestCase):
         self.assertEqual(r.amount, 1)
 
 
-class TestSimTinyResourceMixin(unittest.TestCase):
-    def test1_tiny_resource_factory(self):
-        sim = DSSimulation(layer2=TinyLayer2)
-        r = sim.tiny_resource(amount=2, capacity=3)
-        self.assertIsInstance(r, TinyResource)
+class TestSimLiteResourceMixin(unittest.TestCase):
+    def test1_lite_resource_factory(self):
+        sim = DSSimulation(layer2=LiteLayer2)
+        r = sim.lite_resource(amount=2, capacity=3)
+        self.assertIsInstance(r, LiteResource)
         self.assertEqual(r.amount, 2)
         self.assertEqual(r.capacity, 3)
         self.assertIs(r.sim, sim)
 
-    def test2_tiny_priority_resource_factory(self):
-        sim = DSSimulation(layer2=TinyLayer2)
-        r = sim.tiny_priority_resource(amount=1, capacity=4)
-        self.assertIsInstance(r, TinyPriorityResource)
+    def test2_lite_priority_resource_factory(self):
+        sim = DSSimulation(layer2=LiteLayer2)
+        r = sim.lite_priority_resource(amount=1, capacity=4)
+        self.assertIsInstance(r, LitePriorityResource)
         self.assertIs(r.sim, sim)
 
     def test3_wrong_sim_raises(self):
-        sim1 = DSSimulation(layer2=TinyLayer2)
-        sim2 = DSSimulation(layer2=TinyLayer2)
+        sim1 = DSSimulation(layer2=LiteLayer2)
+        sim2 = DSSimulation(layer2=LiteLayer2)
         with self.assertRaises(ValueError):
-            sim1.tiny_resource(sim=sim2)
+            sim1.lite_resource(sim=sim2)
         with self.assertRaises(ValueError):
-            sim1.tiny_priority_resource(sim=sim2)
+            sim1.lite_priority_resource(sim=sim2)
 
-    def test4_factories_not_available_without_tiny_layer2(self):
+    def test4_factories_not_available_without_lite_layer2(self):
         sim = DSSimulation()
-        self.assertFalse(hasattr(sim, 'tiny_resource'))
-        self.assertFalse(hasattr(sim, 'tiny_priority_resource'))
+        self.assertFalse(hasattr(sim, 'lite_resource'))
+        self.assertFalse(hasattr(sim, 'lite_priority_resource'))
 
 
 if __name__ == '__main__':

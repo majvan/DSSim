@@ -30,7 +30,7 @@ Five scenarios
 
 Each scenario is measured for three DSSim configurations:
   - raw        : DSSimulation(layer2=None), schedule_event(), plain yield
-  - TinyLayer2 : DSSimulation(layer2=TinyLayer2), sim.schedule(), yield from sim.gwait()
+  - LiteLayer2 : DSSimulation(layer2=LiteLayer2), sim.schedule(), yield from sim.gwait()
   - PubSubLayer2: DSSimulation(layer2=PubSubLayer2), sim.schedule() → DSProcess,
                   yield from sim.gwait(cond=AlwaysTrue)
 
@@ -217,17 +217,17 @@ def dssim_raw_cross_signal(n):
 
 
 # ===========================================================================
-# DSSim — TinyLayer2
+# DSSim — LiteLayer2
 # ===========================================================================
-from dssim import TinyLayer2
+from dssim import LiteLayer2
 
 
-def dssim_tiny_timed_callbacks(n):
+def dssim_lite_timed_callbacks(n):
     '''
     Schedules N events at strictly increasing timestamps, all dispatched to
     one generator.  Uses sim.schedule() and yield from sim.gwait().
     '''
-    sim = DSSimulation(layer2=TinyLayer2)
+    sim = DSSimulation(layer2=LiteLayer2)
     handled = 0
 
     def sink():
@@ -241,15 +241,15 @@ def dssim_tiny_timed_callbacks(n):
     for i in range(n):
         sim.schedule(i + 1, consumer)   # wake consumer N times
     sim.run()
-    assert handled == n, f'tiny timed-callbacks: expected {n}, got {handled}'
+    assert handled == n, f'lite timed-callbacks: expected {n}, got {handled}'
 
 
-def dssim_tiny_now_burst(n):
+def dssim_lite_now_burst(n):
     '''
     One scheduled generator emits N zero-time events via signal;
     a second generator consumes them.  Stresses now_queue append + drain.
     '''
-    sim = DSSimulation(layer2=TinyLayer2)
+    sim = DSSimulation(layer2=LiteLayer2)
     handled = 0
 
     def sink():
@@ -267,15 +267,15 @@ def dssim_tiny_now_burst(n):
     sim.schedule(0, sink_cb)    # prime sink first so it is ready to receive
     sim.schedule(0, burst())    # burst runs its loop then suspends
     sim.run()
-    assert handled == n, f'tiny now-burst: expected {n}, got {handled}'
+    assert handled == n, f'lite now-burst: expected {n}, got {handled}'
 
 
-def dssim_tiny_now_chain(n):
+def dssim_lite_now_chain(n):
     '''
     One generator reschedules itself via signal until N iterations.
     Stresses zero-time dispatch with dynamic event generation.
     '''
-    sim = DSSimulation(layer2=TinyLayer2)
+    sim = DSSimulation(layer2=LiteLayer2)
     fired = 0
 
     def chain():
@@ -290,15 +290,15 @@ def dssim_tiny_now_chain(n):
     sim.schedule(0, chain_cb)   # prime: advances chain_cb to first gwait
     sim.schedule(0, chain_cb)   # trigger first iteration
     sim.run()
-    assert fired == n, f'tiny now-chain: expected {n}, got {fired}'
+    assert fired == n, f'lite now-chain: expected {n}, got {fired}'
 
 
-def dssim_tiny_generator_wakeup(n):
+def dssim_lite_generator_wakeup(n):
     '''
     A generator yields N times; a producer generator schedules N zero-time
     events to it.  Stresses coroutine send path in the simulation loop.
     '''
-    sim = DSSimulation(layer2=TinyLayer2)
+    sim = DSSimulation(layer2=LiteLayer2)
     received = 0
 
     def waiter():
@@ -316,15 +316,15 @@ def dssim_tiny_generator_wakeup(n):
     sim.schedule(0, waiter_ref)  # prime waiter
     sim.schedule(0, producer())  # producer fills now_queue then suspends
     sim.run()
-    assert received == n, f'tiny generator-wakeup: expected {n}, got {received}'
+    assert received == n, f'lite generator-wakeup: expected {n}, got {received}'
 
 
-def dssim_tiny_cross_signal(n):
+def dssim_lite_cross_signal(n):
     '''
-    Two TinyLayer2 generators alternately wake each other via signal while
+    Two LiteLayer2 generators alternately wake each other via signal while
     both spend most of their time blocked in gwait().
     '''
-    sim = DSSimulation(layer2=TinyLayer2)
+    sim = DSSimulation(layer2=LiteLayer2)
     total = 0
     a_cb = None
     b_cb = None
@@ -351,7 +351,7 @@ def dssim_tiny_cross_signal(n):
     sim.schedule(0, b_cb)  # prime to first gwait
     sim.signal(None, a_cb) # seed ping-pong
     sim.run()
-    assert total == n, f'tiny cross-signal: expected {n}, got {total}'
+    assert total == n, f'lite cross-signal: expected {n}, got {total}'
 
 
 # ===========================================================================
@@ -784,7 +784,7 @@ if __name__ == '__main__':
     # ---- scenario 1 --------------------------------------------------------
     print(f'=== Scenario 1: timed-callbacks  (N={N_EVENTS:,}) ===')
     report('DSSim raw        ', N_EVENTS, *bench(dssim_raw_timed_callbacks,    N_EVENTS))
-    report('DSSim TinyLayer2 ', N_EVENTS, *bench(dssim_tiny_timed_callbacks,   N_EVENTS))
+    report('DSSim LiteLayer2 ', N_EVENTS, *bench(dssim_lite_timed_callbacks,   N_EVENTS))
     report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_timed_callbacks, N_EVENTS))
     report('SimPy            ', N_EVENTS, *bench(simpy_timed_callbacks,         N_EVENTS))
     report('salabim          ', N_EVENTS, *bench(salabim_timed_callbacks,       N_EVENTS))
@@ -792,7 +792,7 @@ if __name__ == '__main__':
     # ---- scenario 2 --------------------------------------------------------
     print(f'\n=== Scenario 2: now-burst  (1 burst → N zero-time events, N={N_EVENTS:,}) ===')
     report('DSSim raw        ', N_EVENTS, *bench(dssim_raw_now_burst,    N_EVENTS))
-    report('DSSim TinyLayer2 ', N_EVENTS, *bench(dssim_tiny_now_burst,   N_EVENTS))
+    report('DSSim LiteLayer2 ', N_EVENTS, *bench(dssim_lite_now_burst,   N_EVENTS))
     report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_now_burst, N_EVENTS))
     report('SimPy            ', N_EVENTS, *bench(simpy_now_burst,         N_EVENTS))
     report('salabim          ', N_EVENTS, *bench(salabim_now_burst,       N_EVENTS))
@@ -800,7 +800,7 @@ if __name__ == '__main__':
     # ---- scenario 3 --------------------------------------------------------
     print(f'\n=== Scenario 3: now-chain  (self-rescheduling, N={N_EVENTS:,}) ===')
     report('DSSim raw        ', N_EVENTS, *bench(dssim_raw_now_chain,    N_EVENTS))
-    report('DSSim TinyLayer2 ', N_EVENTS, *bench(dssim_tiny_now_chain,   N_EVENTS))
+    report('DSSim LiteLayer2 ', N_EVENTS, *bench(dssim_lite_now_chain,   N_EVENTS))
     report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_now_chain, N_EVENTS))
     report('SimPy            ', N_EVENTS, *bench(simpy_now_chain,         N_EVENTS))
     report('salabim          ', N_EVENTS, *bench(salabim_now_chain,       N_EVENTS))
@@ -808,7 +808,7 @@ if __name__ == '__main__':
     # ---- scenario 4 --------------------------------------------------------
     print(f'\n=== Scenario 4: generator-wakeup  (1 waiter + 1 producer, N={N_EVENTS:,}) ===')
     report('DSSim raw        ', N_EVENTS, *bench(dssim_raw_generator_wakeup,    N_EVENTS))
-    report('DSSim TinyLayer2 ', N_EVENTS, *bench(dssim_tiny_generator_wakeup,   N_EVENTS))
+    report('DSSim LiteLayer2 ', N_EVENTS, *bench(dssim_lite_generator_wakeup,   N_EVENTS))
     report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_generator_wakeup, N_EVENTS))
     report('SimPy            ', N_EVENTS, *bench(simpy_process_wakeup,           N_EVENTS))
     report('salabim          ', N_EVENTS, *bench(salabim_generator_wakeup,       N_EVENTS))
@@ -816,7 +816,7 @@ if __name__ == '__main__':
     # ---- scenario 5 --------------------------------------------------------
     print(f'\n=== Scenario 5: cross-signal  (2 waiting peers ping-pong, N={N_EVENTS:,}) ===')
     report('DSSim raw        ', N_EVENTS, *bench(dssim_raw_cross_signal,    N_EVENTS))
-    report('DSSim TinyLayer2 ', N_EVENTS, *bench(dssim_tiny_cross_signal,   N_EVENTS))
+    report('DSSim LiteLayer2 ', N_EVENTS, *bench(dssim_lite_cross_signal,   N_EVENTS))
     report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_cross_signal, N_EVENTS))
     report('SimPy            ', N_EVENTS, *bench(simpy_cross_signal,         N_EVENTS))
     report('salabim          ', N_EVENTS, *bench(salabim_cross_signal,       N_EVENTS))

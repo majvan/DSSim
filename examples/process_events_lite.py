@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-TinyLayer2 adaptation of process_events.py.
+LiteLayer2 adaptation of process_events.py.
 
 Key differences from the PubSubLayer2 version:
 
-* TinyLayer2 has no DSProcess / .signal() / cond-filtered gwait().
+* LiteLayer2 has no DSProcess / .signal() / cond-filtered gwait().
 * The locker generator is stored as ``self._locker_gen`` and the attacker
   signals it via ``sim.signal(code, self._locker_gen)``.
 * Condition filtering is done manually in ``_wait_for_code()``, which loops
   with a shrinking timeout until the right code arrives or the deadline passes.
 '''
 from dssim import DSComponent, DSSimulation
-from dssim.simulation import TinyLayer2
+from dssim.simulation import LiteLayer2
 from random import randint
 
 
@@ -83,7 +83,7 @@ class MyComponent(DSComponent):
     def _wait_for_code(self, timeout, expected):
         '''Wait up to *timeout* seconds for *expected* to arrive.
 
-        Unlike PubSubLayer2's ``gwait(cond=...)``, TinyLayer2's ``gwait()``
+        Unlike PubSubLayer2's ``gwait(cond=...)``, LiteLayer2's ``gwait()``
         accepts one event per yield.  This helper loops with the remaining
         time budget so that wrong codes are discarded and the deadline is
         respected across multiple receives.
@@ -111,7 +111,7 @@ class MyComponent(DSComponent):
                 self.stat['success'] += 1
 
 if __name__ == '__main__':
-    sim = DSSimulation(layer2=TinyLayer2)
+    sim = DSSimulation(layer2=LiteLayer2)
     obj0 = MyComponent(name='obj0', sim=sim)
     obj0.boot()
     print('Running...')
