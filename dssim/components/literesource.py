@@ -488,14 +488,14 @@ class LitePriorityResource(LiteResource):
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
 class SimLiteResourceMixin:
-    def lite_resource(self: Any, *args: Any, **kwargs: Any) -> LiteResource:
+    def resource(self: Any, *args: Any, **kwargs: Any) -> LiteResource:
         sim: 'DSSimulation' = kwargs.pop('sim', self)
         if sim is not self:
-            raise ValueError('The parameter sim in lite_resource() method should be set to the same simulation instance.')
+            raise ValueError('The parameter sim in resource() method should be set to the same simulation instance.')
         return LiteResource(*args, **kwargs, sim=sim)
 
-    def lite_priority_resource(self: Any, *args: Any, **kwargs: Any) -> LitePriorityResource:
+    def priority_resource(self: Any, *args: Any, **kwargs: Any) -> LitePriorityResource:
         sim: 'DSSimulation' = kwargs.pop('sim', self)
         if sim is not self:
-            raise ValueError('The parameter sim in lite_priority_resource() method should be set to the same simulation instance.')
+            raise ValueError('The parameter sim in priority_resource() method should be set to the same simulation instance.')
         return LitePriorityResource(*args, **kwargs, sim=sim)

@@ -241,17 +241,17 @@ class TestLitePriorityResource(unittest.TestCase):
 
 
 class TestSimLiteResourceMixin(unittest.TestCase):
-    def test1_lite_resource_factory(self):
+    def test1_resource_factory(self):
         sim = DSSimulation(layer2=LiteLayer2)
-        r = sim.lite_resource(amount=2, capacity=3)
+        r = sim.resource(amount=2, capacity=3)
         self.assertIsInstance(r, LiteResource)
         self.assertEqual(r.amount, 2)
         self.assertEqual(r.capacity, 3)
         self.assertIs(r.sim, sim)
 
-    def test2_lite_priority_resource_factory(self):
+    def test2_priority_resource_factory(self):
         sim = DSSimulation(layer2=LiteLayer2)
-        r = sim.lite_priority_resource(amount=1, capacity=4)
+        r = sim.priority_resource(amount=1, capacity=4)
         self.assertIsInstance(r, LitePriorityResource)
         self.assertIs(r.sim, sim)
 
@@ -259,12 +259,12 @@ class TestSimLiteResourceMixin(unittest.TestCase):
         sim1 = DSSimulation(layer2=LiteLayer2)
         sim2 = DSSimulation(layer2=LiteLayer2)
         with self.assertRaises(ValueError):
-            sim1.lite_resource(sim=sim2)
+            sim1.resource(sim=sim2)
         with self.assertRaises(ValueError):
-            sim1.lite_priority_resource(sim=sim2)
+            sim1.priority_resource(sim=sim2)
 
-    def test4_factories_not_available_without_lite_layer2(self):
-        sim = DSSimulation()
+    def test4_old_lite_factory_names_not_available(self):
+        sim = DSSimulation(layer2=LiteLayer2)
         self.assertFalse(hasattr(sim, 'lite_resource'))
         self.assertFalse(hasattr(sim, 'lite_priority_resource'))
 

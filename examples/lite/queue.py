@@ -56,7 +56,7 @@ def do_somethingB():
 
 if __name__ == '__main__':
     sim = DSSimulation(layer2=LiteLayer2)
-    q_ab, q_ba = sim.lite_queue(), sim.lite_queue()
+    q_ab, q_ba = sim.queue(), sim.queue()
     process_a, process_b = do_somethingA(), do_somethingB()
     sim.schedule(0, process_a)
     sim.schedule(0, process_b)

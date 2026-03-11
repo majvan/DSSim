@@ -8,9 +8,9 @@ sim = DSSimulation(layer2=LiteLayer2)
 
 
 # Capacity-1 token queues emulate occupied/free production stations.
-c0 = sim.lite_queue(capacity=1)
-i0 = sim.lite_queue(capacity=1)
-c1 = sim.lite_queue(capacity=1)
+c0 = sim.queue(capacity=1)
+i0 = sim.queue(capacity=1)
+c1 = sim.queue(capacity=1)
 c0.put_nowait(object())
 i0.put_nowait(object())
 c1.put_nowait(object())
