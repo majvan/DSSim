@@ -1,3 +1,4 @@
+# Copyright 2026- majvan (majvan@gmail.com)
 from dssim import DSProcessComponent, PCGenerator, Queue, DSSimulation
 import random
 sim = DSSimulation()

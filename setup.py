@@ -1,5 +1,4 @@
 # Copyright 2020- majvan (majvan@gmail.com)
-# Copyright 2020 NXP Semiconductors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +23,7 @@ setup(
   description='Discrete System Simulation framework',
   long_description='A simulation framework to simulate time-based discrete '
       'events. Useful to simulate behavior of a digital system in time.', # This can be moved into separate desc file in the future
-  author='NXP Semiconductors',
+  author='majvan',
   author_email='juraj.vanco@nxp.com',
   url='https://github.com/majvan/dssim',   # Provide either the link to your github or to your website
   keywords=['simulation', 'simulator', 'discrete', 'system', 'event', 'Process', 'event-based', 'time'],   # Keywords that define your package best

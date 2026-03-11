@@ -1,4 +1,3 @@
-# Copyright 2022 NXP Semiconductors
 # Copyright 2022- majvan (majvan@gmail.com)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

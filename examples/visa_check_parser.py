@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright 2026- majvan (majvan@gmail.com)
 """
 Validate visa_check.py textual output for sequencing issues.
 
