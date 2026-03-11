@@ -50,7 +50,7 @@ class IntegralLimiter(DSComponent):
     async def _push(self) -> None:
         ''' Push another event after events accumlated over time '''
         while True:
-            await self.sim.wait(self.report_period)
+            await self.sim.sleep(self.report_period)
             self.accumulated_rate += self.report_period * self.throughput
             limited_num = int(self.accumulated_rate)
             self.accumulated_rate -= limited_num

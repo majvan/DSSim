@@ -16,7 +16,7 @@ global f  # this is used to shortify sim.filter(...) method to f(...) method;
 # Another option is to use: from dssim import DSFilter as f
 
 def return_apologize_after_10():
-    yield from sim.gwait(10)
+    yield from sim.gsleep(10)
     return {'apologize': 'sorry'}
 
 async def waiting_for_table_service():
@@ -137,7 +137,7 @@ async def demo_filtering():
     time = sim.time
     # The following timeout events from particular filters will not be forwarded to this process unless we subscribe for it.
     # await c subscribes for these events via the DSFuture branch
-    c = f(sim.gwait(2), signal_timeout=True, sim=sim) & f(sim.gwait(6), signal_timeout=True, sim=sim) | f(sim.gwait(4), signal_timeout=True, sim=sim) & f(sim.gwait(5), signal_timeout=True, sim=sim)
+    c = f(sim.gsleep(2), signal_timeout=True, sim=sim) & f(sim.gsleep(6), signal_timeout=True, sim=sim) | f(sim.gsleep(4), signal_timeout=True, sim=sim) & f(sim.gsleep(5), signal_timeout=True, sim=sim)
     ret = await c
     assert sim.time == time + 5  # wait for (2 and 6) or (1 and 5) => signal at 1 then 5 makes this true
     assert tuple(ret.values()) == (None, None)

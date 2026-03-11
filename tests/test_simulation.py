@@ -308,13 +308,13 @@ class TestVoidSubscriber(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# SimWaitMixin — basic timeout-only gwait / wait
+# SimWaitMixin — basic gwait / wait / sleep
 # SimProcessMixin is bypassed via _TestSim so SimWaitMixin's methods are
 # actually under test (not the full condition-aware overrides).
 # ---------------------------------------------------------------------------
 
 class TestSimWaitMixin(unittest.TestCase):
-    ''' Tests for SimWaitMixin.gwait / SimWaitMixin.wait.
+    ''' Tests for SimWaitMixin.gwait / SimWaitMixin.wait / SimWaitMixin.sleep.
     Uses a local _TestSim subclass that replaces gwait/wait/schedule with the
     SimWaitMixin / SimScheduleMixin versions, preventing SimProcessMixin from
     wrapping generators in DSProcess or overriding the wait methods. '''
@@ -394,6 +394,42 @@ class TestSimWaitMixin(unittest.TestCase):
         self.assertEqual(result[0], ('first', 2, 'hello'))
         self.assertEqual(result[1], ('second', 7, None))
         self.assertEqual(len(sim.time_queue), 0)
+
+    def test6_gsleep_ignores_events_until_timeout(self):
+        ''' gsleep(timeout) ignores non-exception events and returns at timeout. '''
+        sim = self._make_sim()
+        result = []
+
+        def my_gen():
+            retval = yield from sim.gsleep(5)
+            result.append((sim.time, retval))
+
+        gen = my_gen()
+        sim.schedule(0, gen)
+        sim.schedule_event(2, 'hello', gen)
+        sim.schedule_event(3, 'world', gen)
+        t, _ = sim.run()
+
+        self.assertEqual(result, [(5, None)])
+        self.assertEqual(t, 5)
+
+    def test7_sleep_ignores_events_until_timeout(self):
+        ''' sleep(timeout) ignores non-exception events and returns at timeout. '''
+        sim = self._make_sim()
+        result = []
+
+        async def my_coro():
+            retval = await sim.sleep(5)
+            result.append((sim.time, retval))
+
+        coro = my_coro()
+        sim.schedule(0, coro)
+        sim.schedule_event(2, 'hello', coro)
+        sim.schedule_event(3, 'world', coro)
+        t, _ = sim.run()
+
+        self.assertEqual(result, [(5, None)])
+        self.assertEqual(t, 5)
 
 
 # ---------------------------------------------------------------------------
