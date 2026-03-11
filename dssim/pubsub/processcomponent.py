@@ -19,11 +19,11 @@ from abc import abstractmethod
 from typing import Any, Optional, Generator, Type, Callable
 import inspect
 from dssim.base import EventType, TimeType, DSComponent
-from dssim.pubsub_base import CondType, DSAbortException, AlwaysTrue
-from dssim.process import DSProcess
+from dssim.pubsub.base import CondType, DSAbortException, AlwaysTrue
+from dssim.pubsub.process import DSProcess
 from dssim.simulation import DSSchedulable
-from dssim.components.container import ContainerMixin
-from dssim.components.resource import ResourceMixin
+from dssim.pubsub.components.container import ContainerMixin
+from dssim.pubsub.components.resource import ResourceMixin
 
 
 class DSProcessComponent(DSComponent, ContainerMixin, ResourceMixin):

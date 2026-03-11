@@ -223,7 +223,7 @@ def dssim_cross_notify(n, k, capacity):
 # DSSim LiteQueue  (LiteLayer2)
 # ===========================================================================
 from dssim.simulation import LiteLayer2
-from dssim.components.litequeue import LiteQueue
+from dssim.lite.components.litequeue import LiteQueue
 
 
 def lite_free_flow(n):

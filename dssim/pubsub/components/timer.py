@@ -17,8 +17,8 @@ Periodic timer with on/off control
 from typing import Any, Optional
 from enum import Enum
 from dssim.base import EventType, DSComponent
-from dssim.pubsub import DSPub
-from dssim.process import DSProcess
+from dssim.pubsub.pubsub import DSPub
+from dssim.pubsub.process import DSProcess
 
 
 class Timer(DSComponent):

@@ -20,13 +20,13 @@ import inspect
 import copy
 from enum import Enum
 from dssim.base import TimeType, EventType, EventRetType
-from dssim.pubsub_base import CondType, ICondition, CallableConditionMixin, SubscriberMetadata
-from dssim.future import DSFuture
-from dssim.process import DSProcess
+from dssim.pubsub.base import CondType, ICondition, CallableConditionMixin, SubscriberMetadata
+from dssim.pubsub.future import DSFuture
+from dssim.pubsub.process import DSProcess
 
 
 if TYPE_CHECKING:
-    from dssim.pubsub import DSPub
+    from dssim.pubsub.pubsub import DSPub
     from dssim.simulation import DSSimulation
 
 

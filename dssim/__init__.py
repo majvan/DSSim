@@ -15,16 +15,22 @@
 The aggregation of class interfaces needed for developing a dssim application.
 '''
 from dssim.base import DSAbsTime, DSComponent
-from dssim.pubsub_base import DSAbortException
+from dssim.pubsub.base import DSAbortException
 from dssim.pubsub import DSCallback, DSKWCallback, DSSub, DSPub, DSTrackableEvent, DSTransformation
 from dssim.pubsub import NotifierDict, NotifierRoundRobin, NotifierPriority
-from dssim.future import DSFuture
-from dssim.process import DSProcess
+from dssim.pubsub.future import DSFuture
+from dssim.pubsub.process import DSProcess
 from dssim.simulation import DSSchedulable, LiteLayer2, PubSubLayer2
-from dssim.process import DSInterruptibleContextError, DSTransferableCondition, DSTimeoutContextError
-from dssim.cond import DSFilter
-from dssim.processcomponent import DSProcessComponent, PCGenerator
+from dssim.pubsub.process import DSInterruptibleContextError, DSTransferableCondition, DSTimeoutContextError
+from dssim.pubsub.cond import DSFilter
+from dssim.pubsub.processcomponent import DSProcessComponent, PCGenerator
 from dssim.simulation import DSSimulation
 
-from dssim.components import DSQueue, DSLifoQueue, DSKeyQueue, DSResource, DSPriorityResource, DSPriorityPreemption, Queue, LiteResource, LitePriorityResource, Resource, PriorityResource, DSResourcePreempted, Mutex, State
-from dssim.components import Timer, Delay, Limiter
+from dssim.base_components import DSQueue, DSLifoQueue, DSKeyQueue, DSResource, DSPriorityResource, DSPriorityPreemption
+from dssim.pubsub.components.queue import Queue
+from dssim.lite.components.literesource import LiteResource, LitePriorityResource
+from dssim.pubsub.components.resource import Resource, PriorityResource, DSResourcePreempted, Mutex
+from dssim.pubsub.components.state import State
+from dssim.pubsub.components.timer import Timer
+from dssim.pubsub.components.delay import Delay
+from dssim.pubsub.components.limiter import Limiter

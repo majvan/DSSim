@@ -16,8 +16,8 @@ This file implements future class (see the paradigm in async programming).
 '''
 from typing import Any, Set, Optional, Generator, TYPE_CHECKING
 from dssim.base import TimeType, EventType, EventRetType, SignalMixin, IFuture
-from dssim.pubsub_base import DSAbortException, SubscriberMetadata
-from dssim.pubsub import DSSub, DSPub, TrackEvent
+from dssim.pubsub.base import DSAbortException, SubscriberMetadata
+from dssim.pubsub.pubsub import DSSub, DSPub, TrackEvent
 
 
 if TYPE_CHECKING:

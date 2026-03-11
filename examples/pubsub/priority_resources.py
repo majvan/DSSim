@@ -11,7 +11,7 @@ The resources are preemptive PriorityResource instances.
 '''
 
 from dssim import DSSimulation, DSResourcePreempted
-from dssim.process import TestObject
+from dssim.pubsub.process import TestObject
 
 
 def main() -> None:

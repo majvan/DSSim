@@ -16,7 +16,7 @@ Tests for LiteQueue — a minimal queue for LiteLayer2 simulations.
 '''
 import unittest
 from dssim.simulation import DSSimulation, LiteLayer2
-from dssim.components.litequeue import LiteQueue
+from dssim.lite.components.litequeue import LiteQueue
 
 
 def _make(capacity=float('inf')):

@@ -19,8 +19,8 @@ from dssim import DSSimulation, DSAbsTime, DSAbortException
 from dssim import DSSchedulable, DSFuture, DSProcess, DSCallback
 from dssim.pubsub import DSPub
 # other imports
-from dssim.process import DSTimeoutContext
-from dssim.cond import DSCircuit, DSFilter
+from dssim.pubsub.process import DSTimeoutContext
+from dssim.pubsub.cond import DSCircuit, DSFilter
 from contextlib import asynccontextmanager
 
 

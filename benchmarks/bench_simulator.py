@@ -358,7 +358,7 @@ def dssim_lite_cross_signal(n):
 # DSSim — PubSubLayer2
 # ===========================================================================
 from dssim import PubSubLayer2
-from dssim.pubsub_base import AlwaysTrue
+from dssim.pubsub.base import AlwaysTrue
 
 
 def dssim_pubsub_timed_callbacks(n):

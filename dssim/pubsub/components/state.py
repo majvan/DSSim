@@ -18,8 +18,8 @@ in the pool, just an abstract pool level information (e.g. amount of water in a 
 '''
 from typing import Dict, Any, TYPE_CHECKING
 from dssim.base import TimeType, EventType
-from dssim.pubsub_base import CondType
-from dssim.components.base import DSStatefulComponent
+from dssim.pubsub.base import CondType
+from dssim.pubsub.components.base import DSStatefulComponent
 
 
 if TYPE_CHECKING:

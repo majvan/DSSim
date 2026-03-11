@@ -72,7 +72,7 @@ class LiteQueue(DSComponent, ISubscriber):
     capacity:
         Maximum number of items the queue can hold.  Default: unlimited.
     policy:
-        A :class:`~dssim.components.container.DSQueue`-compatible object
+        A :class:`~dssim.base_components.DSQueue`-compatible object
         that provides ``enqueue`` / ``dequeue`` / ``__len__`` / ``__bool__``
         methods.  Default: plain FIFO :class:`DSQueue`.
     '''

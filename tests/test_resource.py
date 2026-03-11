@@ -16,7 +16,7 @@ Tests for Resource, Mutex, and ResourceMixin components.
 '''
 import unittest
 from dssim import DSSimulation
-from dssim.components.resource import Resource, PriorityResource, DSResourcePreempted, Mutex, ResourceMixin
+from dssim.pubsub.components.resource import Resource, PriorityResource, DSResourcePreempted, Mutex, ResourceMixin
 
 
 # ---------------------------------------------------------------------------

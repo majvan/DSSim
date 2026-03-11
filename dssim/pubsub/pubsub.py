@@ -24,7 +24,7 @@ from enum import IntEnum
 from bisect import bisect_left, insort
 from typing import List, Dict, Any, Type, Generator, Callable, Tuple, Iterator, TYPE_CHECKING
 from dssim.base import TimeType, DSComponent, DSEvent, EventType, SignalMixin, ISubscriber
-from dssim.pubsub_base import CondType, AlwaysTrue, SubscriberMetadata, StackedCond
+from dssim.pubsub.base import CondType, AlwaysTrue, SubscriberMetadata, StackedCond
 
 
 if TYPE_CHECKING:
