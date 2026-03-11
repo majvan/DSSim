@@ -15,7 +15,7 @@
 '''
 The example is showing a code parity with example from salabim project
 '''
-from dssim import DSSimulation, DSProcessComponent, DSProducer
+from dssim import DSSimulation, DSProcessComponent, DSPub
 import random
 
 
@@ -48,7 +48,7 @@ CustomerGenerator()
 for i in range(3):
     Clerk(i)
 waitingline = []  # we could use Queue as well, but it does not make a sense because we do not use it for signaling
-signaler = DSProducer(name="worktodo")
+signaler = DSPub(name="worktodo")
 time, events = sim.run(50000)
 # waitingline.print_histograms()
 # worktodo.print_histograms()

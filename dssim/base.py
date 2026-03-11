@@ -101,9 +101,9 @@ class DSComponent:
         return self.name
 
 
-# In the following, self is in fact of type DSConsumer, but PyLance makes troubles with variable types
+# In the following, self is in fact of type DSSub, but PyLance makes troubles with variable types
 class SignalMixin:
-    ''' Pairs of helper methods for extending a functionality of a consumer.
+    ''' Pairs of helper methods for extending a functionality of a subscriber.
     For better performance, it is recommended to avoid these helper methods
     and call the underlying DSSimulation methods directly.
     '''

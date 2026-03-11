@@ -16,7 +16,7 @@ UART components- physical layer nad link layer.
 Link layer components can (but not necessarily has to) use physical layer
 '''
 import random as _rand
-from dssim import DSSchedulable, DSComponent, DSKWCallback, DSProcess, DSProducer
+from dssim import DSSchedulable, DSComponent, DSKWCallback, DSProcess, DSPub
 from dssim.components.hw.utils import ParityComputer, ByteAssembler
 
 
@@ -45,7 +45,7 @@ class UARTNoisyLine(DSComponent):
             self._on_rx_event,
             name=self.name + '.rx',
         )
-        self.tx = self.sim.producer(name=self.name + '.tx')
+        self.tx = self.sim.publisher(name=self.name + '.tx')
 
         self.stat = {}
         self.stat['bit_counter'] = 0  # counter of bits received
@@ -127,13 +127,13 @@ class UARTPhysBase(DSComponent):
         self.rx_buffer_size = rx_buffer_size
 
     def _add_tx_pubsub(self):
-        self.tx = self.sim.producer(name=self.name + '.tx')
-        # self.tx_irq = self.sim.producer(name=self.name + '.tx_irq')  # Not supported yet, low value
-        self.tx_link = self.sim.producer(name=self.name + '.tx bridge to linklayer')
+        self.tx = self.sim.publisher(name=self.name + '.tx')
+        # self.tx_irq = self.sim.publisher(name=self.name + '.tx_irq')  # Not supported yet, low value
+        self.tx_link = self.sim.publisher(name=self.name + '.tx bridge to linklayer')
 
     def _add_rx_pubsub(self):
-        # self.rx_irq = self.sim.producer(name=self.name + '.rx_irq')  # Not supported now, low value
-        self.rx_link = self.sim.producer(name=self.name + '.rx bridge to linklayer')
+        # self.rx_irq = self.sim.publisher(name=self.name + '.rx_irq')  # Not supported now, low value
+        self.rx_link = self.sim.publisher(name=self.name + '.rx bridge to linklayer')
 
     def send(self, byte, parity):
         ''' Send a byte over UART with and a parity bit '''
@@ -350,10 +350,10 @@ class UARTPhysBasic(UARTPhysBase):
         self.stat['err_overrun'] = 0  # RX overruns counter (app to slow to recv)
 
     def __add_tx_pubsub(self):
-        consumer = self.sim.kw_callback(self._on_tx_byte_event,
-                              name=self.name + '.(internal) tx fb',
-                              )
-        self.tx.add_subscriber(consumer)
+        subscriber = self.sim.kw_callback(self._on_tx_byte_event,
+                                name=self.name + '.(internal) tx fb',
+                                )
+        self.tx.add_subscriber(subscriber)
 
     def __add_rx_pubsub(self):
         # Create new interface for RX
@@ -448,19 +448,19 @@ class UARTLink(DSComponent):
         self.stat['err_other'] = 0  # RX other error counter
 
     def __add_tx_pubsub(self):
-        self.tx = self.sim.producer(name=self.name + '.tx')
-        self.tx_irq = self.sim.producer(name=self.name + '.tx_irq')
-        consumer = self.sim.kw_callback(self._on_tx_event,
-                              name=self.name + '.(internal) tx_fb',
-                              )
+        self.tx = self.sim.publisher(name=self.name + '.tx')
+        self.tx_irq = self.sim.publisher(name=self.name + '.tx_irq')
+        subscriber = self.sim.kw_callback(self._on_tx_event,
+                                name=self.name + '.(internal) tx_fb',
+                                )
         if self.phys:
-            self.phys.tx_link.add_subscriber(consumer)
+            self.phys.tx_link.add_subscriber(subscriber)
         else:
-            self.tx.add_subscriber(consumer)
+            self.tx.add_subscriber(subscriber)
 
     def __add_rx_pubsub(self):
         self.rx = self.sim.kw_callback(self._on_rx_event, name=self.name + '.rx')
-        self.rx_irq = self.sim.producer(name=self.name + '.rx_irq')
+        self.rx_irq = self.sim.publisher(name=self.name + '.rx_irq')
         if self.phys:
             self.phys.rx_link.add_subscriber(self.rx)
 

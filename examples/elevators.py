@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from math import floor
-from dssim import DSProcessComponent, DSProducer
+from dssim import DSProcessComponent, DSPub
 
 class Person(DSProcessComponent):
     def __init__(self, init_floor, requested_floor, *args, **kwargs):
@@ -92,8 +92,8 @@ class Elevator(DSProcessComponent):
         self.container = []
         self.max_load = 100
         self.directions = ('up', 'down')
-        self.requests_tx = DSProducer(name=self.name+'.requests (internal)')
-        self.arrival_tx = DSProducer(name=self.name+'.arrival')
+        self.requests_tx = DSPub(name=self.name+'.requests (internal)')
+        self.arrival_tx = DSPub(name=self.name+'.arrival')
 
     def enter(self, obj):
         self.container.append(obj)

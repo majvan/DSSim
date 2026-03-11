@@ -23,8 +23,8 @@ from contextlib import contextmanager
 from functools import wraps
 import inspect
 from dssim.base import TimeType, EventType, EventRetType, SignalMixin, ISubscriber
-from dssim.pubsub_base import CondType, AlwaysFalse, AlwaysTrue, DSAbortException, DSTransferableCondition, ConsumerMetadata
-from dssim.pubsub import DSConsumer, DSCallback, TrackEvent, DSProducer
+from dssim.pubsub_base import CondType, AlwaysFalse, AlwaysTrue, DSAbortException, DSTransferableCondition, SubscriberMetadata
+from dssim.pubsub import DSSub, DSCallback, TrackEvent, DSPub
 from dssim.future import DSFuture
 
 
@@ -48,8 +48,8 @@ class DSProcess(DSFuture, SignalMixin):
     This class "extends" generator / coroutine for additional info.
     The best practise is to use DSProcess instead of generators.
     '''
-    class _Starter(DSConsumer):
-        ''' One-shot bootstrap consumer for DSProcess.
+    class _Starter(DSSub):
+        ''' One-shot bootstrap subscriber for DSProcess.
         Scheduled in place of the process itself so DSProcess.send() can be
         branch-free: no "first call?" check on every event delivered to the process.
         '''
@@ -85,8 +85,8 @@ class DSProcess(DSFuture, SignalMixin):
             raise ValueError(f'The assigned code {generator} to the process is not a generator, neither a coroutine.')
         super().__init__(*args, **kwargs)
 
-    def create_metadata(self, **kwargs: Any) -> ConsumerMetadata:
-        self.meta = ConsumerMetadata()
+    def create_metadata(self, **kwargs: Any) -> SubscriberMetadata:
+        self.meta = SubscriberMetadata()
         return self.meta
 
     # TODO: this feature is not required
@@ -288,7 +288,7 @@ class SimProcessMixin:
         return DSProcess(*args, **kwargs, sim=sim)
 
     def gwait(self: Any, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
-        ''' Wait for an event from producer for max. timeout time. The criteria which events to be
+        ''' Wait for an event from publisher for max. timeout time. The criteria which events to be
         accepted is given by cond. An accepted event returns from the wait function. An event which
         causes cond to be False is ignored and the function is waiting.
         '''
@@ -300,7 +300,7 @@ class SimProcessMixin:
         return retval
 
     async def wait(self: Any, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> EventType:
-        ''' Wait for an event from producer for max. timeout time. The criteria which events to be
+        ''' Wait for an event from publisher for max. timeout time. The criteria which events to be
         accepted is given by cond. An accepted event returns from the wait function. An event which
         causes cond to be False is ignored and the function is waiting.
         '''
@@ -311,17 +311,17 @@ class SimProcessMixin:
         retval = await self._parent_process.check_and_wait(timeout, cond, val)
         return retval
 
-    def observe_pre(self: Any, *components: Union[DSFuture, DSProducer], **policy_params: Any) -> DSSubscriberContextManager:
-        return DSSubscriberContextManager(self.pid, DSProducer.Phase.PRE, components, **policy_params)
+    def observe_pre(self: Any, *components: Union[DSFuture, DSPub], **policy_params: Any) -> DSSubscriberContextManager:
+        return DSSubscriberContextManager(self.pid, DSPub.Phase.PRE, components, **policy_params)
 
-    def consume(self: Any, *components: Union[DSFuture, DSProducer], **policy_params: Any) -> DSSubscriberContextManager:
-        return DSSubscriberContextManager(self.pid, DSProducer.Phase.CONSUME, components, **policy_params)
+    def consume(self: Any, *components: Union[DSFuture, DSPub], **policy_params: Any) -> DSSubscriberContextManager:
+        return DSSubscriberContextManager(self.pid, DSPub.Phase.CONSUME, components, **policy_params)
 
-    def observe_consumed(self: Any, *components: Union[DSFuture, DSProducer], **policy_params: Any) -> DSSubscriberContextManager:
-        return DSSubscriberContextManager(self.pid, DSProducer.Phase.POST_HIT, components, **policy_params)
+    def observe_consumed(self: Any, *components: Union[DSFuture, DSPub], **policy_params: Any) -> DSSubscriberContextManager:
+        return DSSubscriberContextManager(self.pid, DSPub.Phase.POST_HIT, components, **policy_params)
 
-    def observe_unconsumed(self: Any, *components: Union[DSFuture, DSProducer], **policy_params: Any) -> DSSubscriberContextManager:
-        return DSSubscriberContextManager(self.pid, DSProducer.Phase.POST_MISS, components, **policy_params)
+    def observe_unconsumed(self: Any, *components: Union[DSFuture, DSPub], **policy_params: Any) -> DSSubscriberContextManager:
+        return DSSubscriberContextManager(self.pid, DSPub.Phase.POST_MISS, components, **policy_params)
 
     @contextmanager
     def extend_cond(self: Any, cond: CondType) -> Iterator:
@@ -367,15 +367,15 @@ class DSInterruptibleContextError(Exception):
 
 
 class DSSubscriberContextManager:
-    def __init__(self, process: DSProcess, queue_id: DSProducer.Phase, components: Tuple[Union[DSFuture, DSProducer], ...], **kwargs: Any) -> None:
+    def __init__(self, process: DSProcess, queue_id: DSPub.Phase, components: Tuple[Union[DSFuture, DSPub], ...], **kwargs: Any) -> None:
         self.process = process
         eps = set()
         for c in components:
             if isinstance(c, DSFuture):
                 eps |= set(c.get_future_eps())
-            else:  # component is DSProducer
+            else:  # component is DSPub
                 eps.add(c)
-        Phase = DSProducer.Phase
+        Phase = DSPub.Phase
         self.pre = eps if queue_id == Phase.PRE else set()
         self.consume = eps if queue_id == Phase.CONSUME else set()
         self.postp = eps if queue_id == Phase.POST_HIT else set()
@@ -384,27 +384,27 @@ class DSSubscriberContextManager:
 
     def __enter__(self) -> "DSSubscriberContextManager":
         ''' Connects publisher endpoint with new subscriptions '''
-        Phase = DSProducer.Phase
-        for producer in self.pre:
-            producer.add_subscriber(self.process, Phase.PRE, **self.kwargs)
-        for producer in self.consume:
-            producer.add_subscriber(self.process, Phase.CONSUME, **self.kwargs)
-        for producer in self.postp:
-            producer.add_subscriber(self.process, Phase.POST_HIT, **self.kwargs)
-        for producer in self.postn:
-            producer.add_subscriber(self.process, Phase.POST_MISS, **self.kwargs)
+        Phase = DSPub.Phase
+        for publisher in self.pre:
+            publisher.add_subscriber(self.process, Phase.PRE, **self.kwargs)
+        for publisher in self.consume:
+            publisher.add_subscriber(self.process, Phase.CONSUME, **self.kwargs)
+        for publisher in self.postp:
+            publisher.add_subscriber(self.process, Phase.POST_HIT, **self.kwargs)
+        for publisher in self.postn:
+            publisher.add_subscriber(self.process, Phase.POST_MISS, **self.kwargs)
         return self
 
     def __exit__(self, exc_type: Optional[type[Exception]], exc_value: Exception, tb: TracebackType) -> None:
-        Phase = DSProducer.Phase
-        for producer in self.pre:
-            producer.remove_subscriber(self.process, Phase.PRE, **self.kwargs)
-        for producer in self.consume:
-            producer.remove_subscriber(self.process, Phase.CONSUME, **self.kwargs)
-        for producer in self.postp:
-            producer.remove_subscriber(self.process, Phase.POST_HIT, **self.kwargs)
-        for producer in self.postn:
-            producer.remove_subscriber(self.process, Phase.POST_MISS, **self.kwargs)
+        Phase = DSPub.Phase
+        for publisher in self.pre:
+            publisher.remove_subscriber(self.process, Phase.PRE, **self.kwargs)
+        for publisher in self.consume:
+            publisher.remove_subscriber(self.process, Phase.CONSUME, **self.kwargs)
+        for publisher in self.postp:
+            publisher.remove_subscriber(self.process, Phase.POST_HIT, **self.kwargs)
+        for publisher in self.postn:
+            publisher.remove_subscriber(self.process, Phase.POST_MISS, **self.kwargs)
 
     def __add__(self, other: "DSSubscriberContextManager") -> "DSSubscriberContextManager":
         self.pre = self.pre | other.pre

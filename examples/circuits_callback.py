@@ -11,24 +11,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSComponent, DSCallback, DSSimulation, DSTrackableEvent, DSProducer, DSFilter as _f
+from dssim import DSComponent, DSCallback, DSSimulation, DSTrackableEvent, DSPub, DSFilter as _f
 
 
 class Board(DSComponent):
     def __init__(self, inputs, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.inputs = inputs
-        cond0 = (_f(lambda e:inputs[0] in e.producers) | _f(lambda e:inputs[1] in e.producers)) & (_f(lambda e:inputs[2] in e.producers) | _f(lambda e: inputs[3] in e.producers))
+        cond0 = (_f(lambda e:inputs[0] in e.publishers) | _f(lambda e:inputs[1] in e.publishers)) & (_f(lambda e:inputs[2] in e.publishers) | _f(lambda e: inputs[3] in e.publishers))
         self.rx0 = DSCallback(self.callback0, cond=cond0, name=self.name + '.rx0')
         for ep in inputs:
             ep.add_subscriber(self.rx0)
         
-        cond1 = _f(lambda e:inputs[3] in e.producers)
+        cond1 = _f(lambda e:inputs[3] in e.publishers)
         self.rx1 = DSCallback(self.callback1, cond=cond1, name=self.name + '.rx1')
         for ep in inputs:
             ep.add_subscriber(self.rx1)
 
-        cond2 = _f(lambda e: 'Ahoy' == e.value) | _f(lambda e:inputs[2] in e.producers)
+        cond2 = _f(lambda e: 'Ahoy' == e.value) | _f(lambda e:inputs[2] in e.publishers)
         self.rx2 = DSCallback(self.callback2, cond=cond2, name=self.name + '.rx2')
         for ep in inputs:
             ep.add_subscriber(self.rx2)
@@ -55,7 +55,7 @@ class Board(DSComponent):
         return True  # Consume the event
 
 sim = DSSimulation()
-signals = [DSProducer(name=f'signal{i}', sim=sim) for i in range (4)]
+signals = [DSPub(name=f'signal{i}', sim=sim) for i in range (4)]
 m = Board(signals, name='motherboard0', sim=sim)
 signals[0].schedule_event(1, DSTrackableEvent('Hi'))
 signals[1].schedule_event(2, DSTrackableEvent('Hello'))

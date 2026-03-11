@@ -18,7 +18,7 @@ producer output.
 '''
 from typing import Any
 from dssim.base import EventType, DSComponent
-from dssim.pubsub import DSCallback, DSProducer
+from dssim.pubsub import DSCallback, DSPub
 
 
 class Delay(DSComponent):
@@ -27,7 +27,7 @@ class Delay(DSComponent):
         super().__init__(**kwargs)
         self.set_delay(delay)
         self.rx = self.sim.callback(self._on_event, name=self.name + '.rx')
-        self.tx = self.sim.producer(name=self.name + '.tx')
+        self.tx = self.sim.publisher(name=self.name + '.tx')
 
     def set_delay(self, delay: float) -> None:
         ''' Set the delay '''

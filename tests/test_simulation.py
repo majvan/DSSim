@@ -14,7 +14,7 @@
 # limitations under the License.
 '''
 Tests for the core DSSimulation layer using only plain ISubscriber mocks.
-No DSProcess, DSProducer or DSConsumer objects are used here.
+No DSProcess, DSPub or DSSub objects are used here.
 '''
 import unittest
 from unittest.mock import Mock, call

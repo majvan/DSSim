@@ -21,7 +21,7 @@ from unittest.mock import Mock, call
 from dssim import DSAbsTime, DSSimulation, DSAbortException
 from dssim import DSSchedulable, DSProcess, DSCallback
 from dssim.process import DSSubscriberContextManager, DSTimeoutContext, DSTimeoutContextError
-from dssim import DSProducer
+from dssim import DSPub
 
 
 # ---------------------------------------------------------------------------
@@ -255,7 +255,7 @@ class TestSubscriberContext(unittest.TestCase):
     def test1_sim_functions_producer(self):
         sim = DSSimulation()
         sim._parent_process = DSProcess(self.__process(), sim=sim)
-        a, b, c, d = (DSProducer(), DSProducer(), DSProducer(), DSProducer(),)
+        a, b, c, d = (DSPub(), DSPub(), DSPub(), DSPub(),)
         cm = sim.observe_pre(a, b, c)
         self.assertTrue(type(cm) == DSSubscriberContextManager)
         self.assertTrue(cm.pre == {a, b, c})

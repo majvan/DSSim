@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dssim import DSComponent, DSSimulation, DSProcess
-from dssim import NotifierDict, NotifierRoundRobin, NotifierPriority, DSProducer
+from dssim import NotifierDict, NotifierRoundRobin, NotifierPriority, DSPub
 
 class SingleProducerMultipleConsumers(DSComponent):
     def __init__(self, notifier_method, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.p = self.sim.producer(name=f'{self.name}.generator', notifier=notifier_method)
-        self.sim.schedule(1, self.producer())
+        self.p = self.sim.publisher(name=f'{self.name}.generator', notifier=notifier_method)
+        self.sim.schedule(1, self.publisher_loop())
         for order in range(6):
             self.sim.process(self.consumer(order), name=self.name+f'.consumer{order}').schedule(0)
         self.log = []
 
-    def producer(self):
+    def publisher_loop(self):
         while True:
             self.p.signal('hello from producer')
             yield from self.sim.gwait(1)

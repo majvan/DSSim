@@ -18,7 +18,7 @@ Simple controllable bottleneck components
 from typing import Any, List
 from dssim.base import EventType, DSComponent
 from dssim.pubsub_base import AlwaysTrue
-from dssim.pubsub import DSCallback, DSProducer
+from dssim.pubsub import DSCallback, DSPub
 from dssim.process import DSProcess
 
 
@@ -42,10 +42,10 @@ class IntegralLimiter(DSComponent):
             self._on_event,
             name=self.name + '.rx',
         )
-        self.tx = self.sim.producer(name=self.name + '.tx')
+        self.tx = self.sim.publisher(name=self.name + '.tx')
 
     def _on_event(self, event: EventType) -> None:
-        ''' Feed consumer handler '''
+        ''' Feed subscriber handler '''
         self.buffer.append(event)
 
     async def _push(self) -> None:
@@ -80,7 +80,7 @@ class Limiter(DSComponent):
             name=self.name + '.rx_push',
         ).schedule(0)
         self.rx = self.sim.callback(self._on_event, name=self.name + '.rx')
-        self.tx = self.sim.producer(name=self.name + '.tx')
+        self.tx = self.sim.publisher(name=self.name + '.tx')
 
     def _compute_period(self, throughput: float) -> float:
         ''' Compute when is the next time to report '''
@@ -94,7 +94,7 @@ class Limiter(DSComponent):
         self.pusher.signal(True)
 
     def _on_event(self, event: EventType) -> None:
-        ''' Feed consumer handler '''
+        ''' Feed subscriber handler '''
         if self.buffer:
             self.buffer.append(event)
         else:

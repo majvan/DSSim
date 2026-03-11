@@ -18,7 +18,7 @@ from typing import Any, List, Iterator, Optional, Generator, TYPE_CHECKING
 from dssim.base import NumericType, TimeType, EventType, SignalMixin
 from dssim.pubsub_base import CondType, DSAbortException, AlwaysTrue
 from dssim.components.base import DSStatefulComponent
-from dssim.pubsub import DSProducer
+from dssim.pubsub import DSPub
 from dssim.base_components import DSQueue, DSLifoQueue, DSKeyQueue
 
 
@@ -42,7 +42,7 @@ class Queue(DSStatefulComponent, SignalMixin):
     '''
 
     def __init__(self, capacity: NumericType = float('inf'), policy: DSQueue = None,
-                 nempty_ep: Optional[DSProducer] = None, nfull_ep: Optional[DSProducer] = None,
+                 nempty_ep: Optional[DSPub] = None, nfull_ep: Optional[DSPub] = None,
                  *args: Any, **policy_params: Any) -> None:
         super().__init__(*args, **policy_params)
         self.capacity = capacity
@@ -54,8 +54,8 @@ class Queue(DSStatefulComponent, SignalMixin):
         # nempty_ep / nfull_ep allow injecting a custom notifier (e.g. NotifierPriority)
         # so that priority-ordered waiting works on the hot tx_nempty / tx_nfull paths.
         # self.tx_changed already defined by DSStatefulComponent (accepts change_ep=)
-        self.tx_nempty = nempty_ep if nempty_ep is not None else self.sim.producer(name=self.name + '.tx_nempty')
-        self.tx_nfull  = nfull_ep  if nfull_ep  is not None else self.sim.producer(name=self.name + '.tx_nfull')
+        self.tx_nempty = nempty_ep if nempty_ep is not None else self.sim.publisher(name=self.name + '.tx_nempty')
+        self.tx_nfull  = nfull_ep  if nfull_ep  is not None else self.sim.publisher(name=self.name + '.tx_nfull')
         self.LAMBDA1 = lambda _: len(self._buffer) >= 1
 
     # ---- send (SignalMixin interface) ---------------------------------------

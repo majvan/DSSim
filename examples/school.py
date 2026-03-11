@@ -11,13 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSComponent, DSProcess, DSSimulation, DSProducer, DSProcessComponent
+from dssim import DSComponent, DSProcess, DSSimulation, DSPub, DSProcessComponent
 from random import randint
 
 class School(DSComponent):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.tx = self.sim.producer(name=self.name+'.bell_tx')
+        self.tx = self.sim.publisher(name=self.name+'.bell_tx')
         self.sim.process(self.school_bell(), name=self.name+'.bell_process').schedule(0)
         self.days = 0
 
@@ -68,7 +68,7 @@ class School(DSComponent):
 class Pupil(DSComponent):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.tx = self.sim.producer(name=self.name+'.brain_activity_tx')
+        self.tx = self.sim.publisher(name=self.name+'.brain_activity_tx')
         # self.brain_activity = 'none'
         self.total_classes = 0
 

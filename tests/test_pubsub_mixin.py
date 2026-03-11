@@ -12,27 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Tests for SimPubsubMixin factory methods: sim.producer(), sim.callback(),
+Tests for SimPubsubMixin factory methods: sim.publisher(), sim.callback(),
 sim.kw_callback().
 '''
 import unittest
 from unittest.mock import Mock
-from dssim import DSSimulation, DSProducer, DSCallback, DSKWCallback
+from dssim import DSSimulation, DSPub, DSCallback, DSKWCallback
 
 
 class TestSimPubsubMixin(unittest.TestCase):
 
     def test1_producer_factory_returns_dsproducer(self):
         sim = DSSimulation()
-        p = sim.producer(name='test_producer')
-        self.assertIsInstance(p, DSProducer)
+        p = sim.publisher(name='test_producer')
+        self.assertIsInstance(p, DSPub)
         self.assertIs(p.sim, sim)
 
     def test2_producer_factory_rejects_foreign_sim(self):
         sim = DSSimulation()
         other_sim = DSSimulation(single_instance=False)
         with self.assertRaises(ValueError):
-            sim.producer(name='x', sim=other_sim)
+            sim.publisher(name='x', sim=other_sim)
 
     def test3_callback_factory_returns_dscallback(self):
         sim = DSSimulation()

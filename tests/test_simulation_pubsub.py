@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Integration tests: DSSimulation run loop with real DSProducer / DSConsumer /
+Integration tests: DSSimulation run loop with real DSPub / DSSub /
 DSCallback objects.  These tests verify that the core scheduling and dispatch
 machinery works correctly when the "consumer" side is a real pubsub object
 rather than a plain mock.
 '''
 import unittest
 from unittest.mock import Mock
-from dssim import DSSimulation, DSProducer, DSCallback, DSProcess
+from dssim import DSSimulation, DSPub, DSCallback, DSProcess
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +103,7 @@ class TestScheduleEventNow(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# sim.run() dispatch with real DSCallback / DSProducer consumers
+# sim.run() dispatch with real DSCallback / DSPub consumers
 # ---------------------------------------------------------------------------
 
 class TestProducerConsumerIntegration(unittest.TestCase):
@@ -145,7 +145,7 @@ class TestProducerConsumerIntegration(unittest.TestCase):
         self.assertEqual(len(sim.time_queue), 1)
 
     def test3_producer_signal_dispatched_to_dscallback_subscriber(self):
-        ''' DSProducer.signal() in the run loop reaches a DSCallback subscriber. '''
+        ''' DSPub.signal() in the run loop reaches a DSCallback subscriber. '''
         sim = DSSimulation()
         received = []
 
@@ -157,9 +157,9 @@ class TestProducerConsumerIntegration(unittest.TestCase):
             received.append(event)
             return True
 
-        producer = DSProducer(name='prod', sim=sim)
+        producer = DSPub(name='prod', sim=sim)
         sink_cb = DSCallback(sink, sim=sim)
-        producer.add_subscriber(sink_cb, DSProducer.Phase.CONSUME)
+        producer.add_subscriber(sink_cb, DSPub.Phase.CONSUME)
 
         trigger_cb = DSCallback(trigger, sim=sim)
         sim.schedule_event(1, None, trigger_cb)
@@ -182,12 +182,12 @@ class TestProducerConsumerIntegration(unittest.TestCase):
         self.assertEqual(received, ['hello'])
 
     def test5_dsprocess_receives_events_from_dsproducer_via_run(self):
-        ''' A DSProcess subscribed to a DSProducer receives its events through
+        ''' A DSProcess subscribed to a DSPub receives its events through
         sim.run(). '''
         sim = DSSimulation()
         received = []
 
-        producer = DSProducer(name='source', sim=sim)
+        producer = DSPub(name='source', sim=sim)
 
         def consumer_gen():
             with sim.consume(producer):
@@ -219,11 +219,11 @@ class TestProducerConsumerIntegration(unittest.TestCase):
             order.append('consume')
             return True
 
-        producer = DSProducer(name='p', sim=sim)
+        producer = DSPub(name='p', sim=sim)
         pre_cb = DSCallback(pre_handler, sim=sim)
         consume_cb = DSCallback(consume_handler, sim=sim)
-        producer.add_subscriber(pre_cb, DSProducer.Phase.PRE)
-        producer.add_subscriber(consume_cb, DSProducer.Phase.CONSUME)
+        producer.add_subscriber(pre_cb, DSPub.Phase.PRE)
+        producer.add_subscriber(consume_cb, DSPub.Phase.CONSUME)
 
         def trigger(event):
             producer.signal('ev')

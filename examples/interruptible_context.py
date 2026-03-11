@@ -15,12 +15,12 @@
 An example showing the possibilities to interrupt context in dssim.
 '''
 from dssim import DSSimulation, DSComponent
-from dssim import DSProducer, DSTransformation, DSProcess
+from dssim import DSPub, DSTransformation, DSProcess
 
 class MyComponent(DSComponent):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.ep = self.sim.producer(name=self.name + '.ep')
+        self.ep = self.sim.publisher(name=self.name + '.ep')
 
     async def process0(self):
         ''' The process listens on the self.ep producer in a way that all the events
@@ -42,8 +42,8 @@ class MyComponent(DSComponent):
             assert str(e) == 'Hello'
         assert self.sim.time == t + 10
         print(self.sim.time, 'Interrupted.')
-        assert sum(self.ep.subs[DSProducer.Phase.PRE].d.values()) == 0
-        assert sum(ep.subs[DSProducer.Phase.PRE].d.values()) == 0
+        assert sum(self.ep.subs[DSPub.Phase.PRE].d.values()) == 0
+        assert sum(ep.subs[DSPub.Phase.PRE].d.values()) == 0
         assert cond_stack == [None,]
 
     async def process1(self):
@@ -116,7 +116,7 @@ class MyComponent(DSComponent):
         assert cm.interrupted()
         print(self.sim.time, 'Interrupted.')
         assert cm.value == 'Hi'
-        assert sum(self.ep.subs[DSProducer.Phase.PRE].d.values()) == 0
+        assert sum(self.ep.subs[DSPub.Phase.PRE].d.values()) == 0
         assert cond_stack == [None,]
 
     async def process5(self):
@@ -137,7 +137,7 @@ class MyComponent(DSComponent):
         assert not cm1.interrupted()
         assert cm0.interrupted()
         print(self.sim.time, 'Interrupted.')
-        assert sum(self.ep.subs[DSProducer.Phase.PRE].d.values()) == 0
+        assert sum(self.ep.subs[DSPub.Phase.PRE].d.values()) == 0
         assert cond_stack == [None,]
 
     async def process6(self):
@@ -159,7 +159,7 @@ class MyComponent(DSComponent):
         assert cm1.interrupted()
         assert not cm0.interrupted()
         print(self.sim.time, 'Interrupted.')
-        assert sum(self.ep.subs[DSProducer.Phase.PRE].d.values()) == 0
+        assert sum(self.ep.subs[DSPub.Phase.PRE].d.values()) == 0
         assert cond_stack == [None,]
 
 

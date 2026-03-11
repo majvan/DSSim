@@ -278,10 +278,6 @@ class TinyPriorityResource(TinyResource):
         self._prio_seq = 0
         self._priority = DSPriorityResource()
         self._preemption = DSPriorityPreemption(self._priority)
-        # Backward-compatible aliases for existing tests/debug tooling.
-        self._holders_by_owner = self._priority.holders_by_owner
-        self._holders_by_priority = self._priority.holders_by_priority
-        self._reclaimed = self._priority.reclaimed
 
     class Preempted(Exception):
         def __init__(self, resource: "TinyPriorityResource", by: Any, owner: Any, priority: int, amount: NumericType) -> None:

@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Base condition infrastructure and consumer metadata for dssim framework.
+Base condition infrastructure and subscriber metadata for dssim framework.
 Placed here (rather than base.py) to avoid circular imports: pubsub.py,
 future.py, and process.py all need these definitions, while cond.py also
-needs ConsumerMetadata — moving everything here breaks the
+needs SubscriberMetadata — moving everything here breaks the
 cond → pubsub → cond import cycle.
 '''
 from __future__ import annotations
@@ -110,9 +110,9 @@ class StackedCond(ICondition):
 class DSAbortException(Exception):
     ''' Exception used to abort waiting process '''
 
-    def __init__(self, producer: Any = None, **info) -> None:
+    def __init__(self, publisher: Any = None, **info) -> None:
         super().__init__()
-        self.producer = producer
+        self.publisher = publisher
         self.info = info
 
 
@@ -141,6 +141,6 @@ class DSTransferableCondition(ICondition):
         return self.value
 
 
-class ConsumerMetadata:
+class SubscriberMetadata:
     def __init__(self):
         self.cond = StackedCond()

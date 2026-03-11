@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSProcess, DSComponent, DSSimulation, DSProducer
+from dssim import DSProcess, DSComponent, DSSimulation, DSPub
 
 class Switch(DSComponent):
 
@@ -20,7 +20,7 @@ class Switch(DSComponent):
         self.counter = 0
         for i in range(3):
             self.sim.process(self.process(i), name=f"{self.name}.take{i}").schedule(0)
-        self.producer = self.sim.producer(name=f"{self.name}.feed")
+        self.producer = self.sim.publisher(name=f"{self.name}.feed")
         self.sim.process(self.feeder(), name=f"{self.name}.feedprocess").schedule(0)
 
     def feeder(self):

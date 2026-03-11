@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSComponent, DSKWCallback, DSSimulation, DSProducer
+from dssim import DSComponent, DSKWCallback, DSSimulation, DSPub
 from dssim.components.hw.uart import UARTPhys
 
 
@@ -20,7 +20,7 @@ class MCU(DSComponent):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.baudrate = 115200
-        self.gpio0 = self.sim.producer(name=self.name + '.gpio')
+        self.gpio0 = self.sim.publisher(name=self.name + '.gpio')
         self.uart0 = UARTPhys(baudrate=self.baudrate, parity='E', name=self.name + '.uart0', sim=self.sim)
         self.gpio0.add_subscriber(self.uart0.rx)  # connect gpio output to UART RX peripheral
         self.stat = {'last_byte': 0}
