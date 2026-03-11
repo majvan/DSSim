@@ -1,3 +1,4 @@
+# Copyright 2026- majvan (majvan@gmail.com)
 from tests.test_interface import TestInterface
 from tests.test_timequeue import TestTimeQueue
 from tests.test_pubsub import TestCallback, TestSubscriber, TestProducer

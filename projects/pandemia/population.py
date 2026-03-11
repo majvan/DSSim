@@ -1,3 +1,4 @@
+# Copyright 2026- majvan (majvan@gmail.com)
 """
 Pandemia
 """

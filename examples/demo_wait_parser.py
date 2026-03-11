@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright 2026- majvan (majvan@gmail.com)
 """
 Validate output from:
   - examples/parity/Demo wait.py

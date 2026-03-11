@@ -1,3 +1,4 @@
+# Copyright 2026- majvan (majvan@gmail.com)
 import unittest
 
 from dssim.base_components import (
