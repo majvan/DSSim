@@ -12,18 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Parity examples for resource priority semantics.
+DSSim-only parity example for priority resource semantics.
 
-Demo 1: PriorityResource parity (no interruption, only waiter ordering).
-Demo 2: Preemptive parity with visible interruption events:
-        SimPy PreemptiveResource vs DSSim PriorityResource(preemptive=True).
+Demo 1: non-preemptive priority waiter ordering.
+Demo 2: preemptive acquisition with visible interruption events.
 '''
 from dssim import DSSimulation, PriorityResource, DSResourcePreempted
-
-try:
-    import simpy
-except ImportError:  # pragma: no cover - optional dependency for examples
-    simpy = None
 
 
 NON_PREEMPTIVE_JOBS = [
@@ -67,29 +61,6 @@ def run_dssim_non_preemptive():
     return starts
 
 
-def run_simpy_non_preemptive():
-    if simpy is None:
-        return None
-
-    env = simpy.Environment()
-    res = simpy.PriorityResource(env, capacity=1)
-    starts = []
-
-    def customer(name, arrival, priority, service):
-        yield env.timeout(arrival)
-        req = res.request(priority=priority)
-        yield req
-        starts.append((name, env.now))
-        yield env.timeout(service)
-        res.release(req)
-
-    for job in NON_PREEMPTIVE_JOBS:
-        env.process(customer(*job))
-
-    env.run(until=30)
-    return starts
-
-
 def run_dssim_preemptive():
     sim = DSSimulation()
     resource = PriorityResource(amount=1, capacity=1, preemptive=True, name='machine', sim=sim)
@@ -119,52 +90,14 @@ def run_dssim_preemptive():
     return log
 
 
-def run_simpy_preemptive():
-    if simpy is None:
-        return None
-
-    env = simpy.Environment()
-    machine = simpy.PreemptiveResource(env, capacity=1)
-    log = []
-
-    def job(name, arrival, prio, service):
-        yield env.timeout(arrival)
-        remaining = service
-        while remaining > 0:
-            with machine.request(priority=prio, preempt=True) as req:
-                yield req
-                yield env.timeout(ACQUIRE_SETTLE)
-                start = env.now
-                log.append(('start', name, tstamp(env.now)))
-                try:
-                    yield env.timeout(remaining)
-                    remaining = 0
-                    log.append(('finish', name, tstamp(env.now)))
-                except simpy.Interrupt:
-                    remaining -= env.now - start
-                    log.append(('preempted', name, tstamp(env.now), tstamp(remaining)))
-
-    for item in PREEMPTIVE_JOBS:
-        env.process(job(*item))
-    env.run(until=30)
-    return log
-
-
 if __name__ == '__main__':
-    print('Demo 1: PriorityResource (non-preemptive)')
+    print('Demo 1: PriorityResource (non-preemptive) — DSSim')
     dssim_starts = run_dssim_non_preemptive()
     print('DSSim starts:', dssim_starts)
     assert dssim_starts == [('low', 0), ('high', 4), ('mid', 5)]
+    print('Non-preemptive parity OK.')
 
-    simpy_starts = run_simpy_non_preemptive()
-    if simpy_starts is None:
-        print('SimPy not installed: skipped non-preemptive SimPy parity run.')
-    else:
-        print('SimPy starts:', simpy_starts)
-        assert simpy_starts == dssim_starts
-        print('Non-preemptive parity OK.')
-
-    print('\nDemo 2: Preemptive semantics (with interruption)')
+    print('\nDemo 2: Preemptive semantics (with interruption) — DSSim')
     dssim_log = run_dssim_preemptive()
     print('DSSim log:', dssim_log)
     assert dssim_log == [
@@ -177,13 +110,4 @@ if __name__ == '__main__':
     ]
     dssim_times = [item[2] for item in dssim_log]
     assert len(dssim_times) == len(set(dssim_times)), 'DSSim preemptive demo should have unique event times.'
-
-    simpy_log = run_simpy_preemptive()
-    if simpy_log is None:
-        print('SimPy not installed: skipped preemptive SimPy parity run.')
-    else:
-        print('SimPy log:', simpy_log)
-        simpy_times = [item[2] for item in simpy_log]
-        assert len(simpy_times) == len(set(simpy_times)), 'SimPy preemptive demo should have unique event times.'
-        assert simpy_log == dssim_log
-        print('Preemptive parity OK.')
+    print('Preemptive parity OK.')

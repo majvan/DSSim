@@ -33,8 +33,6 @@ echo "Running interruptible context"
 python $SCRIPT_DIR/interruptible_context.py
 echo "Processcomponent"
 python $SCRIPT_DIR/processcomponent.py
-echo "Priority resources"
-python $SCRIPT_DIR/priority_resources.py
 echo "Queue"
 python $SCRIPT_DIR/queue.py
 echo "School"
@@ -131,3 +129,5 @@ python "$SCRIPT_DIR/parity/Demo wait (signal).py" | tee "$demo_wait_log" | pytho
 rm -f "$demo_wait_log"
 echo "Elevator"
 python $SCRIPT_DIR/parity/Elevator.py
+echo "Priority resources"
+python "$SCRIPT_DIR/parity/PriorityResource pubsub.py"
