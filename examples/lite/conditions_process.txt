@@ -1,0 +1,5 @@
+LiteLayer2 notes for examples/pubsub/conditions_process.py
+
+LiteLayer2 is missing required features:
+- DSFilter/DSCircuit condition algebra and condition-based waiting
+- PubSub subscription contexts (observe/consume/check_and_wait/timeout/interruptible)

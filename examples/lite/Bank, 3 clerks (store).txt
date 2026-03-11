@@ -1,0 +1,5 @@
+LiteLayer2 notes for examples/pubsub/Bank, 3 clerks (store).py
+
+LiteLayer2 is missing required features:
+- DSComponent/DSProcessComponent APIs (enter/leave, signal(), callback(), publisher())
+- PubSub routing/notification primitives not present in LiteLayer2

@@ -2,9 +2,9 @@
 # Copyright 2026- majvan (majvan@gmail.com)
 """
 Validate output from:
-  - examples/parity/Demo wait.py
-  - examples/parity/Demo wait (mutex).py
-  - examples/parity/Demo wait (signal).py
+  - examples/pubsub/Demo wait.py
+  - examples/pubsub/Demo wait (mutex).py
+  - examples/pubsub/Demo wait (signal).py
 
 Checks focus on event-sequence correctness and final summary-table consistency.
 """
@@ -282,4 +282,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
