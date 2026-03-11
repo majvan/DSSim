@@ -210,7 +210,7 @@ def dssim_preemption_delivery(n):
 def dssim_lite_preemption_delivery(n):
     sim = DSSimulation(layer2=LiteLayer2)
     res = LitePriorityResource(amount=1, capacity=1, preemptive=True, sim=sim)
-    handoff = sim.lite_queue(capacity=1)
+    handoff = sim.queue(capacity=1)
 
     preempted = 0
     high_got = 0

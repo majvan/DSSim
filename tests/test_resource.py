@@ -20,6 +20,37 @@ from dssim.components.resource import Resource, PriorityResource, DSResourcePree
 
 
 # ---------------------------------------------------------------------------
+# SimResourceMixin factories
+# ---------------------------------------------------------------------------
+
+class TestSimResourceMixin(unittest.TestCase):
+
+    def test1_resource_factory_returns_resource_instance(self):
+        sim = DSSimulation()
+        r = sim.resource(amount=2, capacity=3)
+        self.assertIsInstance(r, Resource)
+        self.assertIs(r.sim, sim)
+        self.assertEqual(r.amount, 2)
+        self.assertEqual(r.capacity, 3)
+
+    def test2_priority_resource_factory_returns_priority_resource_instance(self):
+        sim = DSSimulation()
+        r = sim.priority_resource(amount=1, capacity=4)
+        self.assertIsInstance(r, PriorityResource)
+        self.assertIs(r.sim, sim)
+        self.assertEqual(r.amount, 1)
+        self.assertEqual(r.capacity, 4)
+
+    def test3_factories_wrong_sim_raise(self):
+        sim1 = DSSimulation()
+        sim2 = DSSimulation()
+        with self.assertRaises(ValueError):
+            sim1.resource(sim=sim2)
+        with self.assertRaises(ValueError):
+            sim1.priority_resource(sim=sim2)
+
+
+# ---------------------------------------------------------------------------
 # Nowait variants (no simulation required)
 # ---------------------------------------------------------------------------
 

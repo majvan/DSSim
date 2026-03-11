@@ -3,7 +3,7 @@
 # LiteLayer2 counterpart of examples/pubsub/PriorityResource pubsub.py.
 #
 # Uses LitePriorityResource (priority + optional preemption) available in
-# dssim.components.literesource via sim.lite_priority_resource(...).
+# dssim.components.literesource via sim.priority_resource(...).
 from dssim import DSSimulation, LiteLayer2
 
 
@@ -30,7 +30,7 @@ def tstamp(value):
 
 def run_lite_non_preemptive():
     sim = DSSimulation(layer2=LiteLayer2)
-    res = sim.lite_priority_resource(amount=1, capacity=1, preemptive=False, name='clerks')
+    res = sim.priority_resource(amount=1, capacity=1, preemptive=False, name='clerks')
     starts = []
 
     def customer(name, arrival, priority, service):
@@ -50,7 +50,7 @@ def run_lite_non_preemptive():
 
 def run_lite_preemptive():
     sim = DSSimulation(layer2=LiteLayer2)
-    resource = sim.lite_priority_resource(amount=1, capacity=1, preemptive=True, name='machine')
+    resource = sim.priority_resource(amount=1, capacity=1, preemptive=True, name='machine')
     log = []
 
     def job(name, arrival, prio, service):

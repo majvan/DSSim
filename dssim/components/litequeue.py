@@ -234,8 +234,8 @@ class LiteQueue(DSComponent, ISubscriber):
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
 class SimLiteQueueMixin:
-    def lite_queue(self: Any, *args: Any, **kwargs: Any) -> LiteQueue:
+    def queue(self: Any, *args: Any, **kwargs: Any) -> LiteQueue:
         sim: 'DSSimulation' = kwargs.pop('sim', self)
         if sim is not self:
-            raise ValueError('The parameter sim in lite_queue() method should be set to the same simulation instance.')
+            raise ValueError('The parameter sim in queue() method should be set to the same simulation instance.')
         return LiteQueue(*args, **kwargs, sim=sim)

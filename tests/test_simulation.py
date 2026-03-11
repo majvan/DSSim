@@ -437,32 +437,32 @@ class TestSimWaitMixin(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestSimLiteQueueMixin(unittest.TestCase):
-    ''' Tests for SimLiteQueueMixin.lite_queue() factory. '''
+    ''' Tests for SimLiteQueueMixin.queue() factory. '''
 
-    def test1_lite_queue_returns_lite_queue_instance(self):
-        ''' sim.lite_queue() returns a LiteQueue bound to the sim. '''
+    def test1_queue_returns_lite_queue_instance(self):
+        ''' sim.queue() on LiteLayer2 returns a LiteQueue bound to the sim. '''
         from dssim.components.litequeue import LiteQueue
         sim = DSSimulation(layer2=LiteLayer2)
-        q = sim.lite_queue()
+        q = sim.queue()
         self.assertIsInstance(q, LiteQueue)
         self.assertIs(q.sim, sim)
 
-    def test2_lite_queue_passes_capacity(self):
+    def test2_queue_passes_capacity(self):
         ''' Capacity keyword argument is forwarded to LiteQueue. '''
         sim = DSSimulation(layer2=LiteLayer2)
-        q = sim.lite_queue(capacity=3)
+        q = sim.queue(capacity=3)
         self.assertEqual(q.capacity, 3)
 
-    def test3_lite_queue_wrong_sim_raises(self):
+    def test3_queue_wrong_sim_raises(self):
         ''' Passing a different sim instance raises ValueError. '''
         sim1 = DSSimulation(layer2=LiteLayer2)
         sim2 = DSSimulation(layer2=LiteLayer2)
         with self.assertRaises(ValueError):
-            sim1.lite_queue(sim=sim2)
+            sim1.queue(sim=sim2)
 
-    def test4_lite_queue_not_available_without_lite_layer2(self):
-        ''' lite_queue() is not present on a default (PubSubLayer2) simulation. '''
-        sim = DSSimulation()
+    def test4_old_lite_queue_name_not_available(self):
+        ''' Legacy lite_queue() name is not exposed on LiteLayer2. '''
+        sim = DSSimulation(layer2=LiteLayer2)
         self.assertFalse(hasattr(sim, 'lite_queue'))
 
 

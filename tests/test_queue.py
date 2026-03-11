@@ -19,6 +19,26 @@ from dssim import DSSimulation, Queue
 from dssim.base_components import DSQueue, DSLifoQueue, DSKeyQueue
 
 # ---------------------------------------------------------------------------
+# SimQueueMixin factory
+# ---------------------------------------------------------------------------
+
+class TestSimQueueMixin(unittest.TestCase):
+
+    def test1_queue_factory_returns_queue_instance(self):
+        sim = DSSimulation()
+        q = sim.queue(capacity=3)
+        self.assertIsInstance(q, Queue)
+        self.assertIs(q.sim, sim)
+        self.assertEqual(q.capacity, 3)
+
+    def test2_queue_factory_wrong_sim_raises(self):
+        sim1 = DSSimulation()
+        sim2 = DSSimulation()
+        with self.assertRaises(ValueError):
+            sim1.queue(sim=sim2)
+
+
+# ---------------------------------------------------------------------------
 # Queue component tests (requires DSSimulation)
 # ---------------------------------------------------------------------------
 
