@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Plain (simulation-unaware) data structures used as building blocks for
-simulation components.
+Core reusable building blocks used by simulation components.
 '''
 import heapq
 from collections import deque
-from typing import Any, Iterator, Callable
+from typing import Any, Iterator, Callable, Dict, List, Optional
+
+from dssim.base import NumericType
 
 
 class DSQueue:
@@ -266,3 +267,161 @@ class DSKeyQueue(DSQueue):
         '''Remove all items.'''
         self._data.clear()
         self._counter = 0
+
+
+class DSResource:
+    '''Plain amount/capacity container for resource components.'''
+
+    def __init__(
+        self,
+        amount: NumericType = 0,
+        capacity: NumericType = float('inf'),
+        owner: Optional[Any] = None,
+    ) -> None:
+        if amount > capacity:
+            raise ValueError('Initial amount of the resource is greater than capacity.')
+        self._owner = owner
+        target = owner if owner is not None else self
+        target.amount = amount
+        target.capacity = capacity
+
+    def put_n_nowait(self, amount: NumericType = 1) -> NumericType:
+        target = self._owner if self._owner is not None else self
+        if target.amount + amount > target.capacity:
+            return 0
+        target.amount += amount
+        return amount
+
+    def get_n_nowait(self, amount: NumericType = 1) -> NumericType:
+        target = self._owner if self._owner is not None else self
+        if amount > target.amount:
+            return 0
+        target.amount -= amount
+        return amount
+
+
+class DSPriorityResource:
+    '''Priority holder bookkeeping shared by priority resource components.'''
+
+    def __init__(self) -> None:
+        # Owner state layout: [amount, priority]
+        self.holders_by_owner: Dict[Any, List[NumericType]] = {}
+        self.holders_by_priority: Dict[int, List[Any]] = {}
+        self.reclaimed: Dict[Any, NumericType] = {}
+
+    def held_amount(self, owner: Any) -> NumericType:
+        state = self.holders_by_owner.get(owner)
+        if state is None:
+            return 0
+        return state[0]
+
+    def remove_from_bucket(self, owner: Any, priority: int) -> None:
+        bucket = self.holders_by_priority.get(priority)
+        if bucket is None:
+            return
+        try:
+            bucket.remove(owner)
+        except ValueError:
+            return
+        if not bucket:
+            self.holders_by_priority.pop(priority, None)
+
+    def set_holder_amount(self, owner: Any, amount: NumericType) -> None:
+        state = self.holders_by_owner.get(owner)
+        if state is None:
+            return
+        if amount <= 0:
+            self.remove_from_bucket(owner, state[1])
+            self.holders_by_owner.pop(owner, None)
+            return
+        state[0] = amount
+
+    def remember_acquire(self, owner: Any, amount: NumericType, priority: int) -> None:
+        state = self.holders_by_owner.get(owner)
+        if state is None:
+            self.holders_by_owner[owner] = [amount, priority]
+            bucket = self.holders_by_priority.setdefault(priority, [])
+            bucket.append(owner)
+            return
+
+        state[0] += amount
+        old_priority = state[1]
+        new_priority = min(old_priority, priority)
+        if new_priority != old_priority:
+            self.remove_from_bucket(owner, old_priority)
+            state[1] = new_priority
+            self.holders_by_priority.setdefault(new_priority, []).append(owner)
+            return
+
+        # Same-priority re-acquire: refresh recency (newest at end).
+        bucket = self.holders_by_priority.setdefault(new_priority, [])
+        try:
+            bucket.remove(owner)
+        except ValueError:
+            pass
+        bucket.append(owner)
+
+    def consume_reclaimed_release(self, owner: Any, amount: NumericType) -> NumericType:
+        reclaimed = self.reclaimed.get(owner, 0)
+        if reclaimed <= 0:
+            return amount
+        consumed = reclaimed if reclaimed <= amount else amount
+        left = reclaimed - consumed
+        if left > 0:
+            self.reclaimed[owner] = left
+        else:
+            self.reclaimed.pop(owner, None)
+        return amount - consumed
+
+
+class DSPriorityPreemption:
+    '''Shared preemption dispatch algorithm for priority resources.'''
+
+    def __init__(self, priority_state: DSPriorityResource) -> None:
+        self.priority = priority_state
+
+    def reclaim_from_victims(
+        self,
+        need: NumericType,
+        requester: Any,
+        req_priority: int,
+        on_take: Callable[[NumericType], None],
+        on_preempted: Callable[[Any, int, NumericType], None],
+        on_reclaimed: Optional[Callable[[NumericType], None]] = None,
+    ) -> NumericType:
+        if need <= 0:
+            return 0
+        released = 0
+        # preempt weakest holders first:
+        # larger numeric priority first, and for equal priority newest first.
+        candidates = []
+        for holder_prio in sorted(self.priority.holders_by_priority.keys(), reverse=True):
+            if holder_prio <= req_priority:
+                continue
+            bucket = self.priority.holders_by_priority[holder_prio]
+            for owner in reversed(bucket):
+                candidates.append((holder_prio, owner))
+
+        for holder_prio, owner in candidates:
+            if need <= 0:
+                break
+            if owner is requester:
+                continue
+            state = self.priority.holders_by_owner.get(owner)
+            if state is None:
+                continue
+            if state[1] <= req_priority:
+                continue
+            held = state[0]
+            if held <= 0:
+                continue
+            taken = held if held <= need else need
+            self.priority.set_holder_amount(owner, held - taken)
+            self.priority.reclaimed[owner] = self.priority.reclaimed.get(owner, 0) + taken
+            on_take(taken)
+            released += taken
+            need -= taken
+            on_preempted(owner, holder_prio, taken)
+        if released > 0 and on_reclaimed is not None:
+            on_reclaimed(released)
+        return released

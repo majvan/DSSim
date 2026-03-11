@@ -22,9 +22,10 @@ These components avoid pubsub/conditions and rely only on TinyLayer2 primitives:
 from __future__ import annotations
 
 from collections import deque
-from typing import Any, Deque, Dict, Generator, List, Optional, TYPE_CHECKING
+from typing import Any, Deque, Generator, List, Optional, TYPE_CHECKING
 
 from dssim.base import DSComponent, NumericType, EventType, EventRetType, ISubscriber, TimeType
+from dssim.base_components import DSResource, DSPriorityResource, DSPriorityPreemption
 
 
 if TYPE_CHECKING:
@@ -70,10 +71,7 @@ class TinyResource(DSComponent, ISubscriber):
     def __init__(self, amount: NumericType = 0, capacity: NumericType = float('inf'),
                  *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        if amount > capacity:
-            raise ValueError('Initial amount of the resource is greater than capacity.')
-        self.amount = amount
-        self.capacity = capacity
+        self._resource = DSResource(amount=amount, capacity=capacity, owner=self)
         self._getters: Deque[_Waiter] = deque()
         self._putters: Deque[_Waiter] = deque()
         self._dispatch_scheduled = False
@@ -184,23 +182,19 @@ class TinyResource(DSComponent, ISubscriber):
         return self.put_n_nowait(1)
 
     def put_n_nowait(self, amount: NumericType = 1) -> NumericType:
-        if self.amount + amount > self.capacity:
-            return 0
-        self.amount += amount
-        if self._getters:
+        retval = self._resource.put_n_nowait(amount)
+        if retval > 0 and self._getters:
             self._request_dispatch()
-        return amount
+        return retval
 
     def get_nowait(self, **policy_params: Any) -> NumericType:
         return self.get_n_nowait(1, **policy_params)
 
     def get_n_nowait(self, amount: NumericType = 1, **policy_params: Any) -> NumericType:
-        if amount > self.amount:
-            return 0
-        self.amount -= amount
-        if self._putters:
+        retval = self._resource.get_n_nowait(amount)
+        if retval > 0 and self._putters:
             self._request_dispatch()
-        return amount
+        return retval
 
     # ------------------------------------------------------------------
     # Blocking generator operations
@@ -209,7 +203,7 @@ class TinyResource(DSComponent, ISubscriber):
     def gput(self, timeout: TimeType = float('inf')) -> Generator[EventType, EventType, NumericType]:
         return (yield from self.gput_n(timeout=timeout, amount=1))
 
-    def gput_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1) -> Generator[EventType, EventType, NumericType]:
+    def gput_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, EventType, NumericType]:
         retval = self.put_n_nowait(amount)
         if retval > 0:
             return retval
@@ -243,7 +237,7 @@ class TinyResource(DSComponent, ISubscriber):
     async def put(self, timeout: TimeType = float('inf')) -> NumericType:
         return await self.put_n(timeout=timeout, amount=1)
 
-    async def put_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1) -> NumericType:
+    async def put_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
         retval = self.put_n_nowait(amount)
         if retval > 0:
             return retval
@@ -282,12 +276,12 @@ class TinyPriorityResource(TinyResource):
         self.preemptive = preemptive
         self._getters: List[_PriorityWaiter] = []
         self._prio_seq = 0
-        # Dual-index holder state:
-        # - by owner: fast release/update for current process
-        # - by priority buckets: efficient preemption candidate ordering
-        self._holders_by_owner: Dict[Any, Dict[str, Any]] = {}
-        self._holders_by_priority: Dict[int, List[Any]] = {}
-        self._reclaimed: Dict[Any, NumericType] = {}
+        self._priority = DSPriorityResource()
+        self._preemption = DSPriorityPreemption(self._priority)
+        # Backward-compatible aliases for existing tests/debug tooling.
+        self._holders_by_owner = self._priority.holders_by_owner
+        self._holders_by_priority = self._priority.holders_by_priority
+        self._reclaimed = self._priority.reclaimed
 
     class Preempted(Exception):
         def __init__(self, resource: "TinyPriorityResource", by: Any, owner: Any, priority: int, amount: NumericType) -> None:
@@ -321,108 +315,40 @@ class TinyPriorityResource(TinyResource):
     # Holder / preemption bookkeeping
     # ------------------------------------------------------------------
 
+    def _on_reclaimed(self, released: NumericType) -> None:
+        if self._getters:
+            self._request_dispatch()
+
     def _held_amount(self, owner: Any) -> NumericType:
-        state = self._holders_by_owner.get(owner)
-        if state is None:
-            return 0
-        return state['amount']
+        return self._priority.held_amount(owner)
 
     def _remove_from_bucket(self, owner: Any, priority: int) -> None:
-        bucket = self._holders_by_priority.get(priority)
-        if bucket is None:
-            return
-        try:
-            bucket.remove(owner)
-        except ValueError:
-            return
-        if not bucket:
-            self._holders_by_priority.pop(priority, None)
+        self._priority.remove_from_bucket(owner, priority)
 
     def _set_holder_amount(self, owner: Any, amount: NumericType) -> None:
-        state = self._holders_by_owner.get(owner)
-        if state is None:
-            return
-        if amount <= 0:
-            self._remove_from_bucket(owner, state['priority'])
-            self._holders_by_owner.pop(owner, None)
-            return
-        state['amount'] = amount
+        self._priority.set_holder_amount(owner, amount)
 
     def _remember_acquire(self, owner: Any, amount: NumericType, priority: int) -> None:
-        state = self._holders_by_owner.get(owner)
-        if state is None:
-            self._holders_by_owner[owner] = {'amount': amount, 'priority': priority}
-            bucket = self._holders_by_priority.setdefault(priority, [])
-            bucket.append(owner)
-            return
-
-        state['amount'] += amount
-        old_priority = state['priority']
-        new_priority = min(old_priority, priority)
-        if new_priority != old_priority:
-            self._remove_from_bucket(owner, old_priority)
-            state['priority'] = new_priority
-            self._holders_by_priority.setdefault(new_priority, []).append(owner)
-            return
-
-        # Same-priority re-acquire: refresh recency (newest at end).
-        bucket = self._holders_by_priority.setdefault(new_priority, [])
-        try:
-            bucket.remove(owner)
-        except ValueError:
-            pass
-        bucket.append(owner)
+        self._priority.remember_acquire(owner, amount, priority)
 
     def _reclaim_from_victims(self, need: NumericType, requester: Any, priority: int) -> NumericType:
-        if need <= 0:
-            return 0
-        released = 0
-        # preempt weakest holders first:
-        # larger numeric priority first, and for equal priority newest first.
-        candidates = []
-        for holder_prio in sorted(self._holders_by_priority.keys(), reverse=True):
-            if holder_prio <= priority:
-                continue
-            bucket = self._holders_by_priority[holder_prio]
-            for owner in reversed(bucket):
-                candidates.append((holder_prio, owner))
-
-        for holder_prio, owner in candidates:
-            if need <= 0:
-                break
-            if owner is requester:
-                continue
-            state = self._holders_by_owner.get(owner)
-            if state is None:
-                continue
-            if state['priority'] <= priority:
-                continue
-            held = state['amount']
-            if held <= 0:
-                continue
-            taken = held if held <= need else need
-            self._set_holder_amount(owner, held - taken)
-            self._reclaimed[owner] = self._reclaimed.get(owner, 0) + taken
+        def on_take(taken: NumericType) -> None:
             self.amount += taken
-            released += taken
-            need -= taken
+
+        def on_preempted(owner: Any, holder_prio: int, taken: NumericType) -> None:
             self.sim.signal(self.Preempted(self, requester, owner, holder_prio, taken), owner)
 
-        if released > 0 and self._getters:
-            self._request_dispatch()
-        return released
+        return self._preemption.reclaim_from_victims(
+            need=need,
+            requester=requester,
+            req_priority=priority,
+            on_take=on_take,
+            on_preempted=on_preempted,
+            on_reclaimed=self._on_reclaimed,
+        )
 
     def _consume_reclaimed_release(self, owner: Any, amount: NumericType) -> NumericType:
-        reclaimed = self._reclaimed.get(owner, 0)
-        if reclaimed <= 0:
-            return amount
-        consumed = reclaimed if reclaimed <= amount else amount
-        left = reclaimed - consumed
-        if left > 0:
-            self._reclaimed[owner] = left
-        else:
-            self._reclaimed.pop(owner, None)
-        return amount - consumed
+        return self._priority.consume_reclaimed_release(owner, amount)
 
     def _make_priority_waiter(self, amount: NumericType, priority: int = 0) -> _PriorityWaiter:
         waiter = _PriorityWaiter(self.sim._parent_process, amount, priority, self._prio_seq)
