@@ -1,0 +1,294 @@
+#!/usr/bin/env python3
+'''
+Benchmark: DSSim generator vs coroutine dispatch (raw + TinyLayer2)
+
+Goal
+----
+Compare generator consumers against coroutine consumers in:
+1. raw DSSim (``layer2=None``)
+2. TinyLayer2 DSSim (``layer2=TinyLayer2``)
+
+Both variants use object event delivery (``schedule_event`` / ``signal``).
+
+Scenarios
+---------
+1. timed-dispatch : N object events scheduled at increasing timestamps
+2. now-burst      : N object events queued via ``signal`` at time 0
+
+Metrics per scenario
+--------------------
+- events/s  : N / mean wall-clock seconds
+- mean ms   : average wall-clock time over REPEATS runs
+- min ms    : fastest run
+'''
+
+import os
+import statistics
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from dssim import DSSimulation, TinyLayer2
+
+
+# ---------------------------------------------------------------------------
+# Parameters
+# ---------------------------------------------------------------------------
+N_EVENTS = 200_000
+REPEATS = 25
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+class _RawAwaitable:
+    '''Single-step awaitable for raw coroutine consumers.
+
+    ``await _RawAwaitable()`` suspends once and resumes with the next event
+    sent by DSSim.
+    '''
+
+    def __await__(self):
+        event = yield None
+        return event
+
+
+def bench(fn, *args):
+    times = []
+    for _ in range(REPEATS):
+        t0 = time.perf_counter()
+        fn(*args)
+        times.append(time.perf_counter() - t0)
+    return min(times), statistics.mean(times), statistics.stdev(times), sum(times)
+
+
+def report(label, n, min_t, mean_t, stdev_t, total_t):
+    print(
+        f'  {label:<27s}  {n/mean_t:>10,.0f} ev/s'
+        f'  mean = {mean_t*1e3:7.2f} ± {stdev_t*1e3:3.2f} ms'
+        f'  min = {min_t*1e3:7.2f} ms'
+        f'  total = {total_t:6.2f} s'
+    )
+
+
+# ---------------------------------------------------------------------------
+# Scenario 1: timed-dispatch
+# ---------------------------------------------------------------------------
+def raw_timed_generator(n):
+    sim = DSSimulation(layer2=None)
+    payload = {'kind': 'timed'}
+    handled = 0
+    last_event = None
+
+    def sink():
+        nonlocal handled, last_event
+        while True:
+            event = yield
+            handled += 1
+            last_event = event
+
+    consumer = sink()
+    sim.schedule_event(0, None, consumer)  # prime to first ``yield``
+    for i in range(n):
+        sim.schedule_event(i + 1, payload, consumer)
+    sim.run()
+
+    assert handled == n, f'timed generator: expected {n}, got {handled}'
+    assert last_event is payload, 'timed generator: final payload mismatch'
+
+
+def raw_timed_coroutine(n):
+    sim = DSSimulation(layer2=None)
+    payload = {'kind': 'timed'}
+    handled = 0
+    last_event = None
+
+    async def sink():
+        nonlocal handled, last_event
+        wait_one = _RawAwaitable()
+        while True:
+            event = await wait_one
+            handled += 1
+            last_event = event
+
+    consumer = sink()
+    sim.schedule_event(0, None, consumer)  # prime to first ``await``
+    for i in range(n):
+        sim.schedule_event(i + 1, payload, consumer)
+    sim.run()
+
+    assert handled == n, f'timed coroutine: expected {n}, got {handled}'
+    assert last_event is payload, 'timed coroutine: final payload mismatch'
+
+
+def tiny_timed_generator(n):
+    sim = DSSimulation(layer2=TinyLayer2)
+    payload = {'kind': 'timed'}
+    handled = 0
+    last_event = None
+
+    def sink():
+        nonlocal handled, last_event
+        while True:
+            event = yield from sim.gwait()
+            handled += 1
+            last_event = event
+
+    consumer = sink()
+    sim.schedule(0, consumer)  # prime to first gwait
+    for i in range(n):
+        sim.schedule_event(i + 1, payload, consumer)
+    sim.run()
+
+    assert handled == n, f'tiny timed generator: expected {n}, got {handled}'
+    assert last_event is payload, 'tiny timed generator: final payload mismatch'
+
+
+def tiny_timed_coroutine(n):
+    sim = DSSimulation(layer2=TinyLayer2)
+    payload = {'kind': 'timed'}
+    handled = 0
+    last_event = None
+
+    async def sink():
+        nonlocal handled, last_event
+        while True:
+            event = await sim.wait()
+            handled += 1
+            last_event = event
+
+    consumer = sink()
+    sim.schedule(0, consumer)  # prime to first wait
+    for i in range(n):
+        sim.schedule_event(i + 1, payload, consumer)
+    sim.run()
+
+    assert handled == n, f'tiny timed coroutine: expected {n}, got {handled}'
+    assert last_event is payload, 'tiny timed coroutine: final payload mismatch'
+
+
+# ---------------------------------------------------------------------------
+# Scenario 2: now-burst
+# ---------------------------------------------------------------------------
+def raw_now_burst_generator(n):
+    sim = DSSimulation(layer2=None)
+    payload = {'kind': 'now'}
+    handled = 0
+    last_event = None
+
+    def sink():
+        nonlocal handled, last_event
+        while True:
+            event = yield
+            handled += 1
+            last_event = event
+
+    consumer = sink()
+    sim.schedule_event(0, None, consumer)  # prime
+    for _ in range(n):
+        sim.signal(payload, consumer)
+    sim.run()
+
+    assert handled == n, f'now-burst generator: expected {n}, got {handled}'
+    assert last_event is payload, 'now-burst generator: final payload mismatch'
+
+
+def raw_now_burst_coroutine(n):
+    sim = DSSimulation(layer2=None)
+    payload = {'kind': 'now'}
+    handled = 0
+    last_event = None
+
+    async def sink():
+        nonlocal handled, last_event
+        wait_one = _RawAwaitable()
+        while True:
+            event = await wait_one
+            handled += 1
+            last_event = event
+
+    consumer = sink()
+    sim.schedule_event(0, None, consumer)  # prime
+    for _ in range(n):
+        sim.signal(payload, consumer)
+    sim.run()
+
+    assert handled == n, f'now-burst coroutine: expected {n}, got {handled}'
+    assert last_event is payload, 'now-burst coroutine: final payload mismatch'
+
+
+def tiny_now_burst_generator(n):
+    sim = DSSimulation(layer2=TinyLayer2)
+    payload = {'kind': 'now'}
+    handled = 0
+    last_event = None
+
+    def sink():
+        nonlocal handled, last_event
+        while True:
+            event = yield from sim.gwait()
+            handled += 1
+            last_event = event
+
+    consumer = sink()
+    sim.schedule(0, consumer)  # prime to first gwait
+    for _ in range(n):
+        sim.signal(payload, consumer)
+    sim.run()
+
+    assert handled == n, f'tiny now-burst generator: expected {n}, got {handled}'
+    assert last_event is payload, 'tiny now-burst generator: final payload mismatch'
+
+
+def tiny_now_burst_coroutine(n):
+    sim = DSSimulation(layer2=TinyLayer2)
+    payload = {'kind': 'now'}
+    handled = 0
+    last_event = None
+
+    async def sink():
+        nonlocal handled, last_event
+        while True:
+            event = await sim.wait()
+            handled += 1
+            last_event = event
+
+    consumer = sink()
+    sim.schedule(0, consumer)  # prime to first wait
+    for _ in range(n):
+        sim.signal(payload, consumer)
+    sim.run()
+
+    assert handled == n, f'tiny now-burst coroutine: expected {n}, got {handled}'
+    assert last_event is payload, 'tiny now-burst coroutine: final payload mismatch'
+
+
+if __name__ == '__main__':
+    print(f'Python {sys.version.split()[0]}')
+    print(f'Parameters: N={N_EVENTS:,}  repeats={REPEATS}\n')
+
+    print(f'=== Scenario 1: timed-dispatch (N={N_EVENTS:,}) ===')
+    g1 = bench(raw_timed_generator, N_EVENTS)
+    c1 = bench(raw_timed_coroutine, N_EVENTS)
+    tg1 = bench(tiny_timed_generator, N_EVENTS)
+    tc1 = bench(tiny_timed_coroutine, N_EVENTS)
+    report('DSSim raw generator', N_EVENTS, *g1)
+    report('DSSim raw coroutine', N_EVENTS, *c1)
+    report('DSSim tiny generator', N_EVENTS, *tg1)
+    report('DSSim tiny coroutine', N_EVENTS, *tc1)
+    print(f'  raw  coroutine/generator mean ratio: {c1[1] / g1[1]:.3f}x')
+    print(f'  tiny coroutine/generator mean ratio: {tc1[1] / tg1[1]:.3f}x')
+
+    print(f'\n=== Scenario 2: now-burst (N={N_EVENTS:,}) ===')
+    g2 = bench(raw_now_burst_generator, N_EVENTS)
+    c2 = bench(raw_now_burst_coroutine, N_EVENTS)
+    tg2 = bench(tiny_now_burst_generator, N_EVENTS)
+    tc2 = bench(tiny_now_burst_coroutine, N_EVENTS)
+    report('DSSim raw generator', N_EVENTS, *g2)
+    report('DSSim raw coroutine', N_EVENTS, *c2)
+    report('DSSim TinyLayer2 generator', N_EVENTS, *tg2)
+    report('DSSim TinyLayer2 coroutine', N_EVENTS, *tc2)
+    print(f'  raw  coroutine/generator mean ratio: {c2[1] / g2[1]:.3f}x')
+    print(f'  tiny coroutine/generator mean ratio: {tc2[1] / tg2[1]:.3f}x')
+    print()
