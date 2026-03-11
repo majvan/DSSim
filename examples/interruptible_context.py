@@ -35,7 +35,7 @@ class MyComponent(DSComponent):
             ep = DSTransformation(self.ep, lambda e: ValueError(e))
             with self.sim.observe_pre(ep) as cm:
                 print(self.sim.time, 'Waiting...')
-                event = await self.sim.wait(100)  # No signal should stop this, only Exception
+                event = await self.sim.sleep(100)  # Ignore plain events; only exceptions interrupt.
                 assert False, 'This should not be executed because a signal from main creates exception'
         except Exception as e:
             assert isinstance(e, ValueError)
@@ -55,7 +55,7 @@ class MyComponent(DSComponent):
         t = self.sim.time
         with self.sim.timeout(10) as cm:
             print(self.sim.time, 'Waiting...')
-            event = await self.sim.wait(100)  # No signal should stop this, only Exception
+            event = await self.sim.sleep(100)  # Ignore plain events; timeout raises interruption.
             assert False, 'This should not be executed because a signal from main creates exception'
         assert self.sim.time == t + 10
         assert cm.interrupted()
@@ -72,7 +72,7 @@ class MyComponent(DSComponent):
         with self.sim.timeout(10) as cm0:
             with self.sim.timeout(20) as cm1:
                 print(self.sim.time, 'Waiting...')
-                event = await self.sim.wait(100)  # No signal should stop this, only Exception
+                event = await self.sim.sleep(100)  # Ignore plain events; outer timeout interrupts first.
                 assert False, 'This should not be executed because a signal from main creates exception0'
             assert False, 'This should not be executed because a signal from main creates exception1'
         assert self.sim.time == t + 10
@@ -92,7 +92,8 @@ class MyComponent(DSComponent):
         with self.sim.observe_pre(self.ep) as cm:
             with self.sim.extend_cond(cond='Hi'):
                 print(self.sim.time, 'Waiting 100')
-                event = await self.sim.wait(100)  # No signal should stop this, only Exception
+                # Keep wait() from accepting arbitrary events; only extend_cond('Hi') should wake us.
+                event = await self.sim.wait(100, cond=lambda e: False)
                 assert True, 'This line has to be run.'
         assert event == 'Hi'
         assert self.sim.time == t + 10
@@ -110,7 +111,7 @@ class MyComponent(DSComponent):
         with self.sim.observe_pre(self.ep):
             with self.sim.interruptible(cond='Hi') as cm:
                     print(self.sim.time, 'Waiting 100')
-                    event = await self.sim.wait(100)  # No signal should stop this, only Exception
+                    event = await self.sim.sleep(100)  # Ignore plain events; interruptible condition raises.
                     assert False, 'This line should not be executed.'
         assert self.sim.time == t + 10
         assert cm.interrupted()
@@ -131,7 +132,7 @@ class MyComponent(DSComponent):
             with self.sim.timeout(20) as cm0:
                 with self.sim.interruptible(cond='Hi') as cm1:
                     print(self.sim.time, 'Waiting 100')
-                    event = await self.sim.wait(100)  # No signal should stop this, only Exception
+                    event = await self.sim.sleep(100)  # Ignore plain events; timeout or interruptible decides.
         assert event == None
         assert self.sim.time == t + 20
         assert not cm1.interrupted()
@@ -153,7 +154,7 @@ class MyComponent(DSComponent):
             with self.sim.timeout(20) as cm0:
                 with self.sim.interruptible(cond='Bye transformed') as cm1:
                     print(self.sim.time, 'Waiting 100')
-                    event = await self.sim.wait(100)  # No signal should stop this, only Exception
+                    event = await self.sim.sleep(100)  # Ignore plain events; transformed interrupt decides.
         assert event == None
         assert self.sim.time == t + 15
         assert cm1.interrupted()
@@ -165,48 +166,48 @@ class MyComponent(DSComponent):
 
 async def main(mc):
     sim.schedule(0, mc.process0())
-    await sim.wait(10)
+    await sim.sleep(10)
     print(sim.time, 'Sending Hello')
     mc.ep.signal('Hello')
 
     sim.schedule(0, mc.process1())
-    await sim.wait(20)
+    await sim.sleep(20)
 
     p = DSProcess(mc.process2(), sim=sim).schedule(0)
     await p
 
     sim.schedule(0, mc.process3())
-    await sim.wait(5)
+    await sim.sleep(5)
     print(sim.time, 'Sending Hello')
     mc.ep.signal('Hello')
-    await sim.wait(5)
+    await sim.sleep(5)
     print(sim.time, 'Sending Hi')
     mc.ep.signal('Hi')
 
     sim.schedule(0, mc.process4())
-    await sim.wait(5)
+    await sim.sleep(5)
     print(sim.time, 'Sending Hello')
     mc.ep.signal('Hello')
-    await sim.wait(5)
+    await sim.sleep(5)
     print(sim.time, 'Sending Hi')
     mc.ep.signal('Hi')
 
     sim.schedule(0, mc.process5())
-    await sim.wait(5)
+    await sim.sleep(5)
     print(sim.time, 'Sending Hello')
     mc.ep.signal('Hello')
-    await sim.wait(20)
+    await sim.sleep(20)
     print(sim.time, 'Sending Hi')
     mc.ep.signal('Hi')
 
     sim.schedule(0, mc.process6())
-    await sim.wait(5)
+    await sim.sleep(5)
     print(sim.time, 'Sending Hello')
     mc.ep.signal('Hello')
-    await sim.wait(5)
+    await sim.sleep(5)
     print(sim.time, 'Sending Hi')
     mc.ep.signal('Hi')
-    await sim.wait(5)
+    await sim.sleep(5)
     print(sim.time, 'Sending Bye')
     mc.ep.signal('Bye')
 

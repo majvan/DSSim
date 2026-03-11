@@ -479,9 +479,9 @@ class TestSim(unittest.TestCase):
         self.sim.schedule_event(2.5, {'producer': producer, 'data': 2}, process)
         self.sim.schedule_event(3.5, {'producer': producer, 'data': 3}, process)
         retval = self.sim.run(5)
-        self.assertEqual(retval, (3.5, 6))
+        self.assertEqual(retval, (3.5, 5))
         calls = [
-            call(2, None),
+            call(1.5, None),
             call(2.5, producer=producer, data=2),
             call(3.5, producer=producer, data=3),
         ]
@@ -523,7 +523,7 @@ class TestSim(unittest.TestCase):
         self.sim.schedule_event(1, {'data': 1}, process)
         num_events = self.sim.run(2.5)
         calls = [
-            call(2, None),
+            call(1, None),
         ]
         self.__time_process_event.assert_has_calls(calls)
         self.assertEqual(len(self.sim.time_queue), 0)
@@ -534,6 +534,21 @@ class TestSim(unittest.TestCase):
         process.abort(DSAbortException(testing=-1)),
         num_events = self.sim.run(3)
         self.assertEqual(len(self.sim.time_queue), 0)
+
+    def test9_gsleep_ignores_events_until_timeout(self):
+        self.sim = DSSimulation()
+        result = []
+
+        def my_process():
+            retval = yield from self.sim.gsleep(2)
+            result.append((self.sim.time, retval))
+
+        process = DSProcess(my_process(), sim=self.sim).schedule(0)
+        self.sim.schedule_event(1, {'data': 1}, process)
+        self.sim.schedule_event(1.5, {'data': 2}, process)
+        self.sim.run(5)
+
+        self.assertEqual(result, [(2, None)])
 
 
 # ---------------------------------------------------------------------------

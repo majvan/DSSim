@@ -421,7 +421,7 @@ class PriorityResource(Resource):
             with resource.autorelease():
                 got = yield from resource.gget(priority=1, preempt=True)
                 if got:
-                    yield from sim.gwait(5)
+                    yield from sim.gsleep(5)
             # released automatically here if still held
         '''
         return self._HoldContext(self)

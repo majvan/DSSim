@@ -91,5 +91,5 @@ class PCGenerator(DSProcessComponent):
     async def process(self) -> None:
         while True:
             obj = self.cls()  # create new instance of the class
-            await self.sim.wait(self.wait_method(obj))
+            await self.sim.sleep(self.wait_method(obj))
       

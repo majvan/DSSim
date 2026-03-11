@@ -104,7 +104,7 @@ class DSProcess(DSFuture, SignalMixin):
         self.value = self.generator.send(event)
         return self.value
 
-    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+    def gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
         ''' Wait for an event for max. timeout time, accepting only events where cond is True.
         When cond is a DSFuture (or DSProcess), automatically subscribes to its finish endpoint
         so the caller wakes up when the future completes.
@@ -136,7 +136,7 @@ class DSProcess(DSFuture, SignalMixin):
             event = cond.cond_value()
         return event
 
-    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> EventType:
+    async def wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, val: EventRetType = True) -> EventType:
         ''' Async variant of gwait.
         When cond is a DSFuture (or DSProcess), automatically subscribes to its finish endpoint.
         '''
@@ -166,6 +166,15 @@ class DSProcess(DSFuture, SignalMixin):
         if hasattr(cond, 'cond_value'):
             event = cond.cond_value()
         return event
+
+    def gsleep(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+        '''Sleep for up to timeout while ignoring non-exception events.'''
+        retval = yield from self.gwait(timeout=timeout, cond=AlwaysFalse, val=val)
+        return retval
+
+    async def sleep(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> EventType:
+        '''Async sleep variant; ignores non-exception events until timeout.'''
+        return await self.wait(timeout=timeout, cond=AlwaysFalse, val=val)
 
     def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
         ''' Pre-check cond before waiting; return immediately if already satisfied. '''
@@ -286,7 +295,7 @@ class SimProcessMixin:
             raise ValueError('The parameter sim in process() method should be set to the same simulation instance.')
         return DSProcess(*args, **kwargs, sim=sim)
 
-    def gwait(self: Any, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+    def gwait(self: Any, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
         ''' Wait for an event from publisher for max. timeout time. The criteria which events to be
         accepted is given by cond. An accepted event returns from the wait function. An event which
         causes cond to be False is ignored and the function is waiting.
@@ -298,7 +307,7 @@ class SimProcessMixin:
         retval = yield from self._parent_process.check_and_gwait(timeout, cond, val)
         return retval
 
-    async def wait(self: Any, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> EventType:
+    async def wait(self: Any, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, val: EventRetType = True) -> EventType:
         ''' Wait for an event from publisher for max. timeout time. The criteria which events to be
         accepted is given by cond. An accepted event returns from the wait function. An event which
         causes cond to be False is ignored and the function is waiting.
@@ -309,6 +318,13 @@ class SimProcessMixin:
     async def check_and_wait(self: Any, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> EventType:
         retval = await self._parent_process.check_and_wait(timeout, cond, val)
         return retval
+
+    def gsleep(self: Any, timeout: TimeType = float('inf'), val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+        retval = yield from self._parent_process.gsleep(timeout, val)
+        return retval
+
+    async def sleep(self: Any, timeout: TimeType = float('inf'), val: EventRetType = True) -> EventType:
+        return await self._parent_process.sleep(timeout, val)
 
     def observe_pre(self: Any, *components: Union[DSFuture, DSPub], **policy_params: Any) -> DSSubscriberContextManager:
         return DSSubscriberContextManager(self.pid, DSPub.Phase.PRE, components, **policy_params)

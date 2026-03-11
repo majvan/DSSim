@@ -197,8 +197,8 @@ async def gather(*coros_or_futures, return_exceptions=False):
 
 async def sleep(delay, result=None):
     loop = get_running_loop()
-    retval = await loop.wait(delay)
-    return retval
+    await loop.sleep(delay)
+    return result
 
 async def wait_for(aw, timeout):
     async with _timeout(timeout) as cm:

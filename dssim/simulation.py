@@ -88,13 +88,13 @@ def DSSchedulable(api_func):
 
 
 class SimWaitMixin:
-    ''' Basic gwait/wait mixin for DSSimulation.
+    ''' Basic gwait/wait/sleep mixin for DSSimulation.
 
-    Provides timeout-only wait primitives that work purely at the simulation
+    Provides lightweight wait primitives that work purely at the simulation
     layer — no conditions, no pubsub, no DSProcess.
 
     SimProcessMixin (when present in DSSimulation's MRO before this class)
-    overrides both methods with the full condition-aware versions.
+    overrides these with full condition-aware versions.
     '''
 
     def gwait(self: "DSSimulation", timeout: TimeType = float('inf')) -> "Generator[EventType, EventType, EventType]":
@@ -125,6 +125,34 @@ class SimWaitMixin:
         retval = await self._wait_for_event(timeout)
         return retval
 
+    def gsleep(self: "DSSimulation", timeout: TimeType = float('inf')) -> "Generator[EventType, EventType, EventType]":
+        '''Sleep for up to *timeout* while ignoring non-exception events.'''
+        if timeout == float('inf'):
+            while True:
+                _ = yield from self.gwait(float('inf'))
+        end_time = self._compute_time(timeout)
+        while True:
+            remaining = end_time - self.time
+            if remaining <= 0:
+                return None
+            event = yield from self.gwait(remaining)
+            if event is None:
+                return None
+
+    async def sleep(self: "DSSimulation", timeout: TimeType = float('inf')) -> "EventType":
+        '''Async sleep variant; ignores non-exception events until timeout.'''
+        if timeout == float('inf'):
+            while True:
+                _ = await self.wait(float('inf'))
+        end_time = self._compute_time(timeout)
+        while True:
+            remaining = end_time - self.time
+            if remaining <= 0:
+                return None
+            event = await self.wait(remaining)
+            if event is None:
+                return None
+
 
 class SimScheduleMixin:
     ''' Base schedule() for ISubscriber — the minimal schedulable type.
@@ -143,8 +171,8 @@ class SimScheduleMixin:
                          'For processes, full-producers and full-subscribers, include SimProcessMixin.')
 
 
-# Minimal layer2: plain-generator / coroutine scheduling with timeout-only
-# gwait/wait.  No pubsub, no DSProcess.
+# Minimal layer2: plain-generator / coroutine scheduling with basic
+# gwait/wait/sleep. No pubsub, no DSProcess.
 LiteLayer2 = (
     SimWaitMixin,
     SimScheduleMixin,

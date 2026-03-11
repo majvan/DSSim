@@ -272,7 +272,7 @@ class UARTPhys(UARTPhysBase):
             time += self.bittime
         if line != 1:
             self.tx.schedule_kw_event(time, producer=self.tx, line=1)
-        await self.sim.wait(self.bytetime)
+        await self.sim.sleep(self.bytetime)
         self.stat['tx_counter'] += 1  # TX bytes counter
         self._send_next()
 
@@ -292,15 +292,15 @@ class UARTPhys(UARTPhysBase):
                 continue
             rx_bits = []
             for _ in range(self.bits):
-                await self.sim.wait(self.bittime)
+                await self.sim.sleep(self.bittime)
                 rx_bits.append(self.rx_line_state)
             if self.parity in ('E', 'O'):
-                await self.sim.wait(self.bittime)
+                await self.sim.sleep(self.bittime)
                 rx_parity_bit = self.rx_line_state
             else:
                 rx_parity_bit = None
             # wait for stop bit
-            await self.sim.wait(self.bittime)
+            await self.sim.sleep(self.bittime)
             if self.rx_line_state != 1:
                 self.stat['noise_counter'] += 1
                 continue
