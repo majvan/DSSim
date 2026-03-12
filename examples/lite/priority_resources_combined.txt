@@ -1,4 +1,4 @@
-LiteLayer2 notes for examples/pubsub/priority_resources.py
+LiteLayer2 notes for examples/pubsub/priority_resources_combined.py
 
 LiteLayer2 is missing required features:
 - take_cond(...) endpoint API on resources

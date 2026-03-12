@@ -35,6 +35,18 @@ if TYPE_CHECKING:
 _DISPATCH = object()
 
 
+class DSResourcePreempted(Exception):
+    '''Raised when a resource holder is preempted by a higher-priority requester.'''
+
+    def __init__(self, resource: Any, by: Any, owner: Any, priority: int, amount: Any) -> None:
+        super().__init__(f'{owner} was preempted on {resource} by {by} (priority={priority}, amount={amount}).')
+        self.resource = resource
+        self.by = by
+        self.owner = owner
+        self.priority = priority
+        self.amount = amount
+
+
 class _Waiter:
     __slots__ = ('subscriber', 'amount', 'done')
 
@@ -279,15 +291,6 @@ class LitePriorityResource(LiteResource):
         self._priority = DSPriorityResource()
         self._preemption = DSPriorityPreemption(self._priority)
 
-    class Preempted(Exception):
-        def __init__(self, resource: "LitePriorityResource", by: Any, owner: Any, priority: int, amount: NumericType) -> None:
-            super().__init__(f'{owner} was preempted on {resource} by {by} (priority={priority}, amount={amount}).')
-            self.resource = resource
-            self.by = by
-            self.owner = owner
-            self.priority = priority
-            self.amount = amount
-
     class _HoldContext:
         def __init__(self, resource: "LitePriorityResource") -> None:
             self.resource = resource
@@ -332,7 +335,7 @@ class LitePriorityResource(LiteResource):
             self.amount += taken
 
         def on_preempted(owner: Any, holder_prio: int, taken: NumericType) -> None:
-            self.sim.signal(self.Preempted(self, requester, owner, holder_prio, taken), owner)
+            self.sim.signal(DSResourcePreempted(self, requester, owner, holder_prio, taken), owner)
 
         return self._preemption.reclaim_from_victims(
             need=need,

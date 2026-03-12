@@ -16,6 +16,14 @@ from random import randint
 
 SIM_TIME = 60 * 10
 
+
+def first_person_in_queue(queue):
+    try:
+        return queue[0]['person']
+    except Exception:
+        return None
+
+
 class Person(DSComponent):
     def __init__(self, info, identifier, max_waiting_time):
         super().__init__()
@@ -34,15 +42,10 @@ class Person(DSComponent):
 
     def wait_in_queue(self):
         try:
-            wait = yield from sim.gwait(self.max_waiting_time)
+            yield from self.sim.gwait(self.max_waiting_time)
             self.queue.remove({'person': self})  # remove myself from the queue and return the waiting process
-            try:
-                first_person = None
-                first_person = q[0]['person']
-            except Exception as e:
-                pass
-            print(f'{self.sim.time:<5} {self}: Giving up waiting in queue. First one is {first_person}')
-        except DSAbortException as e:
+            print(f'{self.sim.time:<5} {self}: Giving up waiting in queue. First one is {first_person_in_queue(self.queue)}')
+        except DSAbortException:
             pass
 
     def __repr__(self):
@@ -63,14 +66,9 @@ class VisaCheck(DSComponent):
 
     def work(self):
         while True:
-            try:
-                first_person = None
-                first_person = q[0]['person']
-            except Exception as e:
-                pass
             print(
                 f'{self.sim.time:<5} {self}: Waiting for a person '
-                f'(timeout {self.max_waiting_time}); first one is {first_person}'
+                f'(timeout {self.max_waiting_time}); first one is {first_person_in_queue(self.queue)}'
             )
             event = yield from self.queue.gget(cond=lambda e:e['person'].info in self.info, timeout=self.max_waiting_time)
             if event is None:
@@ -80,13 +78,7 @@ class VisaCheck(DSComponent):
             person.abort_waiting()  # abort his waiting process
             busy = randint(2, 6) if person.info == 'EU' else randint (5, 15)  # persons without EU visa take longer
 
-            try:
-                first_person = None
-                first_person = q[0]['person']
-            except Exception as e:
-                pass
-
-            print(f'{sim.time:<5} {self}: Going to process {person} for {busy} minutes; first one is {first_person}')
+            print(f'{sim.time:<5} {self}: Going to process {person} for {busy} minutes; first one is {first_person_in_queue(self.queue)}')
             yield from sim.gwait(busy)
             print(f'{sim.time:<5} {self}: {person} done.')
             self.stat['processed'] += 1
@@ -95,43 +87,31 @@ class VisaCheck(DSComponent):
         return f'Check{self.info}[{self.identifier}]'
 
 
-def eu_person_generator():
+def person_generator(info, waiting_range):
     i = 0
     while True:
-        person = Person('EU', i, max_waiting_time=randint(10, 60))
+        person = Person(info, i, max_waiting_time=randint(*waiting_range))
         print(f'{sim.time:<5} {person}: Queueing with max. waiting time {person.max_waiting_time} at position {len(q)}.', end='')
         print(f' First one is thus \033[0;32m{person}\033[0m') if len(q) == 0 else print()
-        person.start_waiting(q)
         queued = q.put_nowait({'person': person})
         if not queued:
-            person.abort_waiting()
             print(f'{sim.time:<5} {person}: queue too long, giving up, I do not queue.')
+        else:
+            person.start_waiting(q)
         busy = randint(3, 6)
         yield from sim.gwait(busy)
         i += 1
 
-def ww_person_generator():
-    i = 0
-    while True:
-        person = Person('WW', i, max_waiting_time=randint(20, 90))
-        print(f'{sim.time:<5} {person}: Queueing with max. waiting time {person.max_waiting_time} at position {len(q)}.', end='')
-        print(f' First one is thus \033[0;32m{person}\033[0m') if len(q) == 0 else print()
-        person.start_waiting(q)
-        queued = q.put_nowait({'person': person})
-        if not queued:
-            person.abort_waiting()
-            print(f'{sim.time:<5} {person}: queue too long, giving up, I do not queue.')
-        busy = randint(3, 6)
-        yield from sim.gwait(busy)
-        i += 1
 
 @DSSchedulable
 def alien_person_generator():
     person = Person('Mars', 0, max_waiting_time=10000)
     print(f'{sim.time:<5} New Mars: Queueing {person} with max. waiting time {person.max_waiting_time} at position {len(q)}.')
-    queued = q.put_nowait(person=person)
+    queued = q.put_nowait({'person': person})
     if not queued:
         print(f'{sim.time:<5} New Mars: queue too long, {person} gave up and did not queue.')
+    else:
+        person.start_waiting(q)
 
 
 if __name__ == '__main__':
@@ -139,8 +119,8 @@ if __name__ == '__main__':
 
     q = sim.queue(capacity=12, name='queue')
 
-    persons = sim.schedule(0, eu_person_generator())
-    persons = sim.schedule(0, ww_person_generator())
+    sim.schedule(0, person_generator('EU', (10, 60)))
+    sim.schedule(0, person_generator('WW', (20, 90)))
     #sim.schedule(300, alien_person_generator())
 
     eu_visa_checks = [VisaCheck('EU', i, q, max_waiting_time=randint(15, 30)) for i in range(2)]
@@ -148,6 +128,14 @@ if __name__ == '__main__':
 
     sim.run(SIM_TIME)
     print("Done.")
-    total_processed = sum([check.stat['processed'] for check in eu_visa_checks + ww_visa_checks])
+    all_checks = eu_visa_checks + ww_visa_checks
+    total_processed = sum(check.stat['processed'] for check in all_checks)
+    eu_processed = sum(check.stat['processed'] for check in eu_visa_checks)
+    ww_processed = sum(check.stat['processed'] for check in ww_visa_checks)
+
+    print(f"Summary: sim_time={sim.time}, queue_size={len(q)}")
+    print(f"Summary: total_processed={total_processed}, eu_processed={eu_processed}, ww_processed={ww_processed}")
+    for check in all_checks:
+        print(f"Summary: {check} processed={check.stat['processed']}")
 
     assert total_processed > 120, f'The number of processed {total_processed} should be high'  # high probability to pass

@@ -155,6 +155,7 @@ class MyComponent(DSComponent):
                 with self.sim.interruptible(cond='Bye transformed') as cm1:
                     print(self.sim.time, 'Waiting 100')
                     event = await self.sim.sleep(100)  # Ignore plain events; transformed interrupt decides.
+                print('Succesfully timed out.')
         assert event == None
         assert self.sim.time == t + 15
         assert cm1.interrupted()

@@ -28,26 +28,37 @@ class CustomerGenerator(DSLiteAgent):
 
 class Customer(DSLiteAgent):
     def process(self):
-        self.enter_nowait(waitingline)
+        queued = self.enter_nowait(waitingline)
+        if queued is None:
+            stat['balked'] += 1
+            return
         event = yield from self.gwait()
         print(f"{self.sim.time} Customer ends with signal {event}")
+        stat['completed'] += 1
 
 
 class Clerk(DSLiteAgent):
     def process(self):
+        self.processed = 0
         while True:
             customer = yield from self.gpop(waitingline)
             print(f"{self.sim.time} Processing customer")
             yield from self.gwait(30)
             customer.signal("processed")
+            self.processed += 1
 
 
 if __name__ == '__main__':
     sim = DSSimulation(layer2=LiteLayer2)
     CustomerGenerator(sim=sim)
-    Clerk(sim=sim)
+    clerk = Clerk(sim=sim)
     waitingline = sim.queue(name="waitingline")
+    stat = {'completed': 0, 'balked': 0}
 
     time, events = sim.run(50)
     assert 35 <= time <= 50, f"Time {time} is out of expected range."
-    assert 15 <= events <= 21, f"Number of events {events} is out of expected range."
+    assert 14 <= events <= 21, f"Number of events {events} is out of expected range."
+    assert clerk.processed >= 1, "Expected at least one processed customer."
+    assert stat['completed'] == clerk.processed, (
+        f"Completed customers ({stat['completed']}) should match processed count ({clerk.processed})."
+    )

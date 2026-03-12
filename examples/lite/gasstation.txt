@@ -1,5 +1,0 @@
-LiteLayer2 notes for examples/pubsub/gasstation.py
-
-LiteLayer2 is missing required features:
-- DSComponent/DSProcessComponent lifecycle APIs used by the model
-- component-centric resource/container helper methods and pubsub-style process wiring used in this example

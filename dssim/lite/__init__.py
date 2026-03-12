@@ -1,11 +1,13 @@
 from dssim.lite.components.litequeue import LiteQueue, SimLiteQueueMixin
 from dssim.lite.components.literesource import (
+    DSResourcePreempted,
     LitePriorityResource,
     LiteResource,
     SimLiteResourceMixin,
 )
 
 __all__ = [
+    'DSResourcePreempted',
     'LiteQueue',
     'SimLiteQueueMixin',
     'LiteResource',
