@@ -15,7 +15,7 @@
 Queue of events and logic around it.
 The queue class also maintains current absolute time.
 '''
-from typing import Tuple, Union
+from typing import Deque, Optional, Tuple, Union
 from bisect import bisect_right
 from dssim.base import EventType, ISubscriber
 from collections import deque
@@ -32,56 +32,98 @@ class _VoidSubscriber:
 _void_subscriber = _VoidSubscriber()
 
 
-class ZeroTimeQueue(deque):
-    ''' This is a special queue intended for higher throughput. It does not hold the time
-    and is solely used as a FIFO queue.
-    The reason: many components schedule with t=0; the processing of the events with zero
-    time is boosted with this queue.
-    Another possibility in the future is to use thread - safe queue because processing
-    the equal-time (in this case zero-time) events can be done in parallel.
+class NowQueue(deque):
+    ''' Special queue for "now-time" events.
+
+    It does not hold event times and is used purely as FIFO for events
+    scheduled at current simulation time.
     '''
     pass
 
 
 class TimeQueue:
-    ''' Maintains a queue of (time, element) pairs sorted by time.
-    A single deque of tuples gives O(1) popleft and better cache locality
-    compared to two parallel deques.
-    Insertion appends for the common case (non-decreasing times) and falls
-    back to bisect + deque.insert() for out-of-order events.
+    ''' Maintains a queue of (time, deque(elements)) buckets sorted by time.
+
+    Each bucket stores all events with the same timestamp in FIFO order:
+        (time, deque([(subscriber, event), ...]))
+
+    This lets same-time events be drained from the first bucket without a
+    separate now-queue structure.
     '''
     def __init__(self) -> None:
-        self._queue: deque = deque()  # deque of (time, element) tuples
+        self._queue: Deque[Tuple[TimeType, Deque[ElementType]]] = deque()
 
     def add_element(self, time: float, element: ElementType) -> None:
-        ''' Add an element to the queue at a time_delta from current time. '''
-        if not self._queue or time >= self._queue[-1][0]:
-            self._queue.append((time, element))
+        '''Add one non-zero-time (subscriber,event) element at absolute `time`.'''
+        if not self._queue:
+            self._queue.append((time, deque([element])))
+            return
+
+        if time > self._queue[-1][0]:
+            self._queue.append((time, deque([element])))
+            return
+
+        if time == self._queue[-1][0]:
+            self._queue[-1][1].append(element)
+            return
+
+        i = bisect_right(self._queue, time, key=lambda x: x[0])
+        if i > 0 and self._queue[i - 1][0] == time:
+            self._queue[i - 1][1].append(element)
         else:
+            self._queue.insert(i, (time, deque([element])))
+
+    def get_first_time(self) -> TimeType:
+        '''Return timestamp of the first bucket (expected deque is not empty).'''
+        return self._queue[0][0]
+
+    def pop_first_bucket(self) -> Deque[ElementType]:
+        '''Pop and return the first bucket deque (expected deque is not empty).'''
+        return self._queue.popleft()[1]
+
+    def insertleft(self, time: TimeType, events: Deque[ElementType]) -> None:
+        '''Insert a prepared bucket at `time` preserving same-time FIFO order.'''
+        if events:
+            if not self._queue:
+                self._queue.appendleft((time, events))
+                return
+            first_time, first_events = self._queue[0]
+            if first_time == time:
+                # Preserve already-scheduled order at this timestamp.
+                first_events.extend(events)
+                return
+            if first_time > time:
+                self._queue.appendleft((time, events))
+                return
+            # Defensive fallback: keep time ordering if called with a later time.
             i = bisect_right(self._queue, time, key=lambda x: x[0])
-            self._queue.insert(i, (time, element))
-
-    def get0(self) -> Tuple[TimeType, ElementType]:
-        ''' Get the first element from the queue. '''
-        if self._queue:
-            return self._queue[0]
-        # If there is nothing in the queue, report virtual None object in the inifinite time.
-        # Note: another solution would be to add this virtual element into the queue. In that
-        # case the bisect function would take a little more time when adding an element.
-        return float("inf"), (_void_subscriber, None)
-
-    def pop(self) -> Tuple[TimeType, ElementType]:
-        ''' Pop the first element from the queue and return it to the caller. '''
-        return self._queue.popleft()
+            if i > 0 and self._queue[i - 1][0] == time:
+                self._queue[i - 1][1].extend(events)
+            else:
+                self._queue.insert(i, (time, events))
 
     def delete_sub(self, sub: ISubscriber) -> None:
         '''Delete all queued events targeted to the provided subscriber.'''
-        self._queue = deque((t, e) for t, e in self._queue if e[0] is not sub)
+        new_queue: Deque[Tuple[TimeType, Deque[ElementType]]] = deque()
+        for t, events in self._queue:
+            filtered = deque(e for e in events if e[0] is not sub)
+            if filtered:
+                new_queue.append((t, filtered))
+        self._queue = new_queue
 
     def delete_val(self, val: ElementType) -> None:
         ''' Delete all the objects which have the provided value. '''
-        self._queue = deque((t, e) for t, e in self._queue if e != val)
+        new_queue: Deque[Tuple[TimeType, Deque[ElementType]]] = deque()
+        for t, events in self._queue:
+            filtered = deque(e for e in events if e != val)
+            if filtered:
+                new_queue.append((t, filtered))
+        self._queue = new_queue
 
-    def __len__(self) -> int:
-        ''' Get length of the queue. '''
-        return len(self._queue)
+    def event_count(self) -> int:
+        '''Get number of queued events (not number of time buckets).'''
+        return sum(len(events) for _, events in self._queue)
+
+    def __bool__(self) -> bool:
+        '''O(1) non-empty check used by the simulation hot path.'''
+        return bool(self._queue)

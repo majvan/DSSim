@@ -21,6 +21,14 @@ from dssim import DSSimulation, DSProcess, DSFuture
 from dssim.pubsub.cond import DSFilter as _f, DSCircuit
 from dssim.pubsub.process import _StartProcess
 
+def _pop_timequeue_event(time_queue):
+    t = time_queue.get_first_time()
+    bucket = time_queue.pop_first_bucket()
+    event = bucket.popleft()
+    if bucket:
+        time_queue.insertleft(t, bucket)
+    return t, event
+
 class TestDSFilter(unittest.TestCase):
 
     def test1_init_value(self):
@@ -228,11 +236,11 @@ class TestDSFilter(unittest.TestCase):
 
         sim = DSSimulation()
         g = gen()
-        self.assertTrue(len(sim.time_queue) == 0)
+        self.assertTrue(sim.time_queue.event_count() == 0)
         fd = _f(g, sim=sim)
-        self.assertTrue(len(sim.time_queue) == 1)  # the gen() was scheduled as a new process
-        scheduled = sim.time_queue.pop()
-        self.assertTrue(len(sim.time_queue) == 0)
+        self.assertTrue(sim.time_queue.event_count() == 1)  # the gen() was scheduled as a new process
+        scheduled = _pop_timequeue_event(sim.time_queue)
+        self.assertTrue(sim.time_queue.event_count() == 0)
 
     def test5_init_coro(self):
         async def coro():
@@ -291,11 +299,11 @@ class TestDSFilter(unittest.TestCase):
             -fna  # once a filter is negative (reseter), it cannot be negated again
 
         sim = DSSimulation()
-        self.assertTrue(len(sim.time_queue) == 0)
+        self.assertTrue(sim.time_queue.event_count() == 0)
         fd = _f(coro(), sim=sim)
-        self.assertTrue(len(sim.time_queue) == 1)  # the coro() was scheduled as a new process
-        scheduled = sim.time_queue.pop()
-        self.assertTrue(len(sim.time_queue) == 0)
+        self.assertTrue(sim.time_queue.event_count() == 1)  # the coro() was scheduled as a new process
+        scheduled = _pop_timequeue_event(sim.time_queue)
+        self.assertTrue(sim.time_queue.event_count() == 0)
 
     def test6_init_process(self):
         def gen():
@@ -352,26 +360,26 @@ class TestDSFilter(unittest.TestCase):
 
         # The cond does not schedule a process
         # sim = DSSimulation()
-        # self.assertTrue(len(sim.time_queue) == 0)
+        # self.assertTrue(sim.time_queue.event_count() == 0)
         # p = DSProcess(gen(), sim=sim)
-        # self.assertTrue(len(sim.time_queue) == 0)
+        # self.assertTrue(sim.time_queue.event_count() == 0)
         # fd = _f(p, sim=sim)
-        # self.assertTrue(len(sim.time_queue) == 1)  # the process was scheduled
+        # self.assertTrue(sim.time_queue.event_count() == 1)  # the process was scheduled
         # scheduled = sim.time_queue.pop()
         # self.assertTrue(scheduled == (0, (p, None)))
-        # self.assertTrue(len(sim.time_queue) == 0)
+        # self.assertTrue(sim.time_queue.event_count() == 0)
 
         p = DSProcess(gen(), sim=sim).schedule(0)
-        self.assertTrue(len(sim.time_queue) == 1)  # the process is scheduled explicitly
+        self.assertTrue(sim.time_queue.event_count() == 1)  # the process is scheduled explicitly
         fe = _f(p, sim=sim)
-        self.assertTrue(len(sim.time_queue) == 1)
-        scheduled = sim.time_queue.pop()
+        self.assertTrue(sim.time_queue.event_count() == 1)
+        scheduled = _pop_timequeue_event(sim.time_queue)
         self.assertTrue(scheduled[0] == 0)
         # With _Starter, the time queue consumer is the _Starter, not the process itself
         self.assertIsInstance(scheduled[1][0], DSProcess._Starter)
         self.assertIs(scheduled[1][0]._process, p)
         self.assertIs(scheduled[1][1], _StartProcess)
-        self.assertTrue(len(sim.time_queue) == 0)
+        self.assertTrue(sim.time_queue.event_count() == 0)
 
 
     def test7_feeding_value(self):

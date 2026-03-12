@@ -490,8 +490,8 @@ def dssim_pubsub_now_chain(n):
                 sim.signal(None, chain_process)
 
     chain_process = sim.schedule(0, chain())    # prime, get DSProcess
-    sim.schedule_event(0, None, chain_process)  # add first kick-up
-    sim.run()
+    sim.schedule_event(0, None, chain_process)  # add first kick-up; sim.signal(None, chain_process) possible too
+    sim.run() 
     assert fired == n, f'pubsub now-chain: expected {n}, got {fired}'
 
 
@@ -550,7 +550,7 @@ def dssim_pubsub_cross_signal(n):
     b_proc = sim.schedule(0, proc_b())      # prime to first gwait
     # Seed via time-queue at t=0 (inserted after starters) so both DSProcesses
     # are initialized before the first cross-signal is delivered.
-    sim.schedule_event(0, None, a_proc)
+    sim.schedule_event(0, None, a_proc)  # sim.signal(None, a_proc) possible, too
     sim.run()
     assert total == n, f'pubsub cross-signal: expected {n}, got {total}'
 

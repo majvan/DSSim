@@ -18,7 +18,7 @@ import sys
 import inspect
 from functools import wraps
 from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Optional, Iterator, TYPE_CHECKING
-from dssim.timequeue import TimeQueue, ZeroTimeQueue
+from dssim.timequeue import TimeQueue, NowQueue
 from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, DSComponentSingleton, ISubscriber, IFuture
 from dssim.pubsub import SimPubsubMixin
 from dssim.pubsub.future import SimFutureMixin
@@ -261,7 +261,7 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
 
     def _restart(self) -> None:
         self.time_queue = TimeQueue()
-        self.now_queue = ZeroTimeQueue()
+        self.now_queue = NowQueue()
         self.num_events: int = 0
         # By default, we use fake subscriber. It will be rewritten on the first 
         self._parent_process: ISubscriber = void_subscriber
@@ -328,7 +328,7 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
         return event
 
     def signal(self, event: EventType, subscriber: Optional[ISubscriber] = None) -> None:
-        ''' Schedules an event object onto the now-queue for zero-time dispatch. '''
+        '''Schedule event for immediate dispatch at current simulation time.'''
         subscriber = subscriber or self._parent_process  # schedule to a process or to itself
         self.now_queue.append((subscriber, event))
 
@@ -394,7 +394,7 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
         if hasattr(subscriber, 'reset_cond'):
             subscriber.reset_cond()
         # Remove all the events for this subscriber
-        self.now_queue = ZeroTimeQueue(item for item in self.now_queue if item[0] is not subscriber)
+        self.now_queue = NowQueue(item for item in self.now_queue if item[0] is not subscriber)
         self.time_queue.delete_sub(subscriber)
 
     def try_send_object(self, subscriber: ISubscriber, event: EventType) -> EventType:
@@ -415,30 +415,18 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
         The loop ends when the queue is empty or when the simulation time is over.
         '''
         ftime = up_to.to_number() if isinstance(up_to, DSAbsTime) else up_to
-        # Drain first now queue if non-empty
-        while self.now_queue:
-            (subscriber, event_obj) = self.now_queue.popleft()
-            # check for the future as well in the now_queue
-            if event_obj == future:
-                return self.time, self.num_events
-            self.num_events += 1
-            self.try_send_object(subscriber, event_obj)
-
-        while len(self.time_queue) > 0:
-            # Get the first event on the queue
-            tevent, (subscriber, event_obj) = self.time_queue.get0()
+        if self.now_queue:
+            self.time_queue.insertleft(self.time, self.now_queue)
+        while self.time_queue:
+            tevent = self.time_queue.get_first_time()
             if tevent >= ftime:
                 retval_time = self.time
                 self._simtime = ftime
                 break
-            # The following lines are required for asyncio parity which requires
-            # an event loop implementation of run_until_complete(future)
-            if event_obj == future:
-                return self.time, self.num_events
-            self.num_events += 1
             self._simtime = tevent
-            self.time_queue.pop()
-            self.try_send_object(subscriber, event_obj)
+            self.now_queue = self.time_queue.pop_first_bucket()
+
+            # Step 2: drain now_queue
             while self.now_queue:
                 (subscriber, event_obj) = self.now_queue.popleft()
                 # check for the future as well in the now_queue

@@ -92,7 +92,7 @@ class TestSim(unittest.TestCase):
         self.assertEqual(retval, (3, 3))
         calls = [call(3), call(2), call(1),]
         consumer.send.assert_has_calls(calls)
-        num_events = len(self.sim.time_queue)
+        num_events = self.sim.time_queue.event_count()
         self.assertEqual(num_events, 0)
         consumer.send.reset_mock()
 
@@ -104,7 +104,7 @@ class TestSim(unittest.TestCase):
         self.assertEqual(retval, (2, 2))
         calls = [call(3), call(2),]
         consumer.send.assert_has_calls(calls)
-        num_events = len(self.sim.time_queue)
+        num_events = self.sim.time_queue.event_count()
         self.assertEqual(num_events, 1)
 
     def test6_run_dispatches_without_consumer_try_send(self):
@@ -388,7 +388,7 @@ class TestSimWaitMixin(unittest.TestCase):
         # first gwait returns 'hello' at t=2; second times out at t=2+5=7, not t=5
         self.assertEqual(result[0], ('first', 2, 'hello'))
         self.assertEqual(result[1], ('second', 7, None))
-        self.assertEqual(len(sim.time_queue), 0)
+        self.assertEqual(sim.time_queue.event_count(), 0)
 
     def test6_gsleep_ignores_events_until_timeout(self):
         ''' gsleep(timeout) ignores non-exception events and returns at timeout. '''
