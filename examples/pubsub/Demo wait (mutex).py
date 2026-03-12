@@ -27,18 +27,18 @@ the youngest prince to become king.
 This is demo of the trigger/waitfor mechanism,
 just to allow one waiter to be honored.
 """
-from dssim import DSSimulation, DSAbsTime as _abs, Mutex, DSProcessComponent
+from dssim import DSSimulation, DSAbsTime as _abs, Mutex, DSAgent
 import random
 
 
-class PrinceGenerator(DSProcessComponent):
+class PrinceGenerator(DSAgent):
     async def process(self):
         while True:
             await self.sim.wait(int(random.expovariate(1/20)))  # every 10-20 years othere's a new heir of the throne
             Prince()
 
 
-class Prince(DSProcessComponent):
+class Prince(DSAgent):
     async def process(self):
         global kingdom, kings, lastkingdied
         self.live_till = self.sim.time + random.randint(60, 90)

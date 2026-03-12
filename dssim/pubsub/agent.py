@@ -26,7 +26,7 @@ from dssim.pubsub.components.container import ContainerMixin
 from dssim.pubsub.components.resource import ResourceMixin
 
 
-class DSProcessComponent(DSComponent, ContainerMixin, ResourceMixin):
+class DSAgent(DSComponent, ContainerMixin, ResourceMixin):
     _dscomponent_instances: int = 0
 
     def __init__(self, *args: Any, name: Optional[str] = None, **kwargs: Any) -> None:
@@ -71,16 +71,16 @@ class DSProcessComponent(DSComponent, ContainerMixin, ResourceMixin):
 
 
 class _ComponentProcess(DSProcess):
-    def __init__(self, process_component: DSProcessComponent, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, process_component: DSAgent, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._component = process_component
 
     @property
-    def component(self) -> DSProcessComponent:
+    def component(self) -> DSAgent:
         return self._component
 
 
-class PCGenerator(DSProcessComponent):
+class PCGenerator(DSAgent):
     def __init__(self, cls: Type[DSComponent], wait_method: Callable[[DSComponent], float] = lambda last: 1, *args: Any, name: Optional[str] = None, **kwargs: Any) -> None:
         self.cls = cls
         self.wait_method = wait_method
@@ -92,4 +92,8 @@ class PCGenerator(DSProcessComponent):
         while True:
             obj = self.cls()  # create new instance of the class
             await self.sim.sleep(self.wait_method(obj))
+
+
+# Backward-compatibility alias; DSAgent is the preferred name.
+DSProcessComponent = DSAgent
       

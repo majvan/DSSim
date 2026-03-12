@@ -24,11 +24,11 @@ The default values set in the code are as follows:
         From level n to level n: load_n_n = 100
         From level n to level 0: load_n_0 = 100
 """
-from dssim import DSSimulation, DSProcessComponent, Queue
+from dssim import DSSimulation, DSAgent, Queue
 import random
 
 
-class VisitorGenerator(DSProcessComponent):
+class VisitorGenerator(DSAgent):
     def __init__(self, from_, to, id, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.from_ = from_
@@ -59,7 +59,7 @@ class VisitorGenerator(DSProcessComponent):
                 yield from self.sim.gwait(r * iat)
 
 
-class Visitor(DSProcessComponent):
+class Visitor(DSAgent):
     def __init__(self, from_, to, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fromfloor = floors[from_]
@@ -78,7 +78,7 @@ class Visitor(DSProcessComponent):
         yield from self.sim.gwait(cond=lambda e:True)
 
 
-class Car(DSProcessComponent):
+class Car(DSAgent):
     def __init__(self, capacity, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.capacity = capacity

@@ -11,11 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSSimulation, DSProcessComponent, PCGenerator
+from dssim import DSSimulation, DSAgent, PCGenerator
 from dssim.pubsub import NotifierPriority
 from random import randint
 
-class Customer(DSProcessComponent):
+class Customer(DSAgent):
     def process(self):
         ret = self.enter_nowait(waiting_line)
         if ret is None:
@@ -33,7 +33,7 @@ class Customer(DSProcessComponent):
             yield from self.gwait()  # wait for service to be completed
 
 
-class Clerk(DSProcessComponent):
+class Clerk(DSAgent):
     async def process(self):
         self.processed_customers = []
         while True:

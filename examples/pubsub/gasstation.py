@@ -14,7 +14,7 @@
 '''
 An example taken from salabim showing a parity with the framework.
 '''
-from dssim import DSSimulation, DSProcessComponent
+from dssim import DSSimulation, DSAgent
 from random import randint
 
 GAS_STATION_SIZE = 200.0  # liters
@@ -27,7 +27,7 @@ TANK_TRUCK_TIME = 300  # Seconds it takes the tank truck to arrive
 T_INTER = (10, 100)  # Create a car every [min, max] seconds
 SIM_TIME = 30000  # Simulation time in seconds
 
-class Car(DSProcessComponent):
+class Car(DSAgent):
     """
     A car arrives at the gas station for refueling.
 
@@ -54,7 +54,7 @@ class Car(DSProcessComponent):
         yield from self.gput(gas_station)
 
 
-class TankTruck(DSProcessComponent):
+class TankTruck(DSAgent):
     def process(self):
         print(f'{sim.time} {self} starting...')
         yield from self.sim.gwait(TANK_TRUCK_TIME)
@@ -64,7 +64,7 @@ class TankTruck(DSProcessComponent):
         print(f'{sim.time} {self} leaving station after {amount} of new fuel, filled to {fuel_pump.amount}.')
         
 
-class CarGenerator(DSProcessComponent):
+class CarGenerator(DSAgent):
     """
     Generate new cars that arrive at the gas station.
     """

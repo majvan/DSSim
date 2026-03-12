@@ -280,7 +280,7 @@ class Queue(DSStatefulComponent, SignalMixin):
         return item in self._buffer
 
 
-# In the following, self is in fact of type DSProcessComponent, but PyLance makes troubles with variable types
+# In the following, self is in fact of type DSAgent, but PyLance makes troubles with variable types
 class QueueMixin:
     async def enter(self: Any, queue: Queue, timeout: TimeType = float('inf'), **policy_params: Any) -> EventType:
         try:

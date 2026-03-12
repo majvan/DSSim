@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from math import floor
-from dssim import DSProcessComponent, DSPub
+from dssim import DSAgent, DSPub
 
-class Person(DSProcessComponent):
+class Person(DSAgent):
     def __init__(self, init_floor, requested_floor, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.init_floor = init_floor
@@ -49,7 +49,7 @@ class Person(DSProcessComponent):
         yield from elevator.wait_for_floor(self.requested_floor)
         elevator.leave(self)
 
-class Floor(DSProcessComponent):
+class Floor(DSAgent):
     def __init__(self, nr, elevators, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.nr = nr
@@ -81,7 +81,7 @@ class Floor(DSProcessComponent):
                     self.requests.remove('up')
 
 
-class Elevator(DSProcessComponent):
+class Elevator(DSAgent):
     def __init__(self, max_speed, floors, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.speed = 4  # 4 seconds per floors

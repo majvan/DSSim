@@ -500,7 +500,7 @@ class Mutex(Resource):
             self.release()
 
 
-# In the following, self is in fact of type DSProcessComponent, but PyLance makes troubles with variable types
+# In the following, self is in fact of type DSAgent, but PyLance makes troubles with variable types
 class ResourceMixin:
     async def get(self: Any, resource: Resource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
         return await resource.get(timeout, **policy_params)

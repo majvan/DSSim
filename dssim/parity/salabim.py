@@ -17,8 +17,8 @@ The salabim-like API export.
 from dssim import DSSimulation, DSComponent as component
 from dssim import DSSchedulable, DSProcess, DSCallback, DSAbsTime, DSAbortException
 from dssim import DSPub, DSFilter
-from dssim.pubsub.processcomponent import DSProcessComponent as Component
-from dssim.pubsub.processcomponent import PCGenerator as ComponentGenerator
+from dssim.pubsub.agent import DSAgent as Component
+from dssim.pubsub.agent import PCGenerator as ComponentGenerator
 
 from dssim.pubsub.components.container import Container as Store
 from dssim.pubsub.components.queue import Queue

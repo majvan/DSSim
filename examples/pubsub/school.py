@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSComponent, DSProcess, DSSimulation, DSPub, DSProcessComponent
+from dssim import DSComponent, DSProcess, DSSimulation, DSPub, DSAgent
 from random import randint
 
 class School(DSComponent):
@@ -97,7 +97,7 @@ class Pupil(DSComponent):
         self.tx.signal('none')
         return 'done'
 
-class Family(DSProcessComponent):
+class Family(DSAgent):
     def process(self, school, pupils):
         while True:
             now = sim.time % (24 * 60)  # get time of day in [minutes]

@@ -14,24 +14,24 @@
 '''
 The example is showing a code parity with example from salabim project
 '''
-from dssim import DSSimulation, DSProcessComponent, DSPub
+from dssim import DSSimulation, DSAgent, DSPub
 import random
 
 
-class CustomerGenerator(DSProcessComponent):
+class CustomerGenerator(DSAgent):
     def process(self):
         while True:
             Customer()
             yield from self.gwait(random.uniform(5, 15))
 
 
-class Customer(DSProcessComponent):
+class Customer(DSAgent):
     def process(self):
         waitingline.append(self)
         signaler.signal('there is some work to do')  # the observers and consumers are being notified
 
 
-class Clerk(DSProcessComponent):
+class Clerk(DSAgent):
     def process(self, i):
         with self.sim.consume(signaler):
             while True:

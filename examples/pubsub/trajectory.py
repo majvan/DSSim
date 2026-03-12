@@ -1,9 +1,9 @@
 # Copyright 2026- majvan (majvan@gmail.com)
-from dssim import DSProcessComponent, PCGenerator, DSSimulation
+from dssim import DSAgent, PCGenerator, DSSimulation
 import random
 sim = DSSimulation()
 
-class Product(DSProcessComponent):
+class Product(DSAgent):
     async def process(self):
         await self.enter(c0)
         await sim.wait(3)

@@ -1123,7 +1123,7 @@ class TestMutex(unittest.TestCase):
 class TestResourceMixin(unittest.TestCase):
     '''ResourceMixin delegates to the underlying Resource methods.
     Tested using plain ResourceMixin() instances with standalone generators
-    and coroutines to avoid DSProcessComponent singleton name collisions.
+    and coroutines to avoid DSAgent singleton name collisions.
     '''
 
     def setUp(self):

@@ -14,24 +14,24 @@
 '''
 The example is showing a code parity with example from salabim project
 '''
-from dssim import DSSimulation, DSProcessComponent, State
+from dssim import DSSimulation, DSAgent, State
 import random
 
 
-class CustomerGenerator(DSProcessComponent):
+class CustomerGenerator(DSAgent):
     def process(self):
         while True:
             Customer()
             yield from self.gwait(random.uniform(5, 15))
 
 
-class Customer(DSProcessComponent):
+class Customer(DSAgent):
     def process(self):
         waitingline.append(self)
         worktodo['waiting on line'] = True
 
 
-class Clerk(DSProcessComponent):
+class Clerk(DSAgent):
     def process(self):
         while True:
             retval = yield from worktodo.check_and_gwait(cond=lambda e:worktodo['waiting on line'])  # wait until worktodo['waiting on line'] is True

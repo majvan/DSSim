@@ -269,7 +269,7 @@ class Container(DSStatefulComponent, SignalMixin):
         return iter(elements)
 
 
-# In the following, self is in fact of type DSProcessComponent, but PyLance makes troubles with variable types
+# In the following, self is in fact of type DSAgent, but PyLance makes troubles with variable types
 class ContainerMixin:
     async def enter(self: Any, container: Container, timeout: TimeType = float('inf'), **policy_params: Any) -> EventType:
         try:
