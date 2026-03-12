@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-LiteLayer2 counterpart of examples/pubsub/processcomponent.py.
+LiteLayer2 counterpart of examples/pubsub/agent.py.
 
 Note:
 - LiteQueue does not support prioritized waiter routing.
