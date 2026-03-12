@@ -36,9 +36,9 @@ class DSAgent(DSComponent, ContainerMixin, ResourceMixin):
         kwargs.pop('name', None), kwargs.pop('sim', None)  # remove the two arguments
         process: DSProcess
         if inspect.isgeneratorfunction(self.process) or inspect.iscoroutinefunction(self.process):
-            process = _ComponentProcess(self, self.process(*args, **kwargs), name=self.name+'.process')
+            process = _ComponentProcess(self, self.process(*args, **kwargs), name=self.name+'.process', sim=self.sim)
         elif inspect.ismethod(self.process):
-            process = _ComponentProcess(self, DSSchedulable(self.process)(*args, **kwargs), name=self.name+'.process')
+            process = _ComponentProcess(self, DSSchedulable(self.process)(*args, **kwargs), name=self.name+'.process', sim=self.sim)
         else:
             raise ValueError(f'The attribute {self.__class__}.process is not method, generator, neither coroutine.')
         self._scheduled_process: _ComponentProcess = process.schedule(0)
