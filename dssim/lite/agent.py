@@ -47,7 +47,7 @@ def _as_schedulable(api_func: Callable[..., Any]) -> Callable[..., Generator[Any
     return scheduled_func
 
 
-class _LiteQueueMixin:
+class AgentLiteQueueMixin:
     '''Queue helper methods for DSLiteAgent.
 
     LiteQueue provides generator + nowait APIs only, so async enter/pop are not
@@ -79,7 +79,7 @@ class _LiteQueueMixin:
         return retval
 
 
-class _LiteResourceMixin:
+class AgentLiteResourceMixin:
     '''Resource helper methods for DSLiteAgent.'''
 
     async def get(self: Any, resource: LiteResource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
@@ -119,7 +119,7 @@ class _LiteResourceMixin:
         return resource.get_n_nowait(amount, **policy_params)
 
 
-class DSLiteAgent(DSComponent, _LiteQueueMixin, _LiteResourceMixin):
+class DSLiteAgent(DSComponent, AgentLiteQueueMixin, AgentLiteResourceMixin):
     _dsliteagent_instances: int = 0
 
     def __init__(self, *args: Any, name: Optional[str] = None, **kwargs: Any) -> None:

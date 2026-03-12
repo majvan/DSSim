@@ -18,15 +18,90 @@ application.
 from abc import abstractmethod
 from typing import Any, Optional, Generator, Type, Callable
 import inspect
-from dssim.base import EventType, TimeType, DSComponent
+from dssim.base import EventType, TimeType, DSComponent, NumericType
 from dssim.pubsub.base import CondType, DSAbortException, AlwaysTrue
 from dssim.pubsub.process import DSProcess
 from dssim.simulation import DSSchedulable
-from dssim.pubsub.components.container import ContainerMixin
-from dssim.pubsub.components.resource import ResourceMixin
+from dssim.pubsub.components.container import Container
+from dssim.pubsub.components.resource import Resource
 
 
-class DSAgent(DSComponent, ContainerMixin, ResourceMixin):
+class AgentContainerMixin:
+    async def enter(self: Any, container: Container, timeout: TimeType = float('inf'), **policy_params: Any) -> EventType:
+        try:
+            retval = await container.put(timeout, self, **policy_params)
+        except DSAbortException:
+            self._scheduled_process.abort()
+            raise
+        return retval
+
+    def genter(self: Any, container: Container, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
+        try:
+            retval = yield from container.gput(timeout, self, **policy_params)
+        except DSAbortException:
+            self._scheduled_process.abort()
+            raise
+        return retval
+
+    def enter_nowait(self: Any, container: Container) -> Optional[EventType]:
+        return container.put_nowait(self)
+
+    def leave(self: Any, container: Container) -> None:
+        container.remove(self)
+
+    async def pop(self: Any, container: Container, timeout: TimeType = float('inf'), **policy_params: Any) -> Optional[EventType]:
+        try:
+            retval = await container.get(timeout, **policy_params)
+        except DSAbortException:
+            self._scheduled_process.abort()
+            raise
+        return retval
+
+    def gpop(self: Any, container: Container, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
+        try:
+            retval = yield from container.gget(timeout, **policy_params)
+        except DSAbortException:
+            self._scheduled_process.abort()
+            raise
+        return retval
+
+    def pop_nowait(self: Any, container: Container) -> Optional[EventType]:
+        return container.get_nowait()
+
+
+class AgentResourceMixin:
+    async def get(self: Any, resource: Resource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+        return await resource.get(timeout, **policy_params)
+
+    def gget(self: Any, resource: Resource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        return (yield from resource.gget(timeout, **policy_params))
+
+    async def get_n(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+        return await resource.get_n(timeout, amount, **policy_params)
+
+    def gget_n(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        return (yield from resource.gget_n(timeout, amount, **policy_params))
+
+    async def put(self: Any, resource: Resource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+        return await resource.put(timeout, **policy_params)
+
+    def gput(self: Any, resource: Resource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        return (yield from resource.gput(timeout, **policy_params))
+
+    async def put_n(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+        return await resource.put_n(timeout, amount, **policy_params)
+
+    def gput_n(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+        return (yield from resource.gput_n(timeout, amount, **policy_params))
+
+    def put_nowait(self: Any, resource: Resource) -> NumericType:
+        return resource.put_nowait()
+
+    def put_n_nowait(self: Any, resource: Resource, amount: NumericType = 1) -> NumericType:
+        return resource.put_n_nowait(amount)
+
+
+class DSAgent(DSComponent, AgentContainerMixin, AgentResourceMixin):
     _dscomponent_instances: int = 0
 
     def __init__(self, *args: Any, name: Optional[str] = None, **kwargs: Any) -> None:
