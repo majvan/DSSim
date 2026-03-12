@@ -110,7 +110,7 @@ def dssim_raw_timed_callbacks(n):
             handled += 1
 
     consumer = sink()
-    sim.schedule_event(0, None, consumer)
+    sim.schedule_event(0, None, consumer)  # sim.signal(None, consumer) possible, too
     for i in range(n):
         sim.schedule_event(i + 1, i, consumer)
     sim.run()
@@ -136,9 +136,9 @@ def dssim_raw_now_burst(n):
             sim.signal(None, sink_cb)
 
     sink_cb = sink()
-    sim.schedule_event(0, None, sink_cb)
+    sim.schedule_event(0, None, sink_cb)  # sim.signal(None, sink_cb) possible, too
     burst_cb = burst(sink_cb)
-    sim.schedule_event(0, None, burst_cb)
+    sim.schedule_event(0, None, burst_cb)  # sim.signal(None, burst_cb) possible, too
     sim.run()
     assert handled == n, f'raw now-burst: expected {n}, got {handled}'
 
@@ -161,8 +161,8 @@ def dssim_raw_now_chain(n):
                 sim.signal(None, chain_cb)
 
     chain_cb = chain()
-    sim.schedule_event(0, None, chain_cb)
-    sim.schedule_event(0, None, chain_cb)  # pass first yield
+    sim.schedule_event(0, None, chain_cb)  # sim.signal(None, chain_cb) possible, too
+    sim.schedule_event(0, None, chain_cb)  # pass first yield; sim.signal(None, chain_cb) possible, too
     sim.run()
     assert fired == n, f'raw now-chain: expected {n}, got {fired}'
 
@@ -187,9 +187,9 @@ def dssim_raw_generator_wakeup(n):
             sim.signal(i, waiter_ref)
 
     waiter_ref = waiter()
-    sim.schedule_event(0, None, waiter_ref)
+    sim.schedule_event(0, None, waiter_ref)  # sim.signal(None, waiter_ref) possible, too
     producer_gen = producer()
-    sim.schedule_event(0, None, producer_gen)
+    sim.schedule_event(0, None, producer_gen)  # sim.signal(None, producer_gen) possible, too
     sim.run()
     assert received == n, f'raw generator-wakeup: expected {n}, got {received}'
 
@@ -222,9 +222,9 @@ def dssim_raw_cross_signal(n):
 
     a_cb = proc_a()
     b_cb = proc_b()
-    sim.schedule_event(0, None, a_cb)  # prime to first yield
-    sim.schedule_event(0, None, b_cb)  # prime to first yield
-    sim.schedule_event(0, None, a_cb)  # seed ping-pong
+    sim.schedule_event(0, None, a_cb)  # prime to first yield; sim.signal(None, a_cb) possible, too
+    sim.schedule_event(0, None, b_cb)  # prime to first yield; sim.signal(None, b_cb) possible, too
+    sim.schedule_event(0, None, a_cb)  # seed ping-pong; sim.signal(None, a_cb) possible, too
     sim.run()
     assert total == n, f'raw cross-signal: expected {n}, got {total}'
 
@@ -958,6 +958,7 @@ def salabim_bucketed_burst(n, k, l):
 if __name__ == '__main__':
     print(f'Python {sys.version.split()[0]}')
     print(f'Parameters: N={N_EVENTS:,}  repeats={REPEATS}  K={BUCKET_PROC_COUNT}  L={BUCKET_COUNT}\n')
+
 
 
     # ---- scenario 1 --------------------------------------------------------
