@@ -415,6 +415,15 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
         The loop ends when the queue is empty or when the simulation time is over.
         '''
         ftime = up_to.to_number() if isinstance(up_to, DSAbsTime) else up_to
+        # Drain first now queue if non-empty
+        while self.now_queue:
+            (subscriber, event_obj) = self.now_queue.popleft()
+            # check for the future as well in the now_queue
+            if event_obj == future:
+                return self.time, self.num_events
+            self.num_events += 1
+            self.try_send_object(subscriber, event_obj)
+
         while len(self.time_queue) > 0:
             # Get the first event on the queue
             tevent, (subscriber, event_obj) = self.time_queue.get0()
