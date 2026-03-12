@@ -241,26 +241,27 @@ class DSProcess(DSFuture, SignalMixin):
         '''
         return self._finished
 
+    def _cleanup_starter(self) -> None:
+        if self._starter is not None:
+            self.sim.time_queue.delete_sub(self._starter)
+            self._starter = None
+
     def finish(self, value: EventType) -> EventType:
         self._finished = True
         self.value = value
-        if self._starter is not None:
-            self.sim.time_queue.delete_cond(lambda e: e[0] is self._starter)
-            self._starter = None
+        self._cleanup_starter()
         self.sim.cleanup(self)
         # The last event is the process itself. This enables to wait for a process as an asyncio's Future
         self._finish_tx.signal(self)
-        return self.value
+        return value
 
     def fail(self, exc: Exception) -> Exception:
         self._finished = True
         self.exc = exc
-        if self._starter is not None:
-            self.sim.time_queue.delete_cond(lambda e: e[0] is self._starter)
-            self._starter = None
+        self._cleanup_starter()
         self.sim.cleanup(self)
         self._finish_tx.signal(self)
-        return self.exc
+        return exc
 
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types

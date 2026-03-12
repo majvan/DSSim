@@ -303,10 +303,11 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
             retval = subscriber.send(event)
         except StopIteration as exc:
             if isinstance(subscriber, IFuture):
+                # IFuture.finish() is responsible for sim.cleanup(self).
                 retval = subscriber.finish(exc.value)
             else:
                 retval = exc.value
-            self.cleanup(subscriber)
+                self.cleanup(subscriber)
         except ValueError as exc:
             if isinstance(subscriber, IFuture):
                 retval = subscriber.fail(exc)
@@ -394,7 +395,7 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
             subscriber.reset_cond()
         # Remove all the events for this subscriber
         self.now_queue = ZeroTimeQueue(item for item in self.now_queue if item[0] is not subscriber)
-        self.time_queue.delete_cond(lambda e: e[0] is subscriber)
+        self.time_queue.delete_sub(subscriber)
 
     def try_send_object(self, subscriber: ISubscriber, event: EventType) -> EventType:
         '''Condition-aware dispatch used by run().

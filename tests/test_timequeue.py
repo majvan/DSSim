@@ -98,19 +98,23 @@ class TestTimeQueue(unittest.TestCase):
         self.assertEqual((time, element), (10, '1st element'))
         self.assertEqual(self._get_len(), (0, 0, 0))
 
-    def test6_delete_cond(self):
-        ''' Assert deleting an event '''
-        self.tq.add_element(2, {'a': 1, 'b': 2, 'c': 3})
-        self.tq.add_element(1, {'b': 1, 'c': 2, 'd': 3})
-        self.tq.add_element(3, {'x': 1, 'y': 2, 'z': 3})
-        self.tq.add_element(4, {'a': 1, 'b': 2, 'c': 3, 'x': -1, 'y': -2})
-        self.tq.delete_cond(cond=lambda e:'x' in e)
+    def test6_delete_sub(self):
+        ''' Assert deleting all queued events for a specific subscriber '''
+        sub_a, sub_b, sub_c = object(), object(), object()
+        self.tq.add_element(2, (sub_a, {'a': 1, 'b': 2, 'c': 3}))
+        self.tq.add_element(1, (sub_b, {'b': 1, 'c': 2, 'd': 3}))
+        self.tq.add_element(3, (sub_c, {'x': 1, 'y': 2, 'z': 3}))
+        self.tq.add_element(4, (sub_a, {'a': 10}))
+
+        self.tq.delete_sub(sub_a)
         self.assertEqual(len(self.tq), 2)
+
         time, element = self.tq.pop()
-        self.assertEqual((time, element), (1, {'b': 1, 'c': 2, 'd': 3}))
+        self.assertEqual((time, element), (1, (sub_b, {'b': 1, 'c': 2, 'd': 3})))
         time, element = self.tq.pop()
-        self.assertEqual((time, element), (2, {'a': 1, 'b': 2, 'c': 3}))
-        self.tq.delete_cond(lambda e:'b' in e)
+        self.assertEqual((time, element), (3, (sub_c, {'x': 1, 'y': 2, 'z': 3})))
+
+        self.tq.delete_sub(sub_b)
         self.assertEqual(len(self.tq), 0)
 
     def test7_delete_val(self):

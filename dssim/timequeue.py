@@ -15,7 +15,7 @@
 Queue of events and logic around it.
 The queue class also maintains current absolute time.
 '''
-from typing import List, Tuple, Union, Callable, TYPE_CHECKING
+from typing import Tuple, Union
 from bisect import bisect_right
 from dssim.base import EventType, ISubscriber
 from collections import deque
@@ -74,9 +74,9 @@ class TimeQueue:
         ''' Pop the first element from the queue and return it to the caller. '''
         return self._queue.popleft()
 
-    def delete_cond(self, cond: Callable) -> None:
-        ''' Delete all the objects which fit to the condition from the queue. '''
-        self._queue = deque((t, e) for t, e in self._queue if not cond(e))
+    def delete_sub(self, sub: ISubscriber) -> None:
+        '''Delete all queued events targeted to the provided subscriber.'''
+        self._queue = deque((t, e) for t, e in self._queue if e[0] is not sub)
 
     def delete_val(self, val: ElementType) -> None:
         ''' Delete all the objects which have the provided value. '''
