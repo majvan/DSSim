@@ -25,8 +25,8 @@ import inspect
 from functools import wraps
 
 from dssim.base import DSComponent, EventType, EventRetType, TimeType, NumericType
-from dssim.pubsub.base import DSAbortException, AlwaysTrue
-from dssim.pubsub.process import DSProcess
+from dssim.pubsub.base import DSAbortException
+from dssim.lite.process import DSLiteProcess
 from dssim.lite.components.litequeue import LiteQueue
 from dssim.lite.components.literesource import LiteResource, LitePriorityResource
 
@@ -127,7 +127,7 @@ class DSLiteAgent(DSComponent, AgentLiteQueueMixin, AgentLiteResourceMixin):
             name = type(self).__name__ + '.' + str(self._dsliteagent_instances)
         super().__init__(name=name, *args, **kwargs)
         kwargs.pop('name', None), kwargs.pop('sim', None)
-        process: DSProcess
+        process: _LiteComponentProcess
         if inspect.isgeneratorfunction(self.process) or inspect.iscoroutinefunction(self.process):
             process = _LiteComponentProcess(self, self.process(*args, **kwargs), name=self.name + '.process', sim=self.sim)
         elif inspect.ismethod(self.process):
@@ -135,10 +135,6 @@ class DSLiteAgent(DSComponent, AgentLiteQueueMixin, AgentLiteResourceMixin):
         else:
             raise ValueError(f'The attribute {self.__class__}.process is not method, generator, neither coroutine.')
         self._scheduled_process: _LiteComponentProcess = process.schedule(0)
-        # LiteLayer2 does not inject process-level conditions (SimProcessMixin
-        # is not loaded), so keep one always-true condition on the process to
-        # allow direct event delivery from Lite components.
-        self._scheduled_process.get_cond().push(AlwaysTrue)
         self._instance_nr = self.__class__._dsliteagent_instances + 1
         self.__class__._dsliteagent_instances = self.instance_nr
 
@@ -147,7 +143,7 @@ class DSLiteAgent(DSComponent, AgentLiteQueueMixin, AgentLiteResourceMixin):
         return self._instance_nr
 
     @property
-    def scheduled_process(self) -> DSProcess:
+    def scheduled_process(self) -> DSLiteProcess:
         return self._scheduled_process
 
     @abstractmethod
@@ -173,7 +169,7 @@ class DSLiteAgent(DSComponent, AgentLiteQueueMixin, AgentLiteResourceMixin):
         return retval
 
 
-class _LiteComponentProcess(DSProcess):
+class _LiteComponentProcess(DSLiteProcess):
     def __init__(self, process_component: DSLiteAgent, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._component = process_component

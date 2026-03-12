@@ -27,6 +27,7 @@ from dssim.pubsub.components.container import SimContainerMixin
 from dssim.pubsub.components.queue import SimQueueMixin
 from dssim.lite.components.litequeue import SimLiteQueueMixin
 from dssim.lite.components.literesource import SimLiteResourceMixin
+from dssim.lite.process import SimLiteProcessMixin
 from dssim.pubsub.components.resource import SimResourceMixin
 from dssim.pubsub.components.state import SimStateMixin
 from dssim.pubsub.cond import SimFilterMixin
@@ -175,6 +176,7 @@ class SimScheduleMixin:
 # gwait/wait/sleep. No pubsub, no DSProcess.
 LiteLayer2 = (
     SimWaitMixin,
+    SimLiteProcessMixin,
     SimScheduleMixin,
     SimLiteQueueMixin,
     SimLiteResourceMixin,

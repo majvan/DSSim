@@ -335,11 +335,10 @@ class TestSimWaitMixin(unittest.TestCase):
         sim = self._make_sim()
         result = []
         def my_gen():
+            sim.schedule_event(3, 'hello')
             retval = yield from sim.gwait(10)
             result.append(retval)
-        gen = my_gen()
-        sim.schedule(0, gen)
-        sim.schedule_event(3, 'hello', gen)
+        sim.schedule(0, my_gen())
         t, _ = sim.run()
         self.assertEqual(result, ['hello'])
         self.assertEqual(t, 3)
@@ -361,11 +360,10 @@ class TestSimWaitMixin(unittest.TestCase):
         sim = self._make_sim()
         result = []
         async def my_coro():
+            sim.schedule_event(3, 'hello')
             retval = await sim.wait(10)
             result.append(retval)
-        coro = my_coro()
-        sim.schedule(0, coro)
-        sim.schedule_event(3, 'hello', coro)
+        sim.schedule(0, my_coro())
         t, _ = sim.run()
         self.assertEqual(result, ['hello'])
         self.assertEqual(t, 3)
@@ -377,13 +375,12 @@ class TestSimWaitMixin(unittest.TestCase):
         sim = self._make_sim()
         result = []
         def my_gen():
+            sim.schedule_event(2, 'hello')
             r1 = yield from sim.gwait(5)
             result.append(('first', sim.time, r1))
             r2 = yield from sim.gwait(5)
             result.append(('second', sim.time, r2))
-        gen = my_gen()
-        sim.schedule(0, gen)
-        sim.schedule_event(2, 'hello', gen)  # wake first gwait at t=2 (before t=5)
+        sim.schedule(0, my_gen())  # wake first gwait at t=2 (before t=5)
         sim.run()
         # first gwait returns 'hello' at t=2; second times out at t=2+5=7, not t=5
         self.assertEqual(result[0], ('first', 2, 'hello'))
@@ -396,13 +393,12 @@ class TestSimWaitMixin(unittest.TestCase):
         result = []
 
         def my_gen():
+            sim.schedule_event(2, 'hello')
+            sim.schedule_event(3, 'world')
             retval = yield from sim.gsleep(5)
             result.append((sim.time, retval))
 
-        gen = my_gen()
-        sim.schedule(0, gen)
-        sim.schedule_event(2, 'hello', gen)
-        sim.schedule_event(3, 'world', gen)
+        sim.schedule(0, my_gen())
         t, _ = sim.run()
 
         self.assertEqual(result, [(5, None)])
@@ -414,13 +410,12 @@ class TestSimWaitMixin(unittest.TestCase):
         result = []
 
         async def my_coro():
+            sim.schedule_event(2, 'hello')
+            sim.schedule_event(3, 'world')
             retval = await sim.sleep(5)
             result.append((sim.time, retval))
 
-        coro = my_coro()
-        sim.schedule(0, coro)
-        sim.schedule_event(2, 'hello', coro)
-        sim.schedule_event(3, 'world', coro)
+        sim.schedule(0, my_coro())
         t, _ = sim.run()
 
         self.assertEqual(result, [(5, None)])

@@ -27,6 +27,7 @@ from dssim.pubsub.agent import DSAgent, DSProcessComponent, PCGenerator
 from dssim.simulation import DSSimulation
 
 from dssim.base_components import DSQueue, DSLifoQueue, DSKeyQueue, DSResource, DSPriorityResource, DSPriorityPreemption
+from dssim.lite.process import DSLiteProcess
 from dssim.lite.agent import DSLiteAgent, PCLiteGenerator
 from dssim.pubsub.components.queue import Queue
 from dssim.lite.components.literesource import LiteResource, LitePriorityResource
