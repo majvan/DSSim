@@ -15,8 +15,8 @@
 '''
 Benchmark: DSSim simulator core throughput
 
-Five scenarios
---------------
+Six scenarios
+-------------
 1. timed-callbacks : N events at strictly increasing timestamps dispatched to
                      one generator; stresses schedule_event + time_queue pop/dispatch
 2. now-burst       : one generator emits N zero-time events via signal;
@@ -27,6 +27,9 @@ Five scenarios
                      producer generator; stresses coroutine send path in the loop
 5. cross-signal    : two waiting processes alternately wake each other with zero-time
                      signals; stresses mutual blocking/unblocking dispatch path
+6. bucketed-burst  : K workers, L time buckets; event i is delivered to
+                     worker (i % K) at time (i % L); stresses routed fan-out
+                     and many-events-per-time-bucket dispatch
 
 Each scenario is measured for three DSSim configurations:
   - raw        : DSSimulation(layer2=None), schedule_event(), plain yield
@@ -48,6 +51,14 @@ import os
 import time
 import statistics
 
+try:
+    import simpy
+    _HAS_SIMPY = True
+except Exception:
+    simpy = None
+    _HAS_SIMPY = False
+
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 # ---------------------------------------------------------------------------
@@ -55,6 +66,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # ---------------------------------------------------------------------------
 N_EVENTS = 100_000  # logical events per scenario run
 REPEATS  = 20       # independent timed runs; we report mean + min
+BUCKET_PROC_COUNT = 10   # K (number of target processes) for scenario 6
+BUCKET_COUNT = 100       # L (number of time buckets) for scenario 6
 
 
 # ---------------------------------------------------------------------------
@@ -211,9 +224,36 @@ def dssim_raw_cross_signal(n):
     b_cb = proc_b()
     sim.schedule_event(0, None, a_cb)  # prime to first yield
     sim.schedule_event(0, None, b_cb)  # prime to first yield
-    sim.signal(None, a_cb)             # seed ping-pong
+    sim.schedule_event(0, None, a_cb)  # seed ping-pong
     sim.run()
     assert total == n, f'raw cross-signal: expected {n}, got {total}'
+
+
+def dssim_raw_bucketed_burst(n, k, l):
+    '''
+    K workers, L time buckets. Event i targets worker (i % K) at time (i % L).
+    '''
+    sim = DSSimulation(layer2=None)
+    process_count = max(1, k)
+    bucket_count = max(1, l)
+    hits = [0] * process_count
+    workers = []
+
+    def worker(idx):
+        while True:
+            yield
+            hits[idx] += 1
+
+    for idx in range(process_count):
+        w = worker(idx)
+        workers.append(w)
+        sim.schedule_event(0, None, w)  # prime worker
+
+    for i in range(n):
+        sim.schedule_event(i % bucket_count, i, workers[i % process_count])
+
+    sim.run()
+    assert sum(hits) == n, f'raw bucketed-burst: expected {n}, got {sum(hits)}'
 
 
 # ===========================================================================
@@ -349,9 +389,35 @@ def dssim_lite_cross_signal(n):
     b_cb = proc_b()
     sim.schedule(0, a_cb)  # prime to first gwait
     sim.schedule(0, b_cb)  # prime to first gwait
-    sim.signal(None, a_cb) # seed ping-pong
+    sim.schedule_event(0, None, a_cb) # seed ping-pong
     sim.run()
     assert total == n, f'lite cross-signal: expected {n}, got {total}'
+
+
+def dssim_lite_bucketed_burst(n, k, l):
+    '''
+    K workers, L time buckets. Event i targets worker (i % K) at time (i % L).
+    LiteLayer2 variant.
+    '''
+    sim = DSSimulation(layer2=LiteLayer2)
+    process_count = max(1, k)
+    bucket_count = max(1, l)
+    hits = [0] * process_count
+    workers = []
+
+    def worker(idx):
+        while True:
+            yield from sim.gwait()
+            hits[idx] += 1
+
+    for idx in range(process_count):
+        workers.append(sim.schedule(0, worker(idx)))
+
+    for i in range(n):
+        sim.schedule_event(i % bucket_count, i, workers[i % process_count])
+
+    sim.run()
+    assert sum(hits) == n, f'lite bucketed-burst: expected {n}, got {sum(hits)}'
 
 
 # ===========================================================================
@@ -424,7 +490,7 @@ def dssim_pubsub_now_chain(n):
                 sim.signal(None, chain_process)
 
     chain_process = sim.schedule(0, chain())    # prime, get DSProcess
-    sim.schedule_event(0, None, chain_process)  # trigger first iteration
+    sim.schedule_event(0, None, chain_process)  # add first kick-up
     sim.run()
     assert fired == n, f'pubsub now-chain: expected {n}, got {fired}'
 
@@ -487,6 +553,32 @@ def dssim_pubsub_cross_signal(n):
     sim.schedule_event(0, None, a_proc)
     sim.run()
     assert total == n, f'pubsub cross-signal: expected {n}, got {total}'
+
+
+def dssim_pubsub_bucketed_burst(n, k, l):
+    '''
+    K workers, L time buckets. Event i targets worker (i % K) at time (i % L).
+    PubSubLayer2 variant.
+    '''
+    sim = DSSimulation(layer2=PubSubLayer2)
+    process_count = max(1, k)
+    bucket_count = max(1, l)
+    hits = [0] * process_count
+    workers = []
+
+    def worker(idx):
+        while True:
+            yield from sim.gwait(cond=AlwaysTrue)
+            hits[idx] += 1
+
+    for idx in range(process_count):
+        workers.append(sim.schedule(0, worker(idx)))
+
+    for i in range(n):
+        sim.schedule_event(i % bucket_count, i, workers[i % process_count])
+
+    sim.run()
+    assert sum(hits) == n, f'pubsub bucketed-burst: expected {n}, got {sum(hits)}'
 
 
 # ===========================================================================
@@ -616,6 +708,48 @@ def simpy_cross_signal(n):
     wake['a'].succeed(None)  # seed ping-pong
     env.run()
     assert total['n'] == n, f'simpy cross-signal: expected {n}, got {total["n"]}'
+
+
+def simpy_bucketed_burst(n, k, l):
+    '''
+    K workers, L time buckets. Event i targets worker (i % K) at time (i % L).
+    SimPy variant.
+    '''
+    from collections import deque
+    env = _simpy.Environment()
+    process_count = max(1, k)
+    bucket_count = max(1, l)
+    hits = [0] * process_count
+    mailboxes = [deque() for _ in range(process_count)]
+    wakeup = [env.event() for _ in range(process_count)]
+
+    def worker(idx):
+        while True:
+            if not mailboxes[idx]:
+                ev = wakeup[idx]
+                yield ev
+                wakeup[idx] = env.event()
+            while mailboxes[idx]:
+                mailboxes[idx].popleft()
+                hits[idx] += 1
+
+    def deliver(idx, payload):
+        # callback invoked when timeout fires
+        was_empty = not mailboxes[idx]
+        mailboxes[idx].append(payload)
+        if was_empty and not wakeup[idx].triggered:
+            wakeup[idx].succeed(None)
+
+    for idx in range(process_count):
+        env.process(worker(idx))
+
+    for i in range(n):
+        target = i % process_count
+        ev = env.timeout(i % bucket_count, value=i)
+        ev.callbacks.append(lambda event, idx=target, val=i: deliver(idx, val))
+
+    env.run()
+    assert sum(hits) == n, f'simpy bucketed-burst: expected {n}, got {sum(hits)}'
 
 
 # ===========================================================================
@@ -774,19 +908,65 @@ def salabim_cross_signal(n):
     assert total[0] == n, f'salabim cross-signal: expected {n}, got {total[0]}'
 
 
+def salabim_bucketed_burst(n, k, l):
+    '''
+    K workers, L time buckets. Event i targets worker (i % K) at time (i % L).
+    '''
+    env = _salabim.Environment(trace=False)
+    process_count = max(1, k)
+    bucket_count = max(1, l)
+    hits = [0] * process_count
+    pending = [0] * process_count
+    workers = []
+
+    class Worker(_salabim.Component):
+        def setup(self, idx):
+            self.idx = idx
+
+        def process(self):
+            while True:
+                yield self.passivate()
+                while pending[self.idx] > 0:
+                    pending[self.idx] -= 1
+                    hits[self.idx] += 1
+
+    class Scheduler(_salabim.Component):
+        def process(self):
+            buckets = [[] for _ in range(bucket_count)]
+            for i in range(n):
+                buckets[i % bucket_count].append(i % process_count)
+            for t in range(bucket_count):
+                if t > 0:
+                    yield self.hold(1)
+                for idx in buckets[t]:
+                    was_zero = pending[idx] == 0
+                    pending[idx] += 1
+                    if was_zero:
+                        workers[idx].activate()
+
+    for idx in range(process_count):
+        workers.append(Worker(env=env, idx=idx))
+
+    Scheduler(env=env)
+    env.run()
+    assert sum(hits) == n, f'salabim bucketed-burst: expected {n}, got {sum(hits)}'
+
+
 # ===========================================================================
 # main
 # ===========================================================================
 if __name__ == '__main__':
     print(f'Python {sys.version.split()[0]}')
-    print(f'Parameters: N={N_EVENTS:,}  repeats={REPEATS}\n')
+    print(f'Parameters: N={N_EVENTS:,}  repeats={REPEATS}  K={BUCKET_PROC_COUNT}  L={BUCKET_COUNT}\n')
+
 
     # ---- scenario 1 --------------------------------------------------------
     print(f'=== Scenario 1: timed-callbacks  (N={N_EVENTS:,}) ===')
     report('DSSim raw        ', N_EVENTS, *bench(dssim_raw_timed_callbacks,    N_EVENTS))
     report('DSSim LiteLayer2 ', N_EVENTS, *bench(dssim_lite_timed_callbacks,   N_EVENTS))
     report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_timed_callbacks, N_EVENTS))
-    report('SimPy            ', N_EVENTS, *bench(simpy_timed_callbacks,         N_EVENTS))
+    if _HAS_SIMPY:
+        report('SimPy            ', N_EVENTS, *bench(simpy_timed_callbacks,         N_EVENTS))
     report('salabim          ', N_EVENTS, *bench(salabim_timed_callbacks,       N_EVENTS))
 
     # ---- scenario 2 --------------------------------------------------------
@@ -794,7 +974,8 @@ if __name__ == '__main__':
     report('DSSim raw        ', N_EVENTS, *bench(dssim_raw_now_burst,    N_EVENTS))
     report('DSSim LiteLayer2 ', N_EVENTS, *bench(dssim_lite_now_burst,   N_EVENTS))
     report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_now_burst, N_EVENTS))
-    report('SimPy            ', N_EVENTS, *bench(simpy_now_burst,         N_EVENTS))
+    if _HAS_SIMPY:
+        report('SimPy            ', N_EVENTS, *bench(simpy_now_burst,         N_EVENTS))
     report('salabim          ', N_EVENTS, *bench(salabim_now_burst,       N_EVENTS))
 
     # ---- scenario 3 --------------------------------------------------------
@@ -802,7 +983,8 @@ if __name__ == '__main__':
     report('DSSim raw        ', N_EVENTS, *bench(dssim_raw_now_chain,    N_EVENTS))
     report('DSSim LiteLayer2 ', N_EVENTS, *bench(dssim_lite_now_chain,   N_EVENTS))
     report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_now_chain, N_EVENTS))
-    report('SimPy            ', N_EVENTS, *bench(simpy_now_chain,         N_EVENTS))
+    if _HAS_SIMPY:
+        report('SimPy            ', N_EVENTS, *bench(simpy_now_chain,         N_EVENTS))
     report('salabim          ', N_EVENTS, *bench(salabim_now_chain,       N_EVENTS))
 
     # ---- scenario 4 --------------------------------------------------------
@@ -810,7 +992,8 @@ if __name__ == '__main__':
     report('DSSim raw        ', N_EVENTS, *bench(dssim_raw_generator_wakeup,    N_EVENTS))
     report('DSSim LiteLayer2 ', N_EVENTS, *bench(dssim_lite_generator_wakeup,   N_EVENTS))
     report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_generator_wakeup, N_EVENTS))
-    report('SimPy            ', N_EVENTS, *bench(simpy_process_wakeup,           N_EVENTS))
+    if _HAS_SIMPY:
+        report('SimPy            ', N_EVENTS, *bench(simpy_process_wakeup,           N_EVENTS))
     report('salabim          ', N_EVENTS, *bench(salabim_generator_wakeup,       N_EVENTS))
 
     # ---- scenario 5 --------------------------------------------------------
@@ -820,5 +1003,14 @@ if __name__ == '__main__':
     report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_cross_signal, N_EVENTS))
     report('SimPy            ', N_EVENTS, *bench(simpy_cross_signal,         N_EVENTS))
     report('salabim          ', N_EVENTS, *bench(salabim_cross_signal,       N_EVENTS))
+
+    # ---- scenario 6 --------------------------------------------------------
+    print(f'\n=== Scenario 6: bucketed-burst  (K={BUCKET_PROC_COUNT}, L={BUCKET_COUNT}, N={N_EVENTS:,}) ===')
+    report('DSSim raw        ', N_EVENTS, *bench(dssim_raw_bucketed_burst,    N_EVENTS, BUCKET_PROC_COUNT, BUCKET_COUNT))
+    report('DSSim LiteLayer2 ', N_EVENTS, *bench(dssim_lite_bucketed_burst,   N_EVENTS, BUCKET_PROC_COUNT, BUCKET_COUNT))
+    report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_bucketed_burst, N_EVENTS, BUCKET_PROC_COUNT, BUCKET_COUNT))
+    if _HAS_SIMPY:
+        report('SimPy            ', N_EVENTS, *bench(simpy_bucketed_burst,        N_EVENTS, BUCKET_PROC_COUNT, BUCKET_COUNT))
+    report('salabim          ', N_EVENTS, *bench(salabim_bucketed_burst,      N_EVENTS, BUCKET_PROC_COUNT, BUCKET_COUNT))
 
     print()
