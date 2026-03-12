@@ -23,6 +23,17 @@ from dssim import DSSchedulable, DSProcess, DSCallback
 from dssim.pubsub.process import DSSubscriberContextManager, DSTimeoutContext, DSTimeoutContextError
 from dssim import DSPub
 
+def _peek_timequeue_event(time_queue):
+    return time_queue.get_first_time(), time_queue._queue[0][1][0]
+
+def _pop_timequeue_event(time_queue):
+    t = time_queue.get_first_time()
+    bucket = time_queue.pop_first_bucket()
+    event = bucket.popleft()
+    if bucket:
+        time_queue.insertleft(t, bucket)
+    return t, event
+
 
 # ---------------------------------------------------------------------------
 # sim.schedule() input-type routing
@@ -78,7 +89,7 @@ class TestScheduleRouting(unittest.TestCase):
         cb = DSCallback(Mock(), sim=sim)
         result = sim.schedule(1, cb)
         self.assertIs(result, cb)
-        self.assertEqual(len(sim.time_queue), 1)
+        self.assertEqual(sim.time_queue.event_count(), 1)
 
     def test7_negative_time_raises_value_error(self):
         ''' Negative scheduling time raises ValueError. '''
@@ -317,18 +328,18 @@ class TestTimeoutContext(unittest.TestCase):
         sim = DSSimulation()
         sim._parent_process = 'process'
         with sim.timeout(0) as cm:
-            self.assertTrue(len(sim.time_queue) == 1)
-            queued = sim.time_queue.get0()
+            self.assertTrue(sim.time_queue.event_count() == 1)
+            queued = _peek_timequeue_event(sim.time_queue)
             self.assertTrue(queued[0] == 0)
             self.assertTrue(queued[1][0] == 'process')
             self.assertTrue(isinstance(queued[1][1], DSTimeoutContextError))
             cm.reschedule(10)
-            self.assertTrue(len(sim.time_queue) == 1)
-            queued = sim.time_queue.get0()
+            self.assertTrue(sim.time_queue.event_count() == 1)
+            queued = _peek_timequeue_event(sim.time_queue)
             self.assertTrue(queued[0] == 10)
             self.assertTrue(queued[1][0] == 'process')
             self.assertTrue(isinstance(queued[1][1], DSTimeoutContextError))
-        self.assertTrue(len(sim.time_queue) == 0)
+        self.assertTrue(sim.time_queue.event_count() == 0)
 
     def test2_sim_timeout_negative(self):
         def process(sim, timeout):
@@ -381,16 +392,16 @@ class TestSim(unittest.TestCase):
 
     def test1_init_reset(self):
         sim = DSSimulation()
-        self.assertEqual(len(sim.time_queue), 0)
+        self.assertEqual(sim.time_queue.event_count(), 0)
         self.assertEqual(sim.time, 0)
         sim.schedule(0.5, self.__my_wait_process())
         sim.schedule(1.5, self.__my_wait_process())
-        self.assertEqual(len(sim.time_queue), 2)
+        self.assertEqual(sim.time_queue.event_count(), 2)
         sim.run(1)
         self.assertEqual(sim.time, 1)
-        self.assertEqual(len(sim.time_queue), 1)
+        self.assertEqual(sim.time_queue.event_count(), 1)
         sim.restart(0.9)
-        self.assertEqual(len(sim.time_queue), 0)
+        self.assertEqual(sim.time_queue.event_count(), 0)
         self.assertEqual(sim.time, 0.9)
 
     def test2_scheduling(self):
@@ -400,7 +411,7 @@ class TestSim(unittest.TestCase):
         with self.assertRaises(ValueError):
             _parent_process = self.sim.schedule(-0.5, my_process)
         _parent_process = self.sim.schedule(2, my_process)
-        self.assertEqual(len(self.sim.time_queue), 1)
+        self.assertEqual(self.sim.time_queue.event_count(), 1)
 
     def test3_scheduling_events(self):
         ''' Assert working with time queue when pushing events '''
@@ -421,7 +432,7 @@ class TestSim(unittest.TestCase):
         self.assertEqual(self.sim.time, 0.5)
         event_obj = {'producer': _parent_process, 'data': 1}
         self.sim.schedule_event(2, event_obj, my_process)
-        time, (process, event) = self.sim.time_queue.pop()
+        time, (process, event) = _pop_timequeue_event(self.sim.time_queue)
         self.assertEqual((time, process), (2.5, my_process))
         self.assertEqual(event, event_obj)
         self.sim.run(2.5)
@@ -455,7 +466,7 @@ class TestSim(unittest.TestCase):
         self.assertEqual(retval, (3.5, 3))
         calls = [call(1.5, 3), call(2.5, 2), call(3.5, 1),]
         self.__time_process_event.assert_has_calls(calls)
-        retval = len(self.sim.time_queue)
+        retval = self.sim.time_queue.event_count()
         self.assertEqual(retval, 0)
         self.__time_process_event.reset_mock()
 
@@ -467,7 +478,7 @@ class TestSim(unittest.TestCase):
         self.assertEqual(retval, (2, 2))
         calls = [call(1, 3), call(2, 2),]
         self.__time_process_event.assert_has_calls(calls)
-        num_events = len(self.sim.time_queue)
+        num_events = self.sim.time_queue.event_count()
         self.assertEqual(num_events, 1)
         self.__time_process_event.reset_mock()
 
@@ -512,10 +523,10 @@ class TestSim(unittest.TestCase):
         process = DSProcess(my_process(sim), sim=sim).schedule(0)
         sim.send_object(process, None)  # go to the waiting
         sim.schedule_event(4, 'some_event', subscriber=process)
-        self.assertTrue(len(sim.time_queue) == 3)
+        self.assertTrue(sim.time_queue.event_count() == 3)
         retval = sim.send_object(process, 'value')
         self.assertTrue(retval is None)
-        self.assertTrue(len(sim.time_queue) == 2)
+        self.assertTrue(sim.time_queue.event_count() == 2)
 
     def test8_abort(self):
         self.sim = DSSimulation()
@@ -526,14 +537,14 @@ class TestSim(unittest.TestCase):
             call(1, None),
         ]
         self.__time_process_event.assert_has_calls(calls)
-        self.assertEqual(len(self.sim.time_queue), 0)
+        self.assertEqual(self.sim.time_queue.event_count(), 0)
         self.sim.schedule_event(float('inf'), {'data': 2}, process)
         num_events = self.sim.run(2.5)
         self.__time_process_event.assert_has_calls([])
-        self.assertEqual(len(self.sim.time_queue), 1)
+        self.assertEqual(self.sim.time_queue.event_count(), 1)
         process.abort(DSAbortException(testing=-1)),
         num_events = self.sim.run(3)
-        self.assertEqual(len(self.sim.time_queue), 0)
+        self.assertEqual(self.sim.time_queue.event_count(), 0)
 
     def test9_gsleep_ignores_events_until_timeout(self):
         self.sim = DSSimulation()

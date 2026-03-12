@@ -142,7 +142,7 @@ class TestProducerConsumerIntegration(unittest.TestCase):
         sim.schedule_event(3, 'ev3', cb)
         sim.run(2.5)
         self.assertEqual(received, ['ev1', 'ev2'])
-        self.assertEqual(len(sim.time_queue), 1)
+        self.assertEqual(sim.time_queue.event_count(), 1)
 
     def test3_producer_signal_dispatched_to_dscallback_subscriber(self):
         ''' DSPub.signal() in the run loop reaches a DSCallback subscriber. '''

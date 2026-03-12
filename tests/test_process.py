@@ -24,6 +24,17 @@ from dssim.pubsub.process import DSSubscriberContextManager, DSTimeoutContext, D
 from dssim import DSPub
 from dssim.pubsub.base import StackedCond
 
+def _peek_timequeue_event(time_queue):
+    return time_queue.get_first_time(), time_queue._queue[0][1][0]
+
+def _pop_timequeue_event(time_queue):
+    t = time_queue.get_first_time()
+    bucket = time_queue.pop_first_bucket()
+    event = bucket.popleft()
+    if bucket:
+        time_queue.insertleft(t, bucket)
+    return t, event
+
 
 class FutureMock(Mock):
     def get_eps(self):
@@ -383,37 +394,37 @@ class TestTimeoutContext(unittest.TestCase):
         sim = DSSimulation()
         sim._parent_process = 'process'
         cm = DSTimeoutContext(None, 'hello', sim=sim)
-        self.assertTrue(len(sim.time_queue) == 0)
+        self.assertTrue(sim.time_queue.event_count() == 0)
         cm.reschedule(2)
-        self.assertTrue(len(sim.time_queue) == 1)
-        self.assertTrue(sim.time_queue.get0() == (2, ('process', 'hello')))
+        self.assertTrue(sim.time_queue.event_count() == 1)
+        self.assertTrue(_peek_timequeue_event(sim.time_queue) == (2, ('process', 'hello')))
         cm.reschedule(1)
-        self.assertTrue(len(sim.time_queue) == 1)
-        self.assertTrue(sim.time_queue.get0() == (1, ('process', 'hello')))
+        self.assertTrue(sim.time_queue.event_count() == 1)
+        self.assertTrue(_peek_timequeue_event(sim.time_queue) == (1, ('process', 'hello')))
 
         sim = DSSimulation()
         sim._parent_process = 'process'
         cm = DSTimeoutContext(0, 'hi', sim=sim)
-        self.assertTrue(len(sim.time_queue) == 1)
-        self.assertTrue(sim.time_queue.get0() == (0, ('process', 'hi')))
+        self.assertTrue(sim.time_queue.event_count() == 1)
+        self.assertTrue(_peek_timequeue_event(sim.time_queue) == (0, ('process', 'hi')))
         cm.reschedule(2)
-        self.assertTrue(len(sim.time_queue) == 1)
-        self.assertTrue(sim.time_queue.get0() == (2, ('process', 'hi')))
+        self.assertTrue(sim.time_queue.event_count() == 1)
+        self.assertTrue(_peek_timequeue_event(sim.time_queue) == (2, ('process', 'hi')))
         cm.reschedule(1)
-        self.assertTrue(len(sim.time_queue) == 1)
-        self.assertTrue(sim.time_queue.get0() == (1, ('process', 'hi')))
+        self.assertTrue(sim.time_queue.event_count() == 1)
+        self.assertTrue(_peek_timequeue_event(sim.time_queue) == (1, ('process', 'hi')))
 
         event = 'hi'
         cm = DSTimeoutContext(3, 'bye', sim=sim)
-        self.assertTrue(len(sim.time_queue) == 2)
-        self.assertTrue(sim.time_queue.get0() == (1, ('process', 'hi')))
+        self.assertTrue(sim.time_queue.event_count() == 2)
+        self.assertTrue(_peek_timequeue_event(sim.time_queue) == (1, ('process', 'hi')))
         cm.reschedule(0)
-        self.assertTrue(len(sim.time_queue) == 2)
-        self.assertTrue(sim.time_queue.get0() == (0, ('process', 'bye')))
+        self.assertTrue(sim.time_queue.event_count() == 2)
+        self.assertTrue(_peek_timequeue_event(sim.time_queue) == (0, ('process', 'bye')))
         cm.reschedule(3)
-        self.assertTrue(len(sim.time_queue) == 2)
-        self.assertTrue(sim.time_queue.pop() == (1, ('process', 'hi')))
-        self.assertTrue(sim.time_queue.pop() == (3, ('process', 'bye')))
+        self.assertTrue(sim.time_queue.event_count() == 2)
+        self.assertTrue(_pop_timequeue_event(sim.time_queue) == (1, ('process', 'hi')))
+        self.assertTrue(_pop_timequeue_event(sim.time_queue) == (3, ('process', 'bye')))
 
 
 # ---------------------------------------------------------------------------
@@ -437,7 +448,7 @@ class TestDSProcessAbort(unittest.TestCase):
 
         process_entries = sum(
             1 for _, (consumer, _) in
-            [self.sim.time_queue.pop() for _ in range(len(self.sim.time_queue))]
+            [_pop_timequeue_event(self.sim.time_queue) for _ in range(self.sim.time_queue.event_count())]
             if consumer is process
         )
         self.assertEqual(process_entries, 0)

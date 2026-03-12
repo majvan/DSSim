@@ -15,132 +15,130 @@
 Tests for timequeue module
 '''
 import unittest
-from dssim.timequeue import TimeQueue, ZeroTimeQueue, _void_subscriber
+from collections import deque
+from dssim.timequeue import TimeQueue, NowQueue
 
 class TestTimeQueue(unittest.TestCase):
-    ''' Test the time queue class behavior '''
+    '''Test the TimeQueue API behaviour.'''
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.tq = TimeQueue()
 
-    def _get_len(self):
-        return len(self.tq), len(self.tq._queue), len(self.tq._queue)
+    def _pop_one(self):
+        '''Pop one event using only public TimeQueue API.'''
+        t = self.tq.get_first_time()
+        bucket = self.tq.pop_first_bucket()
+        element = bucket.popleft()
+        if bucket:
+            self.tq.insertleft(t, bucket)
+        return t, element
 
-    def test1_init(self):
-        ''' Assert initialization behavior '''
-        self.assertEqual(self._get_len(), (0, 0, 0))
+    def test1_init_empty(self):
+        self.assertFalse(self.tq)
+        self.assertEqual(self.tq.event_count(), 0)
+        self.assertEqual(len(self.tq._queue), 0)
 
-    def test2_put_get(self):
-        ''' Test adding an event '''
-        self.tq.add_element(0.123, 'An element')
-        self.assertEqual(self._get_len(), (1, 1, 1))
-        self.assertEqual(self.tq._queue[0][0], 0.123)
-        self.assertEqual(self.tq._queue[0][1], 'An element')
-        time, element = self.tq.get0()
-        self.assertEqual((time, element), (0.123, 'An element'))
-        time, element = self.tq.pop()
-        self.assertEqual((time, element), (0.123, 'An element'))
-        self.assertEqual(self._get_len(), (0, 0, 0))
-        time, element = self.tq.get0()
-        self.assertEqual((time, element), (float("inf"), (_void_subscriber, None)))
+    def test2_add_element_builds_sorted_buckets(self):
+        self.tq.add_element(10, 'a')
+        self.tq.add_element(0, 'b')
+        self.tq.add_element(5, 'c')
+        self.tq.add_element(5, 'd')
+        self.assertTrue(self.tq)
+        self.assertEqual(self.tq.event_count(), 4)
+        self.assertEqual([t for t, _ in self.tq._queue], [0, 5, 10])
+        self.assertEqual([len(q) for _, q in self.tq._queue], [1, 2, 1])
+        self.assertEqual(list(self.tq._queue[1][1]), ['c', 'd'])
 
-    def test3_insert(self):
-        ''' Test inserting an event '''
-        self.tq.add_element(10, 'First element')
-        self.tq.add_element(5, 'Second element')
-        self.tq.add_element(0, 'Third element')
-        time, element = self.tq.pop()
-        self.assertEqual((time, element), (0, 'Third element'))
-        time, element = self.tq.pop()
-        self.assertEqual((time, element), (5, 'Second element'))
-        time, element = self.tq.pop()
-        self.assertEqual((time, element), (10, 'First element'))
-        self.assertEqual(self._get_len(), (0, 0, 0))
+    def test3_pop_one_respects_global_and_bucket_fifo(self):
+        self.tq.add_element(10, 'a')
+        self.tq.add_element(0, 'b')
+        self.tq.add_element(5, 'c')
+        self.tq.add_element(5, 'd')
+        self.assertEqual(self._pop_one(), (0, 'b'))
+        self.assertEqual(self._pop_one(), (5, 'c'))
+        self.assertEqual(self._pop_one(), (5, 'd'))
+        self.assertEqual(self._pop_one(), (10, 'a'))
+        self.assertFalse(self.tq)
+        self.assertEqual(self.tq.event_count(), 0)
 
-        self.tq.add_element(10, '1st element')
-        self.tq.add_element(0, '2nd element')
-        self.tq.add_element(5, '3rd element')
-        time, element = self.tq.pop()
-        self.assertEqual((time, element), (0, '2nd element'))
-        time, element = self.tq.pop()
-        self.assertEqual((time, element), (5, '3rd element'))
-        time, element = self.tq.pop()
-        self.assertEqual((time, element), (10, '1st element'))
-        self.assertEqual(self._get_len(), (0, 0, 0))
+    def test4_get_first_time_and_pop_first_bucket(self):
+        self.tq.add_element(2, 'a')
+        self.tq.add_element(2, 'b')
+        self.tq.add_element(3, 'c')
+        self.assertEqual(self.tq.get_first_time(), 2)
+        bucket = self.tq.pop_first_bucket()
+        self.assertEqual(list(bucket), ['a', 'b'])
+        self.assertEqual(self.tq.event_count(), 1)
+        self.assertEqual(self.tq.get_first_time(), 3)
 
-    def test4_insert_infinite_time(self):
-        ''' The elements with infinite time are valid elements '''
-        self.tq.add_element(float('inf'), 'First element')
-        self.tq.add_element(10, 'Second element')
-        time, element = self.tq.pop()
-        self.assertEqual((time, element), (10, 'Second element'))
-        self.assertEqual(self._get_len(), (1, 1, 1))
-        time, element = self.tq.pop()
-        self.assertEqual((time, element), (float('inf'), 'First element'))
-        self.assertEqual(self._get_len(), (0, 0, 0))
+    def test5_insertleft_merges_with_same_time_bucket(self):
+        self.tq.add_element(1, 'a')
+        self.tq.insertleft(1, deque(['b', 'c']))
+        self.assertEqual([t for t, _ in self.tq._queue], [1])
+        self.assertEqual(list(self.tq._queue[0][1]), ['a', 'b', 'c'])
+        self.assertEqual(self.tq.event_count(), 3)
 
-    def test5_insert_elements_with_equal_time(self):
-        ''' The elements with the same time shall be inserted in FIFO order '''
-        self.tq.add_element(10, '1st element')
-        self.tq.add_element(0, '2nd element')
-        self.tq.add_element(5, '3rd element')
-        self.tq.add_element(5, '4th element')
-        self.tq.add_element(5, '5th element')
-        time, element = self.tq.pop()
-        self.assertEqual((time, element), (0, '2nd element'))
-        time, element = self.tq.pop()
-        self.assertEqual((time, element), (5, '3rd element'))
-        time, element = self.tq.pop()
-        self.assertEqual((time, element), (5, '4th element'))
-        time, element = self.tq.pop()
-        self.assertEqual((time, element), (5, '5th element'))
-        time, element = self.tq.pop()
-        self.assertEqual((time, element), (10, '1st element'))
-        self.assertEqual(self._get_len(), (0, 0, 0))
+    def test6_insertleft_prepends_earlier_bucket(self):
+        self.tq.add_element(5, 'x')
+        self.tq.insertleft(1, deque(['a', 'b']))
+        self.assertEqual([t for t, _ in self.tq._queue], [1, 5])
+        self.assertEqual(self._pop_one(), (1, 'a'))
+        self.assertEqual(self._pop_one(), (1, 'b'))
+        self.assertEqual(self._pop_one(), (5, 'x'))
 
-    def test6_delete_sub(self):
-        ''' Assert deleting all queued events for a specific subscriber '''
+    def test7_insertleft_later_time_keeps_sorted_order(self):
+        self.tq.add_element(1, 'a')
+        self.tq.add_element(5, 'e')
+        self.tq.insertleft(3, deque(['c', 'd']))
+        self.assertEqual([t for t, _ in self.tq._queue], [1, 3, 5])
+        self.assertEqual(self._pop_one(), (1, 'a'))
+        self.assertEqual(self._pop_one(), (3, 'c'))
+        self.assertEqual(self._pop_one(), (3, 'd'))
+        self.assertEqual(self._pop_one(), (5, 'e'))
+
+    def test8_infinite_time_is_valid(self):
+        self.tq.add_element(float('inf'), 'later')
+        self.tq.add_element(10, 'now')
+        self.assertEqual(self._pop_one(), (10, 'now'))
+        self.assertEqual(self._pop_one(), (float('inf'), 'later'))
+
+    def test9_delete_sub_filters_all_matching_subscribers(self):
         sub_a, sub_b, sub_c = object(), object(), object()
         self.tq.add_element(2, (sub_a, {'a': 1, 'b': 2, 'c': 3}))
         self.tq.add_element(1, (sub_b, {'b': 1, 'c': 2, 'd': 3}))
         self.tq.add_element(3, (sub_c, {'x': 1, 'y': 2, 'z': 3}))
         self.tq.add_element(4, (sub_a, {'a': 10}))
-
         self.tq.delete_sub(sub_a)
-        self.assertEqual(len(self.tq), 2)
-
-        time, element = self.tq.pop()
+        self.assertEqual(self.tq.event_count(), 2)
+        time, element = self._pop_one()
         self.assertEqual((time, element), (1, (sub_b, {'b': 1, 'c': 2, 'd': 3})))
-        time, element = self.tq.pop()
+        time, element = self._pop_one()
         self.assertEqual((time, element), (3, (sub_c, {'x': 1, 'y': 2, 'z': 3})))
-
         self.tq.delete_sub(sub_b)
-        self.assertEqual(len(self.tq), 0)
+        self.assertEqual(self.tq.event_count(), 0)
 
-    def test7_delete_val(self):
-        ''' Assert deleting an event '''
+    def test10_delete_val_filters_matching_values(self):
         self.tq.add_element(2, {'a': 1, 'b': 2, 'c': 3})
         self.tq.add_element(1, {'b': 1, 'c': 2, 'd': 3})
         self.tq.add_element(3, {'x': 1, 'y': 2, 'z': 3})
         self.tq.add_element(4, {'a': 1, 'b': 2, 'c': 3, 'x': -1, 'y': -2})
         self.tq.delete_val({'x': 1, 'y': 2, 'z': 3})
-        self.assertEqual(len(self.tq), 3)
-        time, element = self.tq.pop()
+        self.assertEqual(self.tq.event_count(), 3)
+        time, element = self._pop_one()
         self.assertEqual((time, element), (1, {'b': 1, 'c': 2, 'd': 3}))
-        time, element = self.tq.pop()
+        time, element = self._pop_one()
         self.assertEqual((time, element), (2, {'a': 1, 'b': 2, 'c': 3}))
-        self.assertEqual(len(self.tq), 1)
+        self.assertEqual(self.tq.event_count(), 1)
         self.tq.delete_val({'a': 100, 'b': 2, 'c': 3, 'x': -1, 'y': -2})
-        self.assertEqual(len(self.tq), 1)
+        self.assertEqual(self.tq.event_count(), 1)
         self.tq.delete_val({'a': 1, 'b': 2, 'c': 3, 'x': -1, 'y': -2})
-        self.assertEqual(len(self.tq), 0)
+        self.assertEqual(self.tq.event_count(), 0)
 
-
-class TestZeroTimeQueue(unittest.TestCase):
-    ''' Test the ZeroTimeQueue class behavior '''
+class TestNowQueue(unittest.TestCase):
+    '''Test the NowQueue class behavior.'''
 
     def setUp(self):
-        self.q = ZeroTimeQueue()
+        self.q = NowQueue()
 
     def test1_init(self):
         ''' Assert initialization — queue is empty '''
@@ -181,13 +179,13 @@ class TestZeroTimeQueue(unittest.TestCase):
         self.assertEqual(e, 'event2')
 
     def test5_filter_constructor(self):
-        ''' ZeroTimeQueue(generator) filters items — used by cleanup() '''
+        ''' NowQueue(generator) filters items — used by cleanup() '''
         consumer_a, consumer_b = object(), object()
         self.q.append((consumer_a, 'ev1'))
         self.q.append((consumer_b, 'ev2'))
         self.q.append((consumer_a, 'ev3'))
         # Keep only items NOT for consumer_a (same pattern as sim.cleanup)
-        filtered = ZeroTimeQueue(item for item in self.q if item[0] is not consumer_a)
+        filtered = NowQueue(item for item in self.q if item[0] is not consumer_a)
         self.assertEqual(len(filtered), 1)
         c, e = filtered.popleft()
         self.assertIs(c, consumer_b)
