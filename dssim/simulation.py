@@ -303,10 +303,11 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
             retval = subscriber.send(event)
         except StopIteration as exc:
             if isinstance(subscriber, IFuture):
+                # IFuture.finish() is responsible for sim.cleanup(self).
                 retval = subscriber.finish(exc.value)
             else:
                 retval = exc.value
-            self.cleanup(subscriber)
+                self.cleanup(subscriber)
         except ValueError as exc:
             if isinstance(subscriber, IFuture):
                 retval = subscriber.fail(exc)
