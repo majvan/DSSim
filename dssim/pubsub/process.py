@@ -245,7 +245,7 @@ class DSProcess(DSFuture, SignalMixin):
         self._finished = True
         self.value = value
         if self._starter is not None:
-            self.sim.time_queue.delete_cond(lambda e: e[0] is self._starter)
+            self.sim.time_queue.delete_sub(self._starter)
             self._starter = None
         self.sim.cleanup(self)
         # The last event is the process itself. This enables to wait for a process as an asyncio's Future
@@ -256,7 +256,7 @@ class DSProcess(DSFuture, SignalMixin):
         self._finished = True
         self.exc = exc
         if self._starter is not None:
-            self.sim.time_queue.delete_cond(lambda e: e[0] is self._starter)
+            self.sim.time_queue.delete_sub(self._starter)
             self._starter = None
         self.sim.cleanup(self)
         self._finish_tx.signal(self)

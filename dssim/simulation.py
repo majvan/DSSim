@@ -394,7 +394,7 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
             subscriber.reset_cond()
         # Remove all the events for this subscriber
         self.now_queue = ZeroTimeQueue(item for item in self.now_queue if item[0] is not subscriber)
-        self.time_queue.delete_cond(lambda e: e[0] is subscriber)
+        self.time_queue.delete_sub(subscriber)
 
     def try_send_object(self, subscriber: ISubscriber, event: EventType) -> EventType:
         '''Condition-aware dispatch used by run().

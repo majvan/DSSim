@@ -63,15 +63,10 @@ class TestSim(unittest.TestCase):
     def test3_cleanup(self):
         ''' Assert deleting from time queue when deleting events '''
         sim = DSSimulation()
-        sim.time_queue.delete_cond = Mock()
+        sim.time_queue.delete_sub = Mock()
         consumer = Mock()
         sim.cleanup(consumer)
-        sim.time_queue.delete_cond.assert_called_once()
-        args, kwargs = sim.time_queue.delete_cond.call_args
-        lambda_fcn = args[0]
-        self.assertTrue(lambda_fcn((consumer,)))
-        self.assertFalse(lambda_fcn((1,)))
-        self.assertEqual(kwargs, {})
+        sim.time_queue.delete_sub.assert_called_once_with(consumer)
 
     def test4_scheduling(self):
         ''' send_object delivers the event to a plain duck-typed ISubscriber. '''
