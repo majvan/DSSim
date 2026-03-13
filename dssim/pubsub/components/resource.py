@@ -269,6 +269,8 @@ class PriorityResource(Resource):
         self.preemptive = preemptive
         self._priority = DSPriorityResource()
         self._preemption = DSPriorityPreemption(self._priority)
+        self.preempt_count = 0
+        self.preempted_amount: NumericType = 0
         # Resource-specific exception subtype allows clear nested catches:
         # except r1.Preempted / except r0.Preempted.
         self.Preempted = type(f'Preempted_{id(self):x}', (DSResourcePreempted,), {'__module__': __name__})
@@ -321,6 +323,8 @@ class PriorityResource(Resource):
             self.amount += taken
 
         def on_preempted(owner: Any, holder_prio: int, taken: NumericType) -> None:
+            self.preempt_count += 1
+            self.preempted_amount += taken
             self.sim.signal(self.Preempted(self, requester, owner, holder_prio, taken), owner)
 
         return self._preemption.reclaim_from_victims(

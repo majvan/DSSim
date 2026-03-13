@@ -1243,6 +1243,33 @@ class TestResourceStatsProbe(unittest.TestCase):
         self.assertEqual(after_reset['put_count'], 0)
         self.assertEqual(after_reset['get_count'], 1)
 
+    def test4_stats_probe_preemption_count(self):
+        r = PriorityResource(amount=1, capacity=1, preemptive=True, sim=self.sim)
+        probe = r.add_stats_probe()
+
+        def low():
+            got = yield from r.gget(priority=5, preempt=True)
+            self.assertEqual(got, 1)
+            try:
+                yield from self.sim.gwait(float('inf'))
+            except r.Preempted:
+                pass
+
+        def high():
+            yield from self.sim.gwait(3)
+            got = yield from r.gget(priority=1, preempt=True)
+            self.assertEqual(got, 1)
+            yield from self.sim.gwait(2)
+            r.put_nowait()
+
+        self.sim.schedule(0, low())
+        self.sim.schedule(0, high())
+        self.sim.run(20)
+
+        stats = probe.get_statistics()
+        self.assertEqual(stats['preempt_count'], 1)
+        self.assertEqual(stats['preempted_amount'], 1.0)
+
 
 # ---------------------------------------------------------------------------
 # ResourceMixin

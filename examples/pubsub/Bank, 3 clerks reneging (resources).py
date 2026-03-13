@@ -63,7 +63,9 @@ print(
     f'nonempty_ratio={clerks_stats["time_nonempty_ratio"]:.3f}, '
     f'full_ratio={clerks_stats["time_full_ratio"]:.3f}, '
     f'puts={clerks_stats["put_count"]}, '
-    f'gets={clerks_stats["get_count"]}'
+    f'gets={clerks_stats["get_count"]}, '
+    f'preempts={clerks_stats["preempt_count"]}, '
+    f'preempted_amount={clerks_stats["preempted_amount"]}'
 )
 assert stat['reneged'] == 6665, f"Unexpected number of reneged."
 assert stat['balked'] == 23330, f"Unexpected number of balked."

@@ -68,7 +68,9 @@ def run_dssim_non_preemptive():
         f'nonempty_ratio={stats["time_nonempty_ratio"]:.3f}, '
         f'full_ratio={stats["time_full_ratio"]:.3f}, '
         f'puts={stats["put_count"]}, '
-        f'gets={stats["get_count"]}'
+        f'gets={stats["get_count"]}, '
+        f'preempts={stats["preempt_count"]}, '
+        f'preempted_amount={stats["preempted_amount"]}'
     )
     return starts
 
@@ -109,7 +111,9 @@ def run_dssim_preemptive():
         f'nonempty_ratio={stats["time_nonempty_ratio"]:.3f}, '
         f'full_ratio={stats["time_full_ratio"]:.3f}, '
         f'puts={stats["put_count"]}, '
-        f'gets={stats["get_count"]}'
+        f'gets={stats["get_count"]}, '
+        f'preempts={stats["preempt_count"]}, '
+        f'preempted_amount={stats["preempted_amount"]}'
     )
     return log
 

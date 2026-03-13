@@ -50,6 +50,8 @@ class ResourceStatsProbe(DSComponent):
         self._area_amount: float = 0.0
         self._area_nonempty: float = 0.0
         self._area_full: float = 0.0
+        self._base_preempt_count: int = 0
+        self._base_preempted_amount: float = 0.0
         self.put_count: int = 0
         self.get_count: int = 0
         self.max_amount: float = 0.0
@@ -83,6 +85,8 @@ class ResourceStatsProbe(DSComponent):
             self._last_amount = 0.0
             self.max_amount = 0.0
             self.min_amount = 0.0
+            self._base_preempt_count = 0
+            self._base_preempted_amount = 0.0
         else:
             now = float(self._resource.sim.time)
             amount = float(self._resource.amount)
@@ -91,6 +95,8 @@ class ResourceStatsProbe(DSComponent):
             self._last_amount = amount
             self.max_amount = amount
             self.min_amount = amount
+            self._base_preempt_count = int(getattr(self._resource, 'preempt_count', 0))
+            self._base_preempted_amount = float(getattr(self._resource, 'preempted_amount', 0.0))
         self._area_amount = 0.0
         self._area_nonempty = 0.0
         self._area_full = 0.0
@@ -137,11 +143,15 @@ class ResourceStatsProbe(DSComponent):
                 'time_full_ratio': 0.0,
                 'put_count': self.put_count,
                 'get_count': self.get_count,
+                'preempt_count': 0,
+                'preempted_amount': 0.0,
                 'current_amount': self._last_amount,
             }
         now = float(self._resource.sim.time)
         self._advance(now)
         duration = now - self._start_time
+        preempt_count = int(getattr(self._resource, 'preempt_count', 0)) - self._base_preempt_count
+        preempted_amount = float(getattr(self._resource, 'preempted_amount', 0.0)) - self._base_preempted_amount
         if duration <= 0:
             avg_amount = self._last_amount
             nonempty_ratio = 1.0 if self._last_amount > 0 else 0.0
@@ -161,6 +171,8 @@ class ResourceStatsProbe(DSComponent):
             'time_full_ratio': full_ratio,
             'put_count': self.put_count,
             'get_count': self.get_count,
+            'preempt_count': preempt_count,
+            'preempted_amount': preempted_amount,
             'current_amount': self._last_amount,
         }
 
