@@ -81,7 +81,7 @@ class TestDSLiteProcess(unittest.TestCase):
         self.assertEqual(p.value, 'aborted')
         self.assertEqual(seen, ['aborted'])
 
-    def test4_sim_schedule_wraps_generator(self):
+    def test4_sim_schedule_keeps_generator(self):
         sim = DSSimulation(layer2=LiteLayer2)
         ran = []
 
@@ -90,13 +90,13 @@ class TestDSLiteProcess(unittest.TestCase):
             yield from sim.gwait(1)
             ran.append(sim.time)
 
-        wrapped = sim.schedule(0, proc())
-        self.assertIsInstance(wrapped, DSLiteProcess)
+        gen = proc()
+        scheduled = sim.schedule(0, gen)
+        self.assertIs(scheduled, gen)
         sim.run(10)
         self.assertEqual(ran, [0, 1])
-        self.assertTrue(wrapped.finished())
 
-    def test5_sim_schedule_wraps_coroutine(self):
+    def test5_sim_schedule_keeps_coroutine(self):
         sim = DSSimulation(layer2=LiteLayer2)
         ran = []
 
@@ -105,11 +105,11 @@ class TestDSLiteProcess(unittest.TestCase):
             await sim.wait(1)
             ran.append(sim.time)
 
-        wrapped = sim.schedule(0, proc())
-        self.assertIsInstance(wrapped, DSLiteProcess)
+        coro = proc()
+        scheduled = sim.schedule(0, coro)
+        self.assertIs(scheduled, coro)
         sim.run(10)
         self.assertEqual(ran, [0, 1])
-        self.assertTrue(wrapped.finished())
 
     def test6_sim_process_factory(self):
         sim = DSSimulation(layer2=LiteLayer2)

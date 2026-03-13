@@ -34,7 +34,7 @@ class Person(DSComponent):
 
     def start_waiting(self, queue):
         self.queue = queue
-        self.waiting_process = self.sim.schedule(0, self.wait_in_queue())
+        self.waiting_process = self.sim.process(self.wait_in_queue()).schedule(0)
 
     def abort_waiting(self):
         if self.waiting_process:
@@ -61,7 +61,7 @@ class VisaCheck(DSComponent):
         self.identifier = identifier
         self.max_waiting_time = max_waiting_time
         self.queue = queue
-        self.sim.schedule(0, self.work())
+        self.sim.process(self.work()).schedule(0)
         self.stat = {'processed': 0}
 
     def work(self):

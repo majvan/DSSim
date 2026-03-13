@@ -97,15 +97,12 @@ class DSLiteProcess(DSComponent, ISubscriber, IFuture):
 class SimLiteProcessMixin:
     '''Lite schedule/process helpers.
 
-    Wraps generators/coroutines in DSLiteProcess so Lite schedulables have a
-    process object with lifecycle methods.
+    ``sim.schedule()`` stays lightweight and schedules raw generators /
+    coroutines directly (via SimScheduleMixin).
+    Use ``sim.process(...)`` when a DSLiteProcess object is required.
     '''
 
     def schedule(self: "DSSimulation", time: TimeType, schedulable: Any) -> Any:
-        if inspect.iscoroutine(schedulable) or inspect.isgenerator(schedulable):
-            process = DSLiteProcess(schedulable, sim=self)
-            process.schedule(time)
-            return process
         if isinstance(schedulable, DSLiteProcess):
             schedulable.schedule(time)
             return schedulable

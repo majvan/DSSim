@@ -117,7 +117,7 @@ class Family(DSLiteAgent):
             yield from self.sim.gsleep(DAY_MINUTES - now)  # wait till midnight
             yield from self.sim.gsleep(7 * 60 + 45)  # wait till 7:45
             for pupil in pupils:
-                process = self.sim.schedule(0, pupil.go_to_school(school, randint(6, 8)))
+                process = self.sim.process(pupil.go_to_school(school, randint(6, 8))).schedule(0)
                 school.register(process)
 
 
