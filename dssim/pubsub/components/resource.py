@@ -20,6 +20,7 @@ from typing import Any, Generator, TYPE_CHECKING, Optional
 from dssim.base import NumericType, TimeType, EventType, DSComponentSingleton
 from dssim.base_components import DSResource, DSPriorityResource, DSPriorityPreemption
 from dssim.pubsub.components.base import DSStatefulComponent
+from dssim.pubsub.components.resource_probes import ResourceProbeMixin
 from dssim.pubsub.pubsub import DSPub, NotifierPriority
 from dssim.pubsub.base import ICondition, CallableConditionMixin
 
@@ -40,7 +41,7 @@ class DSResourcePreempted(Exception):
         self.amount = amount
 
 
-class Resource(DSStatefulComponent):
+class Resource(ResourceProbeMixin, DSStatefulComponent):
     '''Resource models a pool of virtual resource amount.
 
     * ``get`` consumes amount from the pool.
