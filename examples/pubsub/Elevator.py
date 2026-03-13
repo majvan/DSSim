@@ -85,6 +85,7 @@ class Car(DSAgent):
         self.direction = still
         self.floor = floors[0]
         self.visitors = Queue(name=self.name+".visitors in car")
+        self.visitors_probe = self.visitors.add_stats_probe(name='users')
 
     def process(self):
         dooropen = False
@@ -158,7 +159,8 @@ class Car(DSAgent):
 class Floor:
     def __init__(self, n):
         self.n = n
-        self.visitors = Queue(name=f"visitors {n}")
+        self.visitors = Queue(name=f"visitors_{n}")
+        self.visitors_probe = self.visitors.add_stats_probe(name='users')
 
     def count_in_direction(self, dir):
         n = 0
@@ -202,3 +204,23 @@ floors = {ifloor: Floor(ifloor) for ifloor in range(topfloor + 1)}
 cars = [Car(capacity=capacity) for icar in range(ncars)]
 
 sim.run(10000)
+for car in cars:
+    stats = car.visitors_probe.get_statistics()
+    print(
+        f'Summary: {car.visitors_probe.name} '
+        f'avg_len={stats["time_avg_len"]:.3f}, '
+        f'max_len={stats["max_len"]}, '
+        f'nonempty_ratio={stats["time_nonempty_ratio"]:.3f}, '
+        f'puts={stats["put_count"]}, '
+        f'gets={stats["get_count"]}'
+    )
+for floor in floors.values():
+    stats = floor.visitors_probe.get_statistics()
+    print(
+        f'Summary: {floor.visitors_probe.name} '
+        f'avg_len={stats["time_avg_len"]:.3f}, '
+        f'max_len={stats["max_len"]}, '
+        f'nonempty_ratio={stats["time_nonempty_ratio"]:.3f}, '
+        f'puts={stats["put_count"]}, '
+        f'gets={stats["get_count"]}'
+    )

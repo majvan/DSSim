@@ -65,11 +65,24 @@ def do_somethingB():
 
 if __name__ == '__main__':
     sim = DSSimulation()
-    q_ab, q_ba = sim.queue(), sim.queue()
+    q_ab = sim.queue(name='q_ab')
+    q_ba = sim.queue(name='q_ba')
+    q_ab_probe = q_ab.add_stats_probe(name='flow')
+    q_ba_probe = q_ba.add_stats_probe(name='flow')
     process_a, process_b = do_somethingA(), do_somethingB()
     sim.schedule(0, process_a)
     sim.schedule(0, process_b)
     sim.run(20)
+    for probe in (q_ab_probe, q_ba_probe):
+        stats = probe.get_statistics()
+        print(
+            f'Summary: {probe.name} '
+            f'avg_len={stats["time_avg_len"]:.3f}, '
+            f'max_len={stats["max_len"]}, '
+            f'nonempty_ratio={stats["time_nonempty_ratio"]:.3f}, '
+            f'puts={stats["put_count"]}, '
+            f'gets={stats["get_count"]}'
+        )
 
     assert inspect.getgeneratorstate(process_a) == inspect.GEN_CLOSED
     assert inspect.getgeneratorstate(process_b) == inspect.GEN_CLOSED

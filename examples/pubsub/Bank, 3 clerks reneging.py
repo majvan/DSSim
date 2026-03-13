@@ -52,12 +52,23 @@ CustomerGenerator()
 stat = {'balked': 0, 'reneged': 0}
 clerks = [Clerk() for _ in range(3)]
 waiting_line = sim.Queue(5, name="waiting_line")
+waiting_line_probe = waiting_line.add_stats_probe(name='users')
 time, events = env.run(300000)
 # waiting_line.length.print_histogram(30, 0, 1)
 # waiting_line.length_of_stay.print_histogram(30, 0, 10)
 print("number reneged", stat['reneged'])
 print("number balked", stat['balked'])
+waiting_line_stats = waiting_line_probe.get_statistics()
+print(
+    f'Summary: {waiting_line_probe.name} '
+    f'avg_len={waiting_line_stats["time_avg_len"]:.3f}, '
+    f'max_len={waiting_line_stats["max_len"]}, '
+    f'nonempty_ratio={waiting_line_stats["time_nonempty_ratio"]:.3f}, '
+    f'puts={waiting_line_stats["put_count"]}, '
+    f'gets={waiting_line_stats["get_count"]}'
+)
 assert stat['reneged'] == 6665, f"Unexpected number of reneged."
 assert stat['balked'] == 23330, f"Unexpected number of balked."
 assert time == 299995, f"Time {time} is out of expected range."
-assert events == 289994, f"Number of events {events} is out of expected range."
+# Queue probe callbacks add observer work, so total event count is higher than the uninstrumented variant.
+assert events == 363326, f"Number of events {events} is out of expected range."

@@ -52,10 +52,20 @@ sim = DSSimulation()
 CustomerGenerator()
 clerk = Clerk()
 waitingline = Queue(name="waitingline")
+waitingline_probe = waitingline.add_stats_probe(name='users')
 stat = {'completed': 0, 'balked': 0}
 
 time, events = sim.run(50)
 print()
+waitingline_stats = waitingline_probe.get_statistics()
+print(
+    f'Summary: {waitingline_probe.name} '
+    f'avg_len={waitingline_stats["time_avg_len"]:.3f}, '
+    f'max_len={waitingline_stats["max_len"]}, '
+    f'nonempty_ratio={waitingline_stats["time_nonempty_ratio"]:.3f}, '
+    f'puts={waitingline_stats["put_count"]}, '
+    f'gets={waitingline_stats["get_count"]}'
+)
 # waitingline.print_statistics()
 assert 35 <= time <= 50, f"Time {time} is out of expected range."
 assert clerk.processed >= 1, "Expected at least one processed customer."

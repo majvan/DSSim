@@ -36,8 +36,18 @@ env = sim.Environment()
 sim.ComponentGenerator(Customer, wait_method= lambda e: random.uniform(5, 15))
 clerks = [Clerk() for _ in range(3)]
 waitingline = sim.Queue(name="waitingline")
+waitingline_probe = waitingline.add_stats_probe(name='users')
 
 time, events = env.run(50000)
+waitingline_stats = waitingline_probe.get_statistics()
+print(
+    f'Summary: {waitingline_probe.name} '
+    f'avg_len={waitingline_stats["time_avg_len"]:.3f}, '
+    f'max_len={waitingline_stats["max_len"]}, '
+    f'nonempty_ratio={waitingline_stats["time_nonempty_ratio"]:.3f}, '
+    f'puts={waitingline_stats["put_count"]}, '
+    f'gets={waitingline_stats["get_count"]}'
+)
 # waitingline.print_histograms()
 assert 49950 < time <= 50000, f"Time {time} is out of expected range."
 assert 20000 < events < 40000, f"Number of events {events} is out of expected range."
