@@ -18,6 +18,7 @@ from typing import Any, List, Iterator, Optional, Generator, TYPE_CHECKING
 from dssim.base import NumericType, TimeType, EventType, SignalMixin
 from dssim.pubsub.base import CondType, DSAbortException, AlwaysTrue
 from dssim.pubsub.components.base import DSStatefulComponent
+from dssim.pubsub.components.queue_probes import QueueProbeMixin
 from dssim.pubsub.pubsub import DSPub
 from dssim.base_components import DSQueue, DSLifoQueue, DSKeyQueue
 
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
-class Queue(DSStatefulComponent, SignalMixin):
+class Queue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
     '''A queue component backed by three DSQueue instances:
 
     - buffer:  items currently in transit (policy controlled by *policy*)

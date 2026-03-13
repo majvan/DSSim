@@ -936,5 +936,75 @@ class TestQueuePriority(unittest.TestCase):
         self.assertEqual(order, [1, 5, 7])
 
 
+class TestQueueStatsProbe(unittest.TestCase):
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    def test0_stats_probe_name(self):
+        q = Queue(capacity=1, name='q0', sim=self.sim)
+        probe = q.add_stats_probe()
+        self.assertEqual(probe.name, 'q0.stats_probe')
+        probe2 = q.add_stats_probe(name='ops')
+        self.assertEqual(probe2.name, 'q0.ops')
+
+    def test1_stats_probe_counts(self):
+        q = Queue(capacity=1, sim=self.sim)
+        probe = q.add_stats_probe()
+
+        def actor():
+            q.put_nowait('a')
+            yield from self.sim.gwait(1)
+            q.put_nowait('b')  # full -> fail (no nempty signal)
+            yield from self.sim.gwait(1)
+            q.get_nowait()
+
+        self.sim.schedule(0, actor())
+        self.sim.run(10)
+
+        stats = probe.stats()
+        self.assertEqual(stats['put_count'], 1)
+        self.assertEqual(stats['get_count'], 1)
+        self.assertEqual(stats['max_len'], 1)
+        self.assertEqual(stats['current_len'], 0)
+
+    def test2_stats_probe_time_weighted_length(self):
+        q = Queue(sim=self.sim)
+        probe = q.add_stats_probe()
+
+        def actor():
+            q.put_nowait('a')      # t=0, len=1
+            yield from self.sim.gwait(3)
+            q.put_nowait('b')      # t=3, len=2
+            yield from self.sim.gwait(2)
+            q.get_nowait()         # t=5, len=1
+            yield from self.sim.gwait(5)
+            q.get_nowait()         # t=10, len=0
+
+        self.sim.schedule(0, actor())
+        self.sim.run(10)
+
+        stats = probe.get_statistics()
+        self.assertEqual(stats['duration'], 10)
+        self.assertAlmostEqual(stats['time_avg_len'], 1.2, places=6)
+        self.assertAlmostEqual(stats['time_nonempty_ratio'], 1.0, places=6)
+        self.assertEqual(stats['max_len'], 2)
+
+    def test3_stats_probe_reset(self):
+        q = Queue(sim=self.sim)
+        probe = q.add_stats_probe()
+        q.put_nowait('x')
+        self.sim.run(5)
+        before_reset = probe.stats()
+        self.assertAlmostEqual(before_reset['time_avg_len'], 1.0, places=6)
+
+        probe.reset()
+        q.get_nowait()
+        self.sim.run(10)
+        after_reset = probe.stats()
+        self.assertEqual(after_reset['duration'], 5)
+        self.assertAlmostEqual(after_reset['time_avg_len'], 0.0, places=6)
+        self.assertEqual(after_reset['put_count'], 0)
+        self.assertEqual(after_reset['get_count'], 1)
+
 if __name__ == '__main__':
     unittest.main()
