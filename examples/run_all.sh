@@ -88,6 +88,14 @@ run_py "Asyncio future" "$SCRIPT_DIR/pubsub/asyncio/test_future.py"
 run_py "Asyncio gather" "$SCRIPT_DIR/pubsub/asyncio/test_gather.py"
 run_py "Asyncio timeout" "$SCRIPT_DIR/pubsub/asyncio/test_timeout.py"
 
+echo "PubSub parity examples (simpy-style API via DSSim backend)"
+echo "Parity PriorityResource (simpy-style) [backend=dssim]"
+"$PYTHON_BIN" "$SCRIPT_DIR/pubsub/parity/simpy/PriorityResource simpy.py" --backend dssim
+echo "Parity process events (simpy-style) [backend=dssim]"
+"$PYTHON_BIN" "$SCRIPT_DIR/pubsub/parity/simpy/process_events_simpy.py" --backend dssim
+echo "Parity visa check (simpy-style) [backend=dssim]"
+"$PYTHON_BIN" "$SCRIPT_DIR/pubsub/parity/simpy/visa_check_simpy.py" --backend dssim
+
 run_py "Bank, 1 clerk" "$SCRIPT_DIR/pubsub/Bank, 1 clerk.py"
 run_py "Bank, 3 clerks" "$SCRIPT_DIR/pubsub/Bank, 3 clerks.py"
 run_py "Bank, 3 clerks (resources)" "$SCRIPT_DIR/pubsub/Bank, 3 clerks (resources).py"

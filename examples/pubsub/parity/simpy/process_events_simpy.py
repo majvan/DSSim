@@ -22,9 +22,15 @@ Key differences from the DSSim version:
 * _wait_for_code() manually implements condition-filtered timeout wait via
   env.any_of([mailbox.get(), env.timeout()]), discarding wrong codes in a
   loop with a shrinking deadline — the same approach as examples/lite/process_events.py.
+
+Switch backend:
+- --backend simpy (default)
+- --backend dssim
 '''
-import simpy
 from random import randint
+from _backend import import_simpy_backend
+
+simpy, BACKEND = import_simpy_backend()
 
 
 class MyComponent:
@@ -119,7 +125,7 @@ if __name__ == '__main__':
     env = simpy.Environment()
     obj0 = MyComponent(name='obj0', env=env)
     obj0.boot()
-    print('Running...')
+    print(f'Running... backend={BACKEND}')
 
     import cProfile
     cProfile.run('env.run(until=600)')  # run 10 minutes

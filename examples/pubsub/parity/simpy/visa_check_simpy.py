@@ -19,11 +19,17 @@ Behavioral parity notes:
 * Clerks process only when the head-of-queue person is eligible.
 * Each person has an independent reneging timeout process.
 * Queue changes wake waiting clerks via explicit notifier events.
+
+Switch backend:
+- --backend simpy (default)
+- --backend dssim
 '''
 from __future__ import annotations
 
 from random import randint
-import simpy
+from _backend import import_simpy_backend
+
+simpy, BACKEND = import_simpy_backend()
 
 SIM_TIME = 60 * 10
 
@@ -210,6 +216,7 @@ if __name__ == '__main__':
     eu_visa_checks = [VisaCheck('EU', i, q, max_waiting_time=randint(15, 30), env=env) for i in range(2)]
     ww_visa_checks = [VisaCheck('WW', i, q, max_waiting_time=randint(15, 30), env=env) for i in range(2)]
 
+    print(f'Running... backend={BACKEND}')
     env.run(until=SIM_TIME)
     print("Done.")
     total_processed = sum(check.stat['processed'] for check in eu_visa_checks + ww_visa_checks)

@@ -16,11 +16,14 @@ SimPy-only parity example for priority/preemptive resource semantics.
 
 Demo 1: non-preemptive priority waiter ordering.
 Demo 2: preemptive acquisition with visible interruption events.
+
+Switch backend:
+- --backend simpy (default)
+- --backend dssim
 '''
-try:
-    import simpy
-except ImportError as exc:  # pragma: no cover - optional dependency for examples
-    raise SystemExit('SimPy is required for this example: pip install simpy') from exc
+from _backend import import_simpy_backend
+
+simpy, BACKEND = import_simpy_backend()
 
 
 NON_PREEMPTIVE_JOBS = [
@@ -93,13 +96,13 @@ def run_simpy_preemptive():
 
 
 if __name__ == '__main__':
-    print('Demo 1: PriorityResource (non-preemptive) — SimPy')
+    print(f'Demo 1: PriorityResource (non-preemptive) — backend={BACKEND}')
     simpy_starts = run_simpy_non_preemptive()
     print('SimPy starts:', simpy_starts)
     assert simpy_starts == [('low', 0), ('high', 4), ('mid', 5)]
     print('Non-preemptive parity OK.')
 
-    print('\nDemo 2: Preemptive semantics (with interruption) — SimPy')
+    print(f'\nDemo 2: Preemptive semantics (with interruption) — backend={BACKEND}')
     simpy_log = run_simpy_preemptive()
     print('SimPy log:', simpy_log)
     assert simpy_log == [
