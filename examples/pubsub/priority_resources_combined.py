@@ -8,6 +8,8 @@ This demonstrates two phases using check_and_wait + filter circuits:
 2) AND filtering: blocked acquire (waiting time > 0)
 
 The resources are preemptive PriorityResource instances.
+
+For a nested ownership/preemption example, see priority_resources_nested.py.
 '''
 
 from dssim import DSSimulation, DSResourcePreempted
@@ -122,7 +124,6 @@ def main() -> None:
     sim.schedule(0, io_blocker_same_priority())
     sim.schedule(0, requester())
     sim.run(20)
-
 
 if __name__ == '__main__':
     main()
