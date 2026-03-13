@@ -28,6 +28,18 @@ if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
+class DSResourcePreempted(Exception):
+    '''Raised when a resource holder is preempted by a higher-priority requester.'''
+
+    def __init__(self, resource: "PriorityResource", by: Any, owner: Any, priority: int, amount: NumericType) -> None:
+        super().__init__(f'{owner} was preempted on {resource} by {by} (priority={priority}, amount={amount}).')
+        self.resource = resource
+        self.by = by
+        self.owner = owner
+        self.priority = priority
+        self.amount = amount
+
+
 class Resource(DSStatefulComponent):
     '''Resource models a pool of virtual resource amount.
 
@@ -222,6 +234,7 @@ class PriorityResource(Resource):
     policy order. With ``preempt=True``, higher priority requesters may reclaim
     units from lower-priority holders.
     '''
+    Preempted = DSResourcePreempted
 
     def __init__(
         self,
@@ -255,15 +268,9 @@ class PriorityResource(Resource):
         self.preemptive = preemptive
         self._priority = DSPriorityResource()
         self._preemption = DSPriorityPreemption(self._priority)
-
-    class Preempted(Exception):
-        def __init__(self, resource: "PriorityResource", by: Any, owner: Any, priority: int, amount: NumericType) -> None:
-            super().__init__(f'{owner} was preempted on {resource} by {by} (priority={priority}, amount={amount}).')
-            self.resource = resource
-            self.by = by
-            self.owner = owner
-            self.priority = priority
-            self.amount = amount
+        # Resource-specific exception subtype allows clear nested catches:
+        # except r1.Preempted / except r0.Preempted.
+        self.Preempted = type(f'Preempted_{id(self):x}', (DSResourcePreempted,), {'__module__': __name__})
 
     class _HoldContext:
         def __init__(self, resource: "PriorityResource") -> None:
@@ -425,10 +432,6 @@ class PriorityResource(Resource):
             # released automatically here if still held
         '''
         return self._HoldContext(self)
-
-
-DSResourcePreempted = PriorityResource.Preempted
-
 
 class Mutex(Resource):
     class _OpenContext:

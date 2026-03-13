@@ -240,6 +240,58 @@ class TestLitePriorityResource(unittest.TestCase):
         ])
         self.assertEqual(r.amount, 1)
 
+    def test5_nested_resource_specific_preempted_catches(self):
+        sim = DSSimulation(layer2=LiteLayer2)
+        r0 = sim.priority_resource(amount=1, capacity=1, preemptive=True, name='r0')
+        r1 = sim.priority_resource(amount=1, capacity=1, preemptive=True, name='r1')
+        out = []
+
+        self.assertIsNot(r0.Preempted, r1.Preempted)
+        self.assertTrue(issubclass(r0.Preempted, DSResourcePreempted))
+        self.assertTrue(issubclass(r1.Preempted, DSResourcePreempted))
+
+        def nested_owner():
+            try:
+                with r0.autorelease():
+                    got0 = yield from r0.gget(priority=5, preempt=True)
+                    self.assertEqual(got0, 1)
+                    try:
+                        with r1.autorelease():
+                            got1 = yield from r1.gget(priority=10, preempt=True)
+                            self.assertEqual(got1, 1)
+                            yield from sim.gwait(20)
+                    except r1.Preempted:
+                        out.append(('r1_preempted', sim.time))
+                        yield from sim.gwait(20)
+            except r0.Preempted:
+                out.append(('r0_preempted', sim.time))
+
+        def preempt_r1():
+            yield from sim.gwait(3)
+            with r1.autorelease():
+                got = yield from r1.gget(priority=1, preempt=True)
+                self.assertEqual(got, 1)
+                yield from sim.gwait(1)
+
+        def preempt_r0():
+            yield from sim.gwait(6)
+            with r0.autorelease():
+                got = yield from r0.gget(priority=1, preempt=True)
+                self.assertEqual(got, 1)
+                yield from sim.gwait(1)
+
+        sim.schedule(0, nested_owner())
+        sim.schedule(0, preempt_r1())
+        sim.schedule(0, preempt_r0())
+        sim.run(20)
+
+        self.assertEqual(out, [
+            ('r1_preempted', 3),
+            ('r0_preempted', 6),
+        ])
+        self.assertEqual(r0.amount, 1)
+        self.assertEqual(r1.amount, 1)
+
 
 class TestSimLiteResourceMixin(unittest.TestCase):
     def test1_resource_factory(self):

@@ -282,6 +282,7 @@ class LitePriorityResource(LiteResource):
 
     Lower numeric priority value is served first. Same priority preserves FIFO.
     '''
+    Preempted = DSResourcePreempted
 
     def __init__(self, *args: Any, preemptive: bool = False, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -290,6 +291,9 @@ class LitePriorityResource(LiteResource):
         self._prio_seq = 0
         self._priority = DSPriorityResource()
         self._preemption = DSPriorityPreemption(self._priority)
+        # Resource-specific exception subtype allows clear nested catches:
+        # except r1.Preempted / except r0.Preempted.
+        self.Preempted = type(f'Preempted_{id(self):x}', (DSResourcePreempted,), {'__module__': __name__})
 
     class _HoldContext:
         def __init__(self, resource: "LitePriorityResource") -> None:
@@ -335,7 +339,7 @@ class LitePriorityResource(LiteResource):
             self.amount += taken
 
         def on_preempted(owner: Any, holder_prio: int, taken: NumericType) -> None:
-            self.sim.signal(DSResourcePreempted(self, requester, owner, holder_prio, taken), owner)
+            self.sim.signal(self.Preempted(self, requester, owner, holder_prio, taken), owner)
 
         return self._preemption.reclaim_from_victims(
             need=need,
