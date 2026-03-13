@@ -2,4 +2,4 @@ LiteLayer2 notes for examples/pubsub/asyncio/test_gather.py
 
 LiteLayer2 is missing required features:
 - Asyncio parity layer (Task/Future, gather, timeout, cancellation)
-- PubSub-backed process/future integration required by dssim.parity.asyncio
+- PubSub-backed process/future integration required by dssim.pubsub.parity.asyncio
