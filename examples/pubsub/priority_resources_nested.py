@@ -17,6 +17,8 @@ def main() -> None:
     sim = DSSimulation()
     r0 = sim.priority_resource(amount=1, capacity=1, preemptive=True, name='r0')
     r1 = sim.priority_resource(amount=1, capacity=1, preemptive=True, name='r1')
+    r0_probe = r0.add_stats_probe(name='usage')
+    r1_probe = r1.add_stats_probe(name='usage')
     log = []
 
     async def nested_owner():
@@ -53,6 +55,18 @@ def main() -> None:
     assert r0.amount == 1
     assert r1.amount == 1
     print(f'nested preemptions: {log}')
+    for probe in (r0_probe, r1_probe):
+        stats = probe.get_statistics()
+        print(
+            f'Summary: {probe.name} '
+            f'avg_amount={stats["time_avg_amount"]:.3f}, '
+            f'max_amount={stats["max_amount"]}, '
+            f'min_amount={stats["min_amount"]}, '
+            f'nonempty_ratio={stats["time_nonempty_ratio"]:.3f}, '
+            f'full_ratio={stats["time_full_ratio"]:.3f}, '
+            f'puts={stats["put_count"]}, '
+            f'gets={stats["get_count"]}'
+        )
 
 
 if __name__ == '__main__':

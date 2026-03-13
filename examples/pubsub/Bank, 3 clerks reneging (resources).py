@@ -48,12 +48,25 @@ env = sim.Environment()
 CustomerGenerator()
 stat = {'balked': 0, 'reneged': 0}
 clerks = sim.Resource(3, name="clerks")
+clerks_probe = clerks.add_stats_probe(name='usage')
 time, events = env.run(300000)
 # waitingline.length.print_histogram(30, 0, 1)
 # waitingline.length_of_stay.print_histogram(30, 0, 10)
 print("number reneged", stat['reneged'])
 print("number balked", stat['balked'])
+clerks_stats = clerks_probe.get_statistics()
+print(
+    f'Summary: {clerks_probe.name} '
+    f'avg_amount={clerks_stats["time_avg_amount"]:.3f}, '
+    f'max_amount={clerks_stats["max_amount"]}, '
+    f'min_amount={clerks_stats["min_amount"]}, '
+    f'nonempty_ratio={clerks_stats["time_nonempty_ratio"]:.3f}, '
+    f'full_ratio={clerks_stats["time_full_ratio"]:.3f}, '
+    f'puts={clerks_stats["put_count"]}, '
+    f'gets={clerks_stats["get_count"]}'
+)
 assert stat['reneged'] == 6665, f"Unexpected number of reneged."
 assert stat['balked'] == 23330, f"Unexpected number of balked."
 assert time == 299995, f"Time {time} is out of expected range."
-assert events == 246651, f"Number of events {events} is out of expected range."
+# Resource probe callbacks add observer work, so total event count is higher than the uninstrumented variant.
+assert events == 276651, f"Number of events {events} is out of expected range."

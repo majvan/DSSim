@@ -29,6 +29,7 @@ def t(value):
 def run_with_autorelease_context():
     sim = DSSimulation()
     machine = PriorityResource(amount=1, capacity=1, preemptive=True, name='machine', sim=sim)
+    machine_probe = machine.add_stats_probe(name='usage')
     log = []
 
     def low_with_context():
@@ -62,6 +63,17 @@ def run_with_autorelease_context():
     sim.schedule(0, low_with_context())
     sim.schedule(0, high_with_context())
     sim.run(30)
+    stats = machine_probe.get_statistics()
+    print(
+        f'Summary: {machine_probe.name} '
+        f'avg_amount={stats["time_avg_amount"]:.3f}, '
+        f'max_amount={stats["max_amount"]}, '
+        f'min_amount={stats["min_amount"]}, '
+        f'nonempty_ratio={stats["time_nonempty_ratio"]:.3f}, '
+        f'full_ratio={stats["time_full_ratio"]:.3f}, '
+        f'puts={stats["put_count"]}, '
+        f'gets={stats["get_count"]}'
+    )
 
     assert log[0] == ('start', 'low', 0.0)
     assert set(log[1:3]) == {('start', 'high', 3.0), ('preempted', 'low', 3.0, 7.0)}
@@ -77,6 +89,7 @@ def run_with_autorelease_context():
 def run_without_context_manual_release():
     sim = DSSimulation()
     machine = PriorityResource(amount=1, capacity=1, preemptive=True, name='machine', sim=sim)
+    machine_probe = machine.add_stats_probe(name='usage')
     log = []
 
     def low_manual():
@@ -110,6 +123,17 @@ def run_without_context_manual_release():
     sim.schedule(0, low_manual())
     sim.schedule(0, high_manual())
     sim.run(30)
+    stats = machine_probe.get_statistics()
+    print(
+        f'Summary: {machine_probe.name} '
+        f'avg_amount={stats["time_avg_amount"]:.3f}, '
+        f'max_amount={stats["max_amount"]}, '
+        f'min_amount={stats["min_amount"]}, '
+        f'nonempty_ratio={stats["time_nonempty_ratio"]:.3f}, '
+        f'full_ratio={stats["time_full_ratio"]:.3f}, '
+        f'puts={stats["put_count"]}, '
+        f'gets={stats["get_count"]}'
+    )
 
     assert log[0] == ('start', 'low', 0.0)
     assert set(log[1:3]) == {('start', 'high', 3.0), ('preempted', 'low', 3.0, 7.0)}

@@ -44,6 +44,7 @@ def tstamp(value):
 def run_dssim_non_preemptive():
     sim = DSSimulation()
     res = PriorityResource(amount=1, capacity=1, preemptive=False, name='clerks', sim=sim)
+    res_probe = res.add_stats_probe(name='usage')
     starts = []
 
     def customer(name, arrival, priority, service):
@@ -58,12 +59,24 @@ def run_dssim_non_preemptive():
         sim.schedule(0, customer(*job))
 
     sim.run(30)
+    stats = res_probe.get_statistics()
+    print(
+        f'Summary: {res_probe.name} '
+        f'avg_amount={stats["time_avg_amount"]:.3f}, '
+        f'max_amount={stats["max_amount"]}, '
+        f'min_amount={stats["min_amount"]}, '
+        f'nonempty_ratio={stats["time_nonempty_ratio"]:.3f}, '
+        f'full_ratio={stats["time_full_ratio"]:.3f}, '
+        f'puts={stats["put_count"]}, '
+        f'gets={stats["get_count"]}'
+    )
     return starts
 
 
 def run_dssim_preemptive():
     sim = DSSimulation()
     resource = PriorityResource(amount=1, capacity=1, preemptive=True, name='machine', sim=sim)
+    resource_probe = resource.add_stats_probe(name='usage')
     log = []
 
     def job(name, arrival, prio, service):
@@ -87,6 +100,17 @@ def run_dssim_preemptive():
     for item in PREEMPTIVE_JOBS:
         sim.schedule(0, job(*item))
     sim.run(30)
+    stats = resource_probe.get_statistics()
+    print(
+        f'Summary: {resource_probe.name} '
+        f'avg_amount={stats["time_avg_amount"]:.3f}, '
+        f'max_amount={stats["max_amount"]}, '
+        f'min_amount={stats["min_amount"]}, '
+        f'nonempty_ratio={stats["time_nonempty_ratio"]:.3f}, '
+        f'full_ratio={stats["time_full_ratio"]:.3f}, '
+        f'puts={stats["put_count"]}, '
+        f'gets={stats["get_count"]}'
+    )
     return log
 
 

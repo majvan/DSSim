@@ -20,6 +20,8 @@ def main() -> None:
     sim = DSSimulation()
     cpu = sim.priority_resource(amount=1, capacity=1, preemptive=True, name='cpu')
     io = sim.priority_resource(amount=1, capacity=1, preemptive=True, name='io')
+    cpu_probe = cpu.add_stats_probe(name='usage')
+    io_probe = io.add_stats_probe(name='usage')
     preempted_at = {'time': None}
 
     async def cpu_low_holder():
@@ -124,6 +126,18 @@ def main() -> None:
     sim.schedule(0, io_blocker_same_priority())
     sim.schedule(0, requester())
     sim.run(20)
+    for probe in (cpu_probe, io_probe):
+        stats = probe.get_statistics()
+        print(
+            f'Summary: {probe.name} '
+            f'avg_amount={stats["time_avg_amount"]:.3f}, '
+            f'max_amount={stats["max_amount"]}, '
+            f'min_amount={stats["min_amount"]}, '
+            f'nonempty_ratio={stats["time_nonempty_ratio"]:.3f}, '
+            f'full_ratio={stats["time_full_ratio"]:.3f}, '
+            f'puts={stats["put_count"]}, '
+            f'gets={stats["get_count"]}'
+        )
 
 if __name__ == '__main__':
     main()

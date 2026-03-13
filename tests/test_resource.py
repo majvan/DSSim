@@ -1166,6 +1166,85 @@ class TestMutex(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# ResourceStatsProbe
+# ---------------------------------------------------------------------------
+
+class TestResourceStatsProbe(unittest.TestCase):
+
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    def test0_stats_probe_name(self):
+        r = Resource(amount=0, capacity=2, name='r0', sim=self.sim)
+        probe = r.add_stats_probe()
+        self.assertEqual(probe.name, 'r0.stats_probe')
+        probe2 = r.add_stats_probe(name='ops')
+        self.assertEqual(probe2.name, 'r0.ops')
+
+    def test1_stats_probe_counts(self):
+        r = Resource(amount=0, capacity=1, sim=self.sim)
+        probe = r.add_stats_probe()
+
+        def actor():
+            r.put_nowait()
+            yield from self.sim.gwait(1)
+            r.put_n_nowait(2)  # full -> fail (no nempty signal)
+            yield from self.sim.gwait(1)
+            r.get_nowait()
+
+        self.sim.schedule(0, actor())
+        self.sim.run(10)
+
+        stats = probe.stats()
+        self.assertEqual(stats['put_count'], 1)
+        self.assertEqual(stats['get_count'], 1)
+        self.assertEqual(stats['max_amount'], 1.0)
+        self.assertEqual(stats['min_amount'], 0.0)
+        self.assertEqual(stats['current_amount'], 0.0)
+
+    def test2_stats_probe_time_weighted_amount(self):
+        r = Resource(amount=0, capacity=2, sim=self.sim)
+        probe = r.add_stats_probe()
+
+        def actor():
+            r.put_nowait()      # t=0, amount=1
+            yield from self.sim.gwait(3)
+            r.put_nowait()      # t=3, amount=2
+            yield from self.sim.gwait(2)
+            r.get_nowait()      # t=5, amount=1
+            yield from self.sim.gwait(5)
+            r.get_nowait()      # t=10, amount=0
+
+        self.sim.schedule(0, actor())
+        self.sim.run(10)
+
+        stats = probe.get_statistics()
+        self.assertEqual(stats['duration'], 10)
+        self.assertAlmostEqual(stats['time_avg_amount'], 1.2, places=6)
+        self.assertAlmostEqual(stats['time_nonempty_ratio'], 1.0, places=6)
+        self.assertAlmostEqual(stats['time_full_ratio'], 0.2, places=6)
+        self.assertEqual(stats['max_amount'], 2.0)
+        self.assertEqual(stats['min_amount'], 0.0)
+
+    def test3_stats_probe_reset(self):
+        r = Resource(amount=0, capacity=2, sim=self.sim)
+        probe = r.add_stats_probe()
+        r.put_nowait()
+        self.sim.run(5)
+        before_reset = probe.stats()
+        self.assertAlmostEqual(before_reset['time_avg_amount'], 1.0, places=6)
+
+        probe.reset()
+        r.get_nowait()
+        self.sim.run(10)
+        after_reset = probe.stats()
+        self.assertEqual(after_reset['duration'], 5)
+        self.assertAlmostEqual(after_reset['time_avg_amount'], 0.0, places=6)
+        self.assertEqual(after_reset['put_count'], 0)
+        self.assertEqual(after_reset['get_count'], 1)
+
+
+# ---------------------------------------------------------------------------
 # ResourceMixin
 # ---------------------------------------------------------------------------
 

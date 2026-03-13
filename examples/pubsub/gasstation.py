@@ -79,9 +79,23 @@ if __name__ == '__main__':
     sim = DSSimulation()
     gas_station = sim.resource(2, name="Gas station places")  # 2 places in gas station
     fuel_pump = sim.resource(capacity=GAS_STATION_SIZE, name="Gas station fuel")
+    gas_station_probe = gas_station.add_stats_probe(name='usage')
+    fuel_pump_probe = fuel_pump.add_stats_probe(name='usage')
     tank_truck = TankTruck(sim=sim)
     CarGenerator(sim=sim)
 
     sim.run(SIM_TIME)
+    for probe in (gas_station_probe, fuel_pump_probe):
+        stats = probe.get_statistics()
+        print(
+            f'Summary: {probe.name} '
+            f'avg_amount={stats["time_avg_amount"]:.3f}, '
+            f'max_amount={stats["max_amount"]}, '
+            f'min_amount={stats["min_amount"]}, '
+            f'nonempty_ratio={stats["time_nonempty_ratio"]:.3f}, '
+            f'full_ratio={stats["time_full_ratio"]:.3f}, '
+            f'puts={stats["put_count"]}, '
+            f'gets={stats["get_count"]}'
+        )
     print("Done.")
     assert sim.time > 29900
