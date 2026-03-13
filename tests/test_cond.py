@@ -525,7 +525,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == False)
         self.assertTrue(p.finished() == False)
         # Try again, but now the process will be iterating
-        retval = next(p)  # generator.send(None): initialize the process, yields 'First'
+        retval = p.send(None)  # initialize the process, yields 'First'
         self.assertTrue((retval, fa.signaled) == ('First', False))
         self.assertTrue(fa.finished() == False)
         self.assertTrue(p.finished() == False)
@@ -684,7 +684,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == False)
         self.assertTrue(p.finished() == False)
         # Try again, but now the process will be iterating
-        retval = next(p)  # generator.send(None): initialize the process, yields 'First'
+        retval = p.send(None)  # initialize the process, yields 'First'
         self.assertTrue((retval, fa.signaled) == ('First', False))
         self.assertTrue(fa.finished() == False)
         self.assertTrue(p.finished() == False)
@@ -852,7 +852,7 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == False)
         self.assertTrue(p.finished() == False)
         # Try again, but now the process will be iterating
-        retval = next(p)  # generator.send(None): initialize the process, yields 'First'
+        retval = p.send(None)  # initialize the process, yields 'First'
         self.assertTrue((retval, fa.signaled) == ('First', False))
         self.assertTrue(fa.finished() == False)
         self.assertTrue(p.finished() == False)

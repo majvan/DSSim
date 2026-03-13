@@ -16,7 +16,7 @@ Tests for pubsub module
 '''
 import unittest
 from unittest.mock import Mock, call
-from dssim import DSProcess, DSCallback, DSKWCallback, DSSimulation
+from dssim import DSProcess, DSCallback, DSCondCallback, DSKWCondCallback, DSCondSub, DSKWCallback, DSSimulation, DSSub
 from dssim import DSPub, NotifierDict, NotifierRoundRobin, NotifierPriority
 from dssim.pubsub import NotifierRoundRobinItem
 
@@ -87,23 +87,31 @@ class TestCallback(unittest.TestCase):
 
     def test5_consumer_with_filter(self):
         my_consumer_fcn = Mock()
-        c = DSCallback(my_consumer_fcn, cond=lambda e:e['data'] > 0, sim=SomeObj())
-        c.send({'data': 1})
+        c = DSCondCallback(my_consumer_fcn, cond=lambda e:e['data'] > 0, sim=DSSimulation())
+        c.try_send({'data': 1})
         my_consumer_fcn.assert_called_once_with({'data': 1})
         my_consumer_fcn.reset_mock()
-        c.send({'data': 0})
-        my_consumer_fcn.send.assert_not_called()
+        c.try_send({'data': 0})
+        my_consumer_fcn.assert_not_called()
         my_consumer_fcn.reset_mock()
 
     def test6_kw_consumer_with_filter(self):
         my_consumer_fcn = Mock()
-        c = DSKWCallback(my_consumer_fcn, cond=lambda e:e['data'] > 0, sim=SomeObj())
-        c.send({'data': 1})
+        c = DSKWCondCallback(my_consumer_fcn, cond=lambda e:e['data'] > 0, sim=DSSimulation())
+        c.try_send({'data': 1})
         my_consumer_fcn.assert_called_once_with(data=1)
         my_consumer_fcn.reset_mock()
-        c.send({'data': 0})
-        my_consumer_fcn.send.assert_not_called()
+        c.try_send({'data': 0})
+        my_consumer_fcn.assert_not_called()
         my_consumer_fcn.reset_mock()
+
+    def test7_callback_rejects_cond(self):
+        with self.assertRaises(TypeError):
+            DSCallback(Mock(), cond=lambda e: True, sim=SomeObj())
+
+    def test8_kw_callback_rejects_cond(self):
+        with self.assertRaises(TypeError):
+            DSKWCallback(Mock(), cond=lambda e: True, sim=SomeObj())
 
 class SomeObj2:
     pass
@@ -117,7 +125,7 @@ class TestConsumer(unittest.TestCase):
         from unittest.mock import MagicMock
         sim = DSSimulation()
         sim.send_object = Mock()
-        consumer = DSCallback(lambda e: True, sim=sim)
+        consumer = DSCondCallback(lambda e: True, sim=sim)
         consumer.meta = SomeObj2()
         consumer.meta.cond = MagicMock()
         consumer.meta.cond.check = Mock(return_value=(False, 'abc'))
@@ -136,7 +144,7 @@ class TestConsumer(unittest.TestCase):
         def called_send_object(*args, **kwargs):
             call_order.append(call('send_object', *args, **kwargs))
             return True
-        consumer = DSCallback(lambda e: True, sim=sim)
+        consumer = DSCondCallback(lambda e: True, sim=sim)
         consumer.meta = SomeObj2()
         consumer.meta.cond = MagicMock()
         consumer.meta.cond.check = Mock(side_effect=called_check_condition)
@@ -174,12 +182,17 @@ class TestProducer(unittest.TestCase):
         '''
         m = Mock()
         for consumer, retval in consumer_retval_pairs:
-            def make_ts(c=consumer, rv=retval):
-                def ts(event):
+            def make_route(c=consumer, rv=retval):
+                def route(event):
                     m(c, event)
                     return rv
-                return ts
-            consumer.try_send = make_ts()
+                return route
+            route = make_route()
+            # Keep tests compatible with both routing styles:
+            # - pre-check path via consumer.try_send(...)
+            # - direct-send path via consumer.send(...)
+            consumer.try_send = route
+            consumer.send = route
         return m
 
     def test1_producer_add(self):
@@ -623,6 +636,131 @@ class TestNotifierDict(unittest.TestCase):
         it = iter(n)
         n.rewind()
         self.assertEqual(n.d, {'c': 1, 'a': 2, 'b': 4})
+
+
+class _DirectSubscriber(DSSub):
+    supports_direct_send = True
+
+    def __init__(self, retval, *args, **kwargs):
+        self.retval = retval
+        self.events = []
+        super().__init__(*args, **kwargs)
+
+    def send(self, event):
+        self.events.append(event)
+        return self.retval
+
+
+class _PlainSubscriber(DSSub):
+    def __init__(self, retval, *args, **kwargs):
+        self.retval = retval
+        self.events = []
+        super().__init__(*args, **kwargs)
+
+    def send(self, event):
+        self.events.append(event)
+        return self.retval
+
+
+class _RoutedSubscriber(DSCondSub):
+    def __init__(self, retval, *args, **kwargs):
+        self.retval = retval
+        self.events = []
+        super().__init__(*args, **kwargs)
+
+    def send(self, event):
+        self.events.append(event)
+        return self.retval
+
+
+class TestPubSubDirectDispatch(unittest.TestCase):
+    def setUp(self):
+        self.sim = DSSimulation()
+        orig_send_object = self.sim.send_object
+        self.sim.send_object = Mock(wraps=orig_send_object)
+
+    def test_pre_observer_direct_bypasses_sim_send_object(self):
+        pub = DSPub(sim=self.sim)
+        observer = _DirectSubscriber(False, sim=self.sim)
+        pub.add_subscriber(observer, phase=DSPub.Phase.PRE)
+
+        pub.send('evt')
+
+        self.assertEqual(observer.events, ['evt'])
+        self.sim.send_object.assert_not_called()
+
+    def test_pre_observer_without_direct_flag_uses_sim_send_object(self):
+        pub = DSPub(sim=self.sim)
+        observer = _RoutedSubscriber(False, sim=self.sim, cond=lambda e: True)
+        pub.add_subscriber(observer, phase=DSPub.Phase.PRE)
+
+        pub.send('evt')
+
+        self.assertEqual(observer.events, ['evt'])
+        self.sim.send_object.assert_called_once_with(observer, 'evt')
+
+    def test_consume_phase_mixes_direct_and_routed_dispatch(self):
+        pub = DSPub(sim=self.sim)
+        c0 = _DirectSubscriber(False, sim=self.sim)
+        c1 = _RoutedSubscriber(True, sim=self.sim, cond=lambda e: True)
+        pub.add_subscriber(c0, phase=DSPub.Phase.CONSUME)
+        pub.add_subscriber(c1, phase=DSPub.Phase.CONSUME)
+
+        pub.send('evt')
+
+        self.assertEqual(c0.events, ['evt'])
+        self.assertEqual(c1.events, ['evt'])
+        self.sim.send_object.assert_called_once_with(c1, 'evt')
+
+    def test_plain_dssub_defaults_to_direct_dispatch(self):
+        pub = DSPub(sim=self.sim)
+        observer = _PlainSubscriber(False, sim=self.sim)
+        pub.add_subscriber(observer, phase=DSPub.Phase.PRE)
+
+        pub.send('evt')
+
+        self.assertTrue(observer.supports_direct_send)
+        self.assertEqual(observer.events, ['evt'])
+        self.sim.send_object.assert_not_called()
+
+    def test_plain_dssub_consume_short_circuit(self):
+        pub = DSPub(sim=self.sim)
+        c0 = _PlainSubscriber(True, sim=self.sim)
+        c1 = _PlainSubscriber(True, sim=self.sim)
+        pub.add_subscriber(c0, phase=DSPub.Phase.CONSUME)
+        pub.add_subscriber(c1, phase=DSPub.Phase.CONSUME)
+
+        pub.send('evt')
+
+        self.assertEqual(c0.events, ['evt'])
+        self.assertEqual(c1.events, [])
+        self.sim.send_object.assert_not_called()
+
+    def test_plain_dssub_post_hit_receives_payload(self):
+        pub = DSPub(sim=self.sim)
+        consumer = _PlainSubscriber(True, sim=self.sim)
+        hit_observer = _PlainSubscriber(False, sim=self.sim)
+        pub.add_subscriber(consumer, phase=DSPub.Phase.CONSUME)
+        pub.add_subscriber(hit_observer, phase=DSPub.Phase.POST_HIT)
+
+        pub.send('evt')
+
+        self.assertEqual(len(hit_observer.events), 1)
+        payload = hit_observer.events[0]
+        self.assertEqual(payload, {'consumer': consumer, 'event': 'evt'})
+        self.sim.send_object.assert_not_called()
+
+    def test_plain_dssub_post_miss_receives_event(self):
+        pub = DSPub(sim=self.sim)
+        consumer = _PlainSubscriber(False, sim=self.sim)
+        miss_observer = _PlainSubscriber(False, sim=self.sim)
+        pub.add_subscriber(consumer, phase=DSPub.Phase.CONSUME)
+        pub.add_subscriber(miss_observer, phase=DSPub.Phase.POST_MISS)
+
+        pub.send('evt')
+
+        self.assertEqual(miss_observer.events, ['evt'])
+        self.sim.send_object.assert_not_called()
         
 class TestNotifierRoundRobin(unittest.TestCase):
 

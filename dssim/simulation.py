@@ -160,6 +160,14 @@ class SimScheduleMixin:
     SimProcessMixin (when present) overrides schedule() for generators and
     callables and falls back to super().schedule() which resolves here.
     '''
+    def try_send_object(self: "DSSimulation", subscriber: ISubscriber, event: EventType) -> EventType:
+        '''LiteLayer2 dispatch path: direct object send to subscriber.
+
+        Lite layer2 does not use pubsub condition stacks, so there is no
+        condition pre-check here; delivery goes straight through send_object().
+        '''
+        return self.send_object(subscriber, event)
+
     def schedule(self: "DSSimulation", time: TimeType, schedulable: ISubscriber) -> ISubscriber:
         ''' Schedules an ISubscriber directly onto the time queue. '''
         if inspect.iscoroutine(schedulable) or inspect.isgenerator(schedulable):

@@ -67,7 +67,7 @@ class TestDSSchedulable(unittest.TestCase):
     def test1_schedulable_fcn(self):
         process = self.__fcn()
         try:
-            next(process)
+            process.send(None)
         except StopIteration as e:
             retval = e.value
         self.assertEqual(retval, 'Success')
@@ -95,15 +95,15 @@ class TestDSSchedulable(unittest.TestCase):
         retval = process.send(None)
         self.assertEqual(retval, 'Second return')
         try:
-            next(process)
+            process.send(None)
         except StopIteration as e:
             retval = e.value
         self.assertEqual(retval, 'Success')
 
         process = DSProcess(self.__generator(), sim=sim)
-        retval = next(process)
+        retval = process.send(None)
         self.assertEqual(retval, 'First return')
-        retval = next(process)
+        retval = process.send(None)
         self.assertEqual(retval, 'Second return')
         process.get_cond().push(lambda e:True)
         retval = process.try_send(None)
@@ -142,7 +142,7 @@ class TestDSSchedulable(unittest.TestCase):
 
         process = DSProcess(my_wait(sim), sim=sim)
         process.get_cond().push(lambda e:True)
-        retval = next(process)
+        retval = process.send(None)
         process.abort(MyExc())
         self.assertTrue(isinstance(process.exc, MyExc))
         self.assertEqual(process.value, 1)

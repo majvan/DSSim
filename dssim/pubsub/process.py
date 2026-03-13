@@ -88,16 +88,6 @@ class DSProcess(DSFuture, SignalMixin):
         self.meta = SubscriberMetadata()
         return self.meta
 
-    # TODO: this feature is not required
-    def __iter__(self: DSProcessType) -> DSProcessType:
-        ''' Required to use the class to get events from it. '''
-        return self
-
-    def __next__(self) -> EventRetType:
-        ''' Gets next state, without pushing any particular event. '''
-        self.value = self.generator.send(None)
-        return self.value
-
     @TrackEvent
     def send(self, event: EventType) -> EventRetType:
         ''' Pushes an event to the task and gets new state. '''

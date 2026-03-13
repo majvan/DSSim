@@ -75,12 +75,13 @@ from dssim import (
     DSSimulation,
     LiteLayer2,
     DSCallback,
+    DSSub,
     DSPub,
     NotifierDict,
     NotifierRoundRobin,
     NotifierPriority,
 )
-from dssim.base import ISubscriber
+from dssim.base import ISubscriber, EventType
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +157,18 @@ class BenchCallback(DSCallback):
         return self.sim.try_send(self, event)
 
 
+class BenchObserver(DSSub):
+    '''Observer subscriber that is safe for direct DSPub.send() dispatch.'''
+    supports_direct_send = True
+
+    def __init__(self, forward_method: Callable[..., EventType], **kwargs):
+        super().__init__(**kwargs)
+        self.forward_method = forward_method
+
+    def send(self, event: EventType):
+        return self.forward_method(event)
+
+
 # ---------------------------------------------------------------------------
 # 1) Pure pub/sub routing scenarios
 # ---------------------------------------------------------------------------
@@ -166,7 +179,7 @@ def pubsub_pre_observers_one_consumer(n: int, n_pre: int) -> None:
     consume_seen = [0]
 
     for _ in range(n_pre):
-        pub.add_subscriber(BenchCallback(lambda e, c=pre_seen: (_inc(c), False)[1], sim=sim), phase=DSPub.Phase.PRE)
+        pub.add_subscriber(BenchObserver(lambda e, c=pre_seen: (_inc(c), False)[1], sim=sim), phase=DSPub.Phase.PRE)
     pub.add_subscriber(BenchCallback(lambda e, c=consume_seen: (_inc(c), True)[1], sim=sim), phase=DSPub.Phase.CONSUME)
 
     for i in range(n):
@@ -184,7 +197,7 @@ def pubsub_post_hit_observers_one_consumer(n: int, n_post: int) -> None:
 
     pub.add_subscriber(BenchCallback(lambda e, c=consume_seen: (_inc(c), True)[1], sim=sim), phase=DSPub.Phase.CONSUME)
     for _ in range(n_post):
-        pub.add_subscriber(BenchCallback(lambda e, c=post_seen: (_inc(c), False)[1], sim=sim), phase=DSPub.Phase.POST_HIT)
+        pub.add_subscriber(BenchObserver(lambda e, c=post_seen: (_inc(c), False)[1], sim=sim), phase=DSPub.Phase.POST_HIT)
 
     for i in range(n):
         sim.try_send(pub, i)
@@ -201,7 +214,7 @@ def pubsub_post_miss_observers_one_consumer(n: int, n_post: int) -> None:
 
     pub.add_subscriber(BenchCallback(lambda e, c=consume_seen: (_inc(c), False)[1], sim=sim), phase=DSPub.Phase.CONSUME)
     for _ in range(n_post):
-        pub.add_subscriber(BenchCallback(lambda e, c=post_seen: (_inc(c), False)[1], sim=sim), phase=DSPub.Phase.POST_MISS)
+        pub.add_subscriber(BenchObserver(lambda e, c=post_seen: (_inc(c), False)[1], sim=sim), phase=DSPub.Phase.POST_MISS)
 
     for i in range(n):
         sim.try_send(pub, i)

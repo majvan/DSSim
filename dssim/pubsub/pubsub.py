@@ -56,14 +56,43 @@ def TrackEvent(fcn):
 
 
 class DSSub(DSComponent, ISubscriber):
+    # Plain subscribers are direct-send capable by default.
+    supports_direct_send: bool = True
+
     def __init__(self, *args, **kwargs):
-        super().__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.create_metadata(**kwargs)
        
     def create_metadata(self, **kwargs) -> SubscriberMetadata:
         self.meta = SubscriberMetadata()
+        return self.meta
+
+    @TrackEvent
+    @abstractmethod
+    def send(self, event):
+        ''' Receive event. This interface should be used only by DSSimulator instance as
+        the main dispatcher for directly sending messages.
+        Bypassing DSSimulator by calling the subscriber send() directly would bypass the
+        condition check and could also result into dependency issues.
+        The name 'send' is required as python's generator.send() is de-facto subscriber, too.
+        '''
+        raise NotImplementedError('Abstract method, use derived classes')
+
+
+class DSCondSub(DSComponent, ISubscriber):
+    # Condition-aware subscribers can still be direct-send capable when
+    # configured with an unconditional predicate.
+    supports_direct_send: bool = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.create_metadata(**kwargs)
+
+    def create_metadata(self, **kwargs) -> SubscriberMetadata:
+        self.meta = SubscriberMetadata()
         if 'cond' in kwargs:
-            self.meta.cond.push(kwargs['cond'])
+            cond = kwargs['cond']
+            self.meta.cond.push(cond)
         return self.meta
 
     def get_cond(self):
@@ -83,12 +112,6 @@ class DSSub(DSComponent, ISubscriber):
     @TrackEvent
     @abstractmethod
     def send(self, event):
-        ''' Receive event. This interface should be used only by DSSimulator instance as
-        the main dispatcher for directly sending messages.
-        Bypassing DSSimulator by calling the subscriber send() directly would bypass the
-        condition check and could also result into dependency issues.
-        The name 'send' is required as python's generator.send() is de-facto subscriber, too.
-        '''
         raise NotImplementedError('Abstract method, use derived classes')
 
 
@@ -96,8 +119,12 @@ class DSCallback(DSSub):
     ''' A callback interface.
     The callback interface is called from the simulator when a process sends events.
     '''
-    def __init__(self, forward_method: Callable[..., EventType], cond: CondType = AlwaysTrue, **kwargs):
-        super().__init__(cond=cond, **kwargs)
+    supports_direct_send: bool = True
+
+    def __init__(self, forward_method: Callable[..., EventType], **kwargs):
+        if 'cond' in kwargs:
+            raise TypeError('DSCallback is condition-unaware; use DSCondCallback for conditioned callbacks.')
+        super().__init__(**kwargs)
         self.forward_method = forward_method
 
     @TrackEvent
@@ -108,13 +135,35 @@ class DSCallback(DSSub):
 
 
 class DSKWCallback(DSCallback):
+    supports_direct_send: bool = True
 
     @TrackEvent
     def send(self, event: dict) -> EventType:
         ''' The function calls registered callback providing that the event is dict. '''
         retval = self.forward_method(**event)
         return retval
-    
+
+
+class DSCondCallback(DSCondSub):
+    supports_direct_send: bool = False
+
+    def __init__(self, forward_method: Callable[..., EventType], cond: CondType = AlwaysTrue, **kwargs):
+        super().__init__(cond=cond, **kwargs)
+        self.forward_method = forward_method
+
+    @TrackEvent
+    def send(self, event: EventType):
+        retval = self.forward_method(event)
+        return retval
+
+
+class DSKWCondCallback(DSCondCallback):
+    supports_direct_send: bool = False
+
+    @TrackEvent
+    def send(self, event: dict) -> EventType:
+        retval = self.forward_method(**event)
+        return retval
 
 
 class NotifierPolicy:
@@ -127,18 +176,18 @@ class NotifierPolicy:
     def rewind(self) -> None: ...
 
     @abstractmethod
-    def inc(self, key: DSSub, **policy_params: Any) -> None: ...
+    def inc(self, key: ISubscriber, **policy_params: Any) -> None: ...
 
     @abstractmethod
-    def dec(self, key: DSSub, **policy_params: Any) -> None: ...
+    def dec(self, key: ISubscriber, **policy_params: Any) -> None: ...
 
     @abstractmethod
     def cleanup(self) -> None: ...
 
 
-NotifierTypeIter = Tuple[DSSub, int]
+NotifierTypeIter = Tuple[ISubscriber, int]
 NotifierDictItemType = int
-NotifierDictItemsType = Dict[DSSub, NotifierDictItemType]
+NotifierDictItemsType = Dict[ISubscriber, NotifierDictItemType]
 
 class NotifierDict(NotifierPolicy):
     def __init__(self) -> None:
@@ -150,10 +199,10 @@ class NotifierDict(NotifierPolicy):
     def rewind(self) -> None:
         return
 
-    def inc(self, key: DSSub, **kwargs: Any) -> None:
+    def inc(self, key: ISubscriber, **kwargs: Any) -> None:
         self.d[key] = self.d.get(key, 0) + 1
 
-    def dec(self, key: DSSub, **kwargs: Any) -> None:
+    def dec(self, key: ISubscriber, **kwargs: Any) -> None:
         v = self.d.get(key, 0) - 1
         if v <= 0:
             self.d.pop(key, None)  # remove immediately; __iter__ uses a list() snapshot so this is safe
@@ -165,7 +214,7 @@ class NotifierDict(NotifierPolicy):
 
 
 class NotifierRoundRobinItem:
-    def __init__(self, key: DSSub, value: int) -> None:
+    def __init__(self, key: ISubscriber, value: int) -> None:
         self.key, self.value = key, value
 
     def __eq__(self, other: object) -> bool:
@@ -200,14 +249,14 @@ class NotifierRoundRobin(NotifierPolicy):
     def rewind(self) -> None:
         self.queue = self.queue[self.current_index:] + self.queue[:self.current_index:]
 
-    def inc(self, key: DSSub, **kwargs: Any) -> None:
+    def inc(self, key: ISubscriber, **kwargs: Any) -> None:
         for item in self.queue:
             if item.key == key:
                 item.value += 1
                 return
         self.queue.append(NotifierRoundRobinItem(key, 1))
 
-    def dec(self, key: DSSub, **kwargs: Any) -> None:
+    def dec(self, key: ISubscriber, **kwargs: Any) -> None:
         for item in self.queue:
             if item.key == key:
                 item.value -= 1
@@ -221,9 +270,9 @@ class NotifierRoundRobin(NotifierPolicy):
         self.queue = [item for item in self.queue if item.value > 0]
 
 
-NotifierPriorityItemType = Tuple[int, Dict[DSSub, int]]
-NotifierPriorityItemsType = Dict[int, Dict[DSSub, int]]
-NotifierPriorityItemIter = Tuple[DSSub, int]
+NotifierPriorityItemType = Tuple[int, Dict[ISubscriber, int]]
+NotifierPriorityItemsType = Dict[int, Dict[ISubscriber, int]]
+NotifierPriorityItemIter = Tuple[ISubscriber, int]
 
 class NotifierPriority(NotifierPolicy):
     def __init__(self) -> None:
@@ -256,14 +305,14 @@ class NotifierPriority(NotifierPolicy):
     def rewind(self) -> None:
         return
 
-    def inc(self, key: DSSub, priority: int = 0, **kwargs: Any) -> None:
+    def inc(self, key: ISubscriber, priority: int = 0, **kwargs: Any) -> None:
         if priority not in self.d:
             self.d[priority] = {}
             insort(self._sorted_priorities, priority)
         priority_dict = self.d[priority]
         priority_dict[key] = priority_dict.get(key, 0) + 1
 
-    def dec(self, key: DSSub, priority: int = 0, **kwargs: Any) -> None:
+    def dec(self, key: ISubscriber, priority: int = 0, **kwargs: Any) -> None:
         priority_dict = self.d.get(priority)
         if priority_dict is None:
             self.d[priority] = {}
@@ -303,12 +352,12 @@ class DSPub(DSSub, SignalMixin):
         # A publisher takes any event - no conditional
         self.meta.cond.push(AlwaysTrue)
 
-    def add_subscriber(self, subscriber: DSSub, phase: Phase = Phase.CONSUME, **kwargs: Any) -> None:
+    def add_subscriber(self, subscriber: ISubscriber, phase: Phase = Phase.CONSUME, **kwargs: Any) -> None:
         self.subs[phase].inc(subscriber, **kwargs)
         self._subscriber_count += 1
         self._phase_subscriber_count[phase] += 1
 
-    def remove_subscriber(self, subscriber: DSSub, phase: Phase = Phase.CONSUME, **kwargs: Any) -> None:
+    def remove_subscriber(self, subscriber: ISubscriber, phase: Phase = Phase.CONSUME, **kwargs: Any) -> None:
         self.subs[phase].dec(subscriber, **kwargs)
         self._subscriber_count -= 1
         self._phase_subscriber_count[phase] -= 1
@@ -326,7 +375,10 @@ class DSPub(DSSub, SignalMixin):
         if pre_count > 0:
             for subscriber, refs in pre:
                 if refs:
-                    subscriber.try_send(event)
+                    if subscriber.supports_direct_send:
+                        subscriber.send(event)
+                    else:
+                        subscriber.try_send(event)
 
         # Emit the signal to all consumers and stop with the first one
         # which accepted the signal
@@ -334,12 +386,17 @@ class DSPub(DSSub, SignalMixin):
         accepted_consumer = None
         if consume_count > 0:
             for consumer, refs in consume:
-                if refs and consumer.try_send(event):
-                    consumed = True
-                    accepted_consumer = consumer
-                    # The event was consumed.
-                    consume.rewind()  # this will rewind for round robin
-                    break
+                if refs:
+                    if consumer.supports_direct_send:
+                        retval = consumer.send(event)
+                    else:
+                        retval = consumer.try_send(event)
+                    if retval:
+                        consumed = True
+                        accepted_consumer = consumer
+                        # The event was consumed.
+                        consume.rewind()  # this will rewind for round robin
+                        break
         if consumed:
             # Notify all the post-observers about consumed event.
             if post_hit_count > 0:
@@ -347,13 +404,19 @@ class DSPub(DSSub, SignalMixin):
                 for subscriber, prefs in post_hit:
                     # The post-observers will receive a dict with two objects
                     if prefs:
-                        subscriber.try_send(hit_payload)
+                        if subscriber.supports_direct_send:
+                            subscriber.send(hit_payload)
+                        else:
+                            subscriber.try_send(hit_payload)
         else:
             # Emit the missed signal to all post-observers
             if post_miss_count > 0:
                 for subscriber, refs in post_miss:
                     if refs:
-                        subscriber.try_send(event)
+                        if subscriber.supports_direct_send:
+                            subscriber.send(event)
+                        else:
+                            subscriber.try_send(event)
 
         # cleanup- remove items with zero references
         # We do not cleanup in remove_subscriber, because remove_subscriber could
@@ -402,20 +465,40 @@ class DSTransformation(DSPub):
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
 class SimPubsubMixin:
+    def try_send_object(self: Any, subscriber: ISubscriber, event: EventType) -> EventType:
+        '''PubSubLayer2 condition-aware dispatch used by DSSimulation.run().
+
+        Pubsub subscribers may carry stacked conditions. Events that do not
+        pass subscriber conditions must be filtered before delivery, therefore
+        this layer wires a custom pre-check try_send_object into DSSimulation.
+        '''
+        if hasattr(subscriber, 'get_cond'):
+            conds = subscriber.get_cond()
+            signaled, event = conds.check(event)
+            if not signaled:
+                return False
+        return self.send_object(subscriber, event)
+
     def publisher(self: Any, *args: Any, **kwargs: Any) -> DSPub:
         sim: DSSimulation = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in publisher() method should be set to the same simulation instance.')
         return DSPub(*args, **kwargs, sim=sim)
 
-    def callback(self: Any, *args: Any, **kwargs: Any) -> DSCallback:
+    def callback(self: Any, *args: Any, **kwargs: Any) -> "DSCallback | DSCondCallback":
         sim: DSSimulation = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in callback() method should be set to the same simulation instance.')
-        return DSCallback(*args, **kwargs, sim=sim)
+        cond = kwargs.pop('cond', None)
+        if cond is None:
+            return DSCallback(*args, **kwargs, sim=sim)
+        return DSCondCallback(*args, cond=cond, **kwargs, sim=sim)
 
-    def kw_callback(self: Any, *args: Any, **kwargs: Any) -> DSKWCallback:
+    def kw_callback(self: Any, *args: Any, **kwargs: Any) -> "DSKWCallback | DSKWCondCallback":
         sim: DSSimulation = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in kw_callback() method should be set to the same simulation instance.')
-        return DSKWCallback(*args, **kwargs, sim=sim)
+        cond = kwargs.pop('cond', None)
+        if cond is None:
+            return DSKWCallback(*args, **kwargs, sim=sim)
+        return DSKWCondCallback(*args, cond=cond, **kwargs, sim=sim)

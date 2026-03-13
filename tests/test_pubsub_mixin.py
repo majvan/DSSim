@@ -17,7 +17,7 @@ sim.kw_callback().
 '''
 import unittest
 from unittest.mock import Mock
-from dssim import DSSimulation, DSPub, DSCallback, DSKWCallback
+from dssim import DSSimulation, DSPub, DSCallback, DSCondCallback, DSKWCallback, DSKWCondCallback
 
 
 class TestSimPubsubMixin(unittest.TestCase):
@@ -48,6 +48,14 @@ class TestSimPubsubMixin(unittest.TestCase):
         cb.send({'x': 1})
         fn.assert_called_once_with({'x': 1})
 
+    def test4b_callback_factory_with_cond_returns_dscondcallback(self):
+        sim = DSSimulation()
+        fn = Mock(return_value=True)
+        cb = sim.callback(fn, cond=lambda e: e == {'x': 1})
+        self.assertIsInstance(cb, DSCondCallback)
+        cb.try_send({'x': 1})
+        fn.assert_called_once_with({'x': 1})
+
     def test5_callback_factory_rejects_foreign_sim(self):
         sim = DSSimulation()
         other_sim = DSSimulation(single_instance=False)
@@ -67,6 +75,14 @@ class TestSimPubsubMixin(unittest.TestCase):
         cb = sim.kw_callback(fn)
         cb.send({'a': 1, 'b': 2})
         fn.assert_called_once_with(a=1, b=2)
+
+    def test7b_kw_callback_factory_with_cond_returns_dskwcondcallback(self):
+        sim = DSSimulation()
+        fn = Mock(return_value=True)
+        cb = sim.kw_callback(fn, cond=lambda e: e.get('ok', False))
+        self.assertIsInstance(cb, DSKWCondCallback)
+        cb.try_send({'ok': True, 'a': 1, 'b': 2})
+        fn.assert_called_once_with(ok=True, a=1, b=2)
 
     def test8_kw_callback_factory_rejects_foreign_sim(self):
         sim = DSSimulation()

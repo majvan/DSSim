@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSComponent, DSCallback, DSSimulation, DSTrackableEvent, DSPub, DSFilter as _f
+from dssim import DSComponent, DSCondCallback, DSSimulation, DSTrackableEvent, DSPub, DSFilter as _f
 
 
 class Board(DSComponent):
@@ -19,17 +19,17 @@ class Board(DSComponent):
         super().__init__(*args, **kwargs)
         self.inputs = inputs
         cond0 = (_f(lambda e:inputs[0] in e.publishers) | _f(lambda e:inputs[1] in e.publishers)) & (_f(lambda e:inputs[2] in e.publishers) | _f(lambda e: inputs[3] in e.publishers))
-        self.rx0 = DSCallback(self.callback0, cond=cond0, name=self.name + '.rx0')
+        self.rx0 = DSCondCallback(self.callback0, cond=cond0, name=self.name + '.rx0')
         for ep in inputs:
             ep.add_subscriber(self.rx0)
         
         cond1 = _f(lambda e:inputs[3] in e.publishers)
-        self.rx1 = DSCallback(self.callback1, cond=cond1, name=self.name + '.rx1')
+        self.rx1 = DSCondCallback(self.callback1, cond=cond1, name=self.name + '.rx1')
         for ep in inputs:
             ep.add_subscriber(self.rx1)
 
         cond2 = _f(lambda e: 'Ahoy' == e.value) | _f(lambda e:inputs[2] in e.publishers)
-        self.rx2 = DSCallback(self.callback2, cond=cond2, name=self.name + '.rx2')
+        self.rx2 = DSCondCallback(self.callback2, cond=cond2, name=self.name + '.rx2')
         for ep in inputs:
             ep.add_subscriber(self.rx2)
         self.log = []

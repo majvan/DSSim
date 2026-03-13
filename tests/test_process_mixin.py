@@ -129,7 +129,7 @@ class TestDSSchedulable(unittest.TestCase):
     def test1_send_to_process(self):
         sim = DSSimulation()
         process = DSProcess(self.__generator(), sim=sim)
-        retval = next(process)
+        retval = process.send(None)
         self.assertEqual(retval, 'First return')
         retval = process.send('anything0')
         self.assertEqual(retval, 'Second return')
@@ -141,7 +141,7 @@ class TestDSSchedulable(unittest.TestCase):
 
         sim = DSSimulation()
         process = DSProcess(self.__generator(), sim=sim)
-        retval = next(process)
+        retval = process.send(None)
         self.assertEqual(retval, 'First return')
         retval = process.send('anything0')
         self.assertEqual(retval, 'Second return')

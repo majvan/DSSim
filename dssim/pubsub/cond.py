@@ -143,7 +143,13 @@ class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin
                     # intentionally discarded — same semantics as before.
                     self.cond._starter.send(None)
                 else:
-                    self.cond.try_send(event)
+                    if self.cond.supports_direct_send:
+                        # Use simulator-owned dispatch to preserve send_object()
+                        # exception handling semantics (e.g. StopIteration from
+                        # generator/coroutine completion).
+                        self.sim.send_object(self.cond, event)
+                    else:
+                        self.cond.try_send(event)
             if self.cond.finished():
                 if self.cond.exc is not None:
                     pass

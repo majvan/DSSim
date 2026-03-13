@@ -21,14 +21,14 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from dssim.base import DSComponent
-from dssim.pubsub.pubsub import DSPub, DSCallback
+from dssim.pubsub.pubsub import DSPub, DSSub
 
 if TYPE_CHECKING:
     from dssim.pubsub.components.queue import Queue
     from dssim.simulation import DSSimulation
 
 
-class QueueStatsProbe(DSComponent):
+class QueueStatsProbe(DSSub):
     '''Queue occupancy/flow probe using pubsub endpoint observation.
 
     Scope: this probe tracks user-facing queue activity (puts/gets and
@@ -44,7 +44,6 @@ class QueueStatsProbe(DSComponent):
         super().__init__(name=name, sim=sim)
         self.enabled = enabled
         self._queue: Optional['Queue'] = None
-        self._pre_cb: Optional[DSCallback] = None
         self._start_time: float = 0.0
         self._last_time: float = 0.0
         self._last_len: int = 0
@@ -56,23 +55,19 @@ class QueueStatsProbe(DSComponent):
 
     def attach(self, queue: 'Queue') -> None:
         self._queue = queue
-        self._pre_cb = DSCallback(self._on_pre, sim=queue.sim)
 
         Phase = DSPub.Phase
         for ep in (queue.tx_nempty, queue.tx_nfull):
-            ep.add_subscriber(self._pre_cb, Phase.PRE)
+            ep.add_subscriber(self, Phase.PRE)
         self.reset()
 
     def close(self) -> None:
         queue = self._queue
         if queue is None:
             return
-        if self._pre_cb is None:
-            self._queue = None
-            return
         Phase = DSPub.Phase
         for ep in (queue.tx_nempty, queue.tx_nfull):
-            ep.remove_subscriber(self._pre_cb, Phase.PRE)
+            ep.remove_subscriber(self, Phase.PRE)
         self._queue = None
 
     def reset(self) -> None:
@@ -101,9 +96,9 @@ class QueueStatsProbe(DSComponent):
             self._area_nonempty += dt
         self._last_time = now
 
-    def _on_pre(self, event: Any) -> None:
+    def send(self, event: Any) -> None:
         if not self.enabled or self._queue is None:
-            return
+            return None
         now = float(self._queue.sim.time)
         self._advance(now)
         current_len = len(self._queue)
@@ -114,6 +109,7 @@ class QueueStatsProbe(DSComponent):
         self._last_len = current_len
         if current_len > self.max_len:
             self.max_len = current_len
+        return None
 
     def stats(self) -> Dict[str, Any]:
         if self._queue is None:

@@ -17,17 +17,21 @@ This file implements future class (see the paradigm in async programming).
 from typing import Any, Set, Optional, Generator, TYPE_CHECKING
 from dssim.base import TimeType, EventType, EventRetType, SignalMixin, IFuture
 from dssim.pubsub.base import DSAbortException, SubscriberMetadata
-from dssim.pubsub.pubsub import DSSub, DSPub, TrackEvent
+from dssim.pubsub.pubsub import DSCondSub, DSPub, TrackEvent
 
 
 if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
-class DSFuture(DSSub, SignalMixin, IFuture):
+class DSFuture(DSCondSub, SignalMixin, IFuture):
     ''' Typical future which can be used in the simulations.
     A future can be 'signaled', i.e. finished.
     '''
+    # Futures/processes keep simulator-owned dispatch semantics for completion
+    # and failure paths (StopIteration/exception handling).
+    supports_direct_send: bool = False
+
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         # We store the latest value or excpetion. Useful to check the status after finish.
@@ -51,7 +55,10 @@ class DSFuture(DSSub, SignalMixin, IFuture):
         if exc is None:
             exc = DSAbortException(self)
         try:
-            self.try_send(exc)
+            if self.supports_direct_send:
+                self.send(exc)
+            else:
+                self.try_send(exc)
         except StopIteration as e:
             self.finish(e)
         except Exception as e:

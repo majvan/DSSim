@@ -21,14 +21,14 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from dssim.base import DSComponent
-from dssim.pubsub.pubsub import DSPub, DSCallback
+from dssim.pubsub.pubsub import DSPub, DSSub
 
 if TYPE_CHECKING:
     from dssim.pubsub.components.resource import Resource
     from dssim.simulation import DSSimulation
 
 
-class ResourceStatsProbe(DSComponent):
+class ResourceStatsProbe(DSSub):
     '''Resource amount/flow probe using pubsub endpoint observation.
 
     Scope: tracks user-facing resource activity (put/get operation counts and
@@ -43,7 +43,6 @@ class ResourceStatsProbe(DSComponent):
         super().__init__(name=name, sim=sim)
         self.enabled = enabled
         self._resource: Optional['Resource'] = None
-        self._pre_cb: Optional[DSCallback] = None
         self._start_time: float = 0.0
         self._last_time: float = 0.0
         self._last_amount: float = 0.0
@@ -59,23 +58,19 @@ class ResourceStatsProbe(DSComponent):
 
     def attach(self, resource: 'Resource') -> None:
         self._resource = resource
-        self._pre_cb = DSCallback(self._on_pre, sim=resource.sim)
 
         phase = DSPub.Phase
         for ep in (resource.tx_nempty, resource.tx_nfull):
-            ep.add_subscriber(self._pre_cb, phase.PRE)
+            ep.add_subscriber(self, phase.PRE)
         self.reset()
 
     def close(self) -> None:
         resource = self._resource
         if resource is None:
             return
-        if self._pre_cb is None:
-            self._resource = None
-            return
         phase = DSPub.Phase
         for ep in (resource.tx_nempty, resource.tx_nfull):
-            ep.remove_subscriber(self._pre_cb, phase.PRE)
+            ep.remove_subscriber(self, phase.PRE)
         self._resource = None
 
     def reset(self) -> None:
@@ -114,9 +109,9 @@ class ResourceStatsProbe(DSComponent):
             self._area_full += dt
         self._last_time = now
 
-    def _on_pre(self, event: Any) -> None:
+    def send(self, event: Any) -> None:
         if not self.enabled or self._resource is None:
-            return
+            return None
         now = float(self._resource.sim.time)
         self._advance(now)
         current_amount = float(self._resource.amount)
@@ -129,6 +124,7 @@ class ResourceStatsProbe(DSComponent):
             self.max_amount = current_amount
         if current_amount < self.min_amount:
             self.min_amount = current_amount
+        return None
 
     def stats(self) -> Dict[str, Any]:
         if self._resource is None:
