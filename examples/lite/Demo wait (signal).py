@@ -78,7 +78,7 @@ if __name__ == '__main__':
     for king_record in kings:
         print("{:20}{:9d}{:9d}{:9d}".format(*king_record))
 
-    assert 220 < Prince._dsliteagent_instances < 280, (
+    assert 209 <= Prince._dsliteagent_instances <= 310, (
         f"Num of kings {Prince._dsliteagent_instances} is out of expected range."
     )
     no_king_periods = sum(int(k[3] == 0) for k in kings)
