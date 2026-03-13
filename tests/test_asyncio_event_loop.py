@@ -15,7 +15,7 @@
 Tests for event loop (asyncio)
 '''
 import unittest
-from dssim.parity.asyncio import DSAsyncSimulation
+from dssim.pubsub.parity.asyncio import DSAsyncSimulation
 
 async def process(sim):
     await sim.wait(1)

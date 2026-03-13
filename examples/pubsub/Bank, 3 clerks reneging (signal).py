@@ -14,7 +14,7 @@
 '''
 The example is showing a code parity with example from salabim project
 '''
-from dssim.parity import salabim as sim
+from dssim.pubsub.parity import salabim as sim
 import random
 
 

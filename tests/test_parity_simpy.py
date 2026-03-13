@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Tests for dssim.parity.simpy lightweight adapter.
+Tests for dssim.pubsub.parity.simpy lightweight adapter.
 '''
 import unittest
 
-from dssim.parity import simpy
+from dssim.pubsub.parity import simpy
 
 
 class TestSimpyParityProcess(unittest.TestCase):

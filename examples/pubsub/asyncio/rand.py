@@ -14,7 +14,7 @@
 '''
 The example is showing a code parity with asyncio
 '''
-import dssim.parity.asyncio as asyncio
+import dssim.pubsub.parity.asyncio as asyncio
 import random
 
 # ANSI colors
