@@ -50,12 +50,22 @@ if __name__ == '__main__':
     sim = DSSimulation()
     # In the following we force the notifying endpoint with a special policy
     waiting_line = sim.queue(capacity=5, nempty_ep=sim.publisher(notifier=NotifierPriority), name='waiting_line')
+    waiting_line_probe = waiting_line.add_stats_probe(name='users')
     PCGenerator(Customer, lambda last: 7, name='CustomerGenerator')
     stat = {'balked': 0, 'reneged': 0}
     clerks = [Clerk() for i in range(3)]
     sim.run(up_to=1500)
     print("number reneged", stat['reneged'])
     print("number balked", stat['balked'])
+    waiting_line_stats = waiting_line_probe.get_statistics()
+    print(
+        f'Summary: {waiting_line_probe.name} '
+        f'avg_len={waiting_line_stats["time_avg_len"]:.3f}, '
+        f'max_len={waiting_line_stats["max_len"]}, '
+        f'nonempty_ratio={waiting_line_stats["time_nonempty_ratio"]:.3f}, '
+        f'puts={waiting_line_stats["put_count"]}, '
+        f'gets={waiting_line_stats["get_count"]}'
+    )
     assert stat == {'balked': 48, 'reneged': 13}
     # Assert that the policy worked and the highest priority had the last clerk
     assert clerks[0].processed_customers[0].name == 'Customer.2'
