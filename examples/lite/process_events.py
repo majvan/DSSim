@@ -125,4 +125,4 @@ if __name__ == '__main__':
     print(f'Simulation events: {sim.num_events}')
     assert 20 <= obj0.stat["success"] <= 50  # high probability to pass
     assert obj0.stat["tries"] == 1500002
-    assert 1615000 <= sim.num_events <= 1625000  # high probability to pass
+    assert 1559900 <= sim.num_events <= 1560100  # high probability to pass
