@@ -118,6 +118,7 @@ if __name__ == '__main__':
     sim = DSSimulation()
 
     q = sim.queue(capacity=12, name='queue')
+    q_probe = q.add_stats_probe(name='users')
 
     sim.schedule(0, person_generator('EU', (10, 60)))
     sim.schedule(0, person_generator('WW', (20, 90)))
@@ -135,6 +136,15 @@ if __name__ == '__main__':
 
     print(f"Summary: sim_time={sim.time}, queue_size={len(q)}")
     print(f"Summary: total_processed={total_processed}, eu_processed={eu_processed}, ww_processed={ww_processed}")
+    q_stats = q_probe.get_statistics()
+    print(
+        f'Summary: {q_probe.name} '
+        f'avg_len={q_stats["time_avg_len"]:.3f}, '
+        f'max_len={q_stats["max_len"]}, '
+        f'nonempty_ratio={q_stats["time_nonempty_ratio"]:.3f}, '
+        f'puts={q_stats["put_count"]}, '
+        f'gets={q_stats["get_count"]}'
+    )
     for check in all_checks:
         print(f"Summary: {check} processed={check.stat['processed']}")
 
