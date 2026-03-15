@@ -147,6 +147,26 @@ class TestDSSchedulable(unittest.TestCase):
         self.assertTrue(isinstance(process.exc, MyExc))
         self.assertEqual(process.value, 1)
 
+    def test6_scheduled_start_ignores_non_none_bootstrap_event(self):
+        def gen():
+            event = yield 'booted'
+            return event
+
+        sim = DSSimulation()
+        process = DSProcess(gen(), sim=sim).schedule(0)
+
+        # First payload is ignored in scheduled-start mode and used only to kick startup.
+        retval = sim.send_object(process, 'ignored-first')
+        self.assertEqual(retval, 'booted')
+        self.assertTrue(process.started())
+        self.assertFalse(process.finished())
+
+        # Allow non-timeout events after startup and verify normal delivery resumes.
+        process.get_cond().push(lambda e: True)
+        retval = sim.send_object(process, 'accepted-second')
+        self.assertEqual(retval, 'accepted-second')
+        self.assertTrue(process.finished())
+
 
 # ---------------------------------------------------------------------------
 # Exception propagation inside generators / processes

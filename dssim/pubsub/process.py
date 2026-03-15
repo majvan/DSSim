@@ -150,9 +150,11 @@ class DSProcess(DSFuture, SignalMixin):
         return self._send_started(None)
 
     def _send_scheduled_start(self, event: EventType) -> EventRetType:
-        '''Bootstrap path used after schedule(); accepts _StartProcess/None only.'''
-        if event is not _StartProcess and event is not None:
-            raise TypeError("can't send non-None value to a just-started generator")
+        '''Bootstrap path used after schedule().
+
+        Any first payload is intentionally ignored. A scheduled process must be
+        primed with generator.send(None); startup-triggering events are dropped.
+        '''
         self._mark_started(add_timeout_cond=True)
         self.value = self.generator.send(None)
         return self.value

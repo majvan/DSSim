@@ -542,6 +542,29 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == True)
         self.assertTrue(p.finished() == True)
 
+    def test12b_forwarded_non_none_is_dropped_on_process_bootstrap(self):
+        def gen():
+            event = yield 'First'
+            return event
+
+        sim = DSSimulation()
+        p = DSProcess(gen(), sim=sim)
+        fa = _f(p, forward_events=True, sim=sim)
+
+        # First non-None event only boots the process and is intentionally discarded.
+        retval = fa('ignored-first')
+        self.assertFalse(retval)
+        self.assertTrue(p.started())
+        self.assertFalse(p.finished())
+
+        # Accept normal events after startup and verify they are delivered.
+        p.get_cond().push(lambda e: True)
+        retval = fa('accepted-second')
+        self.assertTrue(retval)
+        self.assertTrue(fa.finished())
+        self.assertEqual(p.value, 'accepted-second')
+        self.assertTrue(p.finished())
+
     def test13_feeding_value_reevaluate(self):
         sim = DSSimulation()
         fa = _f('a', sigtype=_f.SignalType.REEVALUATE, sim=sim)

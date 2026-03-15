@@ -137,15 +137,15 @@ class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin
         if isinstance(self.cond, DSFuture):
             # now we should get this signaled only after return
             if self.forward_events:
-                if isinstance(self.cond, DSProcess) and not self.cond._started:
-                    # First event to an unstarted process: fire the starter to initialize
-                    # the generator (generator.send(None)).  The triggering event is
-                    # intentionally discarded — same semantics as before.
-                    self.cond._starter.send(None)
-                else:
-                    # Route through simulation dispatch so condition-gated
-                    # subscribers and finished processes are handled uniformly.
-                    self.sim.send_object(self.cond, event)
+                # Process bootstrap must always be generator.send(None).
+                # If the process is not started yet, discard the triggering
+                # payload and use None to prime it.
+                forwarded = event
+                if isinstance(self.cond, DSProcess) and not self.cond.started():
+                    forwarded = None
+                # Route through simulation dispatch so condition-gated
+                # subscribers and finished processes are handled uniformly.
+                self.sim.send_object(self.cond, forwarded)
             if self.cond.finished():
                 if self.cond.exc is not None:
                     pass
