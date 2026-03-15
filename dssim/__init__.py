@@ -14,7 +14,7 @@
 '''
 The aggregation of class interfaces needed for developing a dssim application.
 '''
-from dssim.base import DSAbsTime, DSComponent
+from dssim.base import DSComponent
 from dssim.pubsub.base import DSAbortException
 from dssim.pubsub import DSCallback, DSCondCallback, DSKWCallback, DSKWCondCallback, DSCondSub, DSSub, DSPub, DSTrackableEvent, DSTransformation
 from dssim.pubsub import NotifierDict, NotifierRoundRobin, NotifierPriority

@@ -27,7 +27,7 @@ the youngest prince to become king.
 This is demo of the trigger/waitfor mechanism,
 just to allow one waiter to be honored.
 """
-from dssim import DSSimulation, DSAbsTime as _abs, Mutex, DSAgent
+from dssim import DSSimulation, Mutex, DSAgent
 import random
 
 
@@ -45,13 +45,13 @@ class Prince(DSAgent):
         print(self.sim.time, self, "going to live till", self.live_till)
         if not kingdom.locked():  # there is no king, so this prince will become king, immediately
             kings.append(("no king", lastkingdied, self.sim.time, self.sim.time - lastkingdied))
-        async with kingdom.open(_abs(self.live_till)) as event:  # The mutex will be released automatically after closing block.
+        async with kingdom.open(self.live_till - self.sim.time) as event:  # The mutex will be released automatically after closing block.
             if not event:  # timeout returns None event
                 print(self.sim.time, self, "dies before getting to the throne")
                 return
             print(self.sim.time, self, "Vive le roi!")
             kings.append((self.name, self.sim.time, self.live_till, self.live_till - self.sim.time))
-            await self.sim.wait(_abs(self.live_till))
+            await self.sim.wait(self.live_till - self.sim.time)
             lastkingdied = self.sim.time
             print(self.sim.time, self, "Le roi est mort.")
 

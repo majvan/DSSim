@@ -27,7 +27,7 @@ the youngest prince to become king.
 This is demo of the trigger/waitfor mechanism,
 just to allow one waiter to be honored.
 """
-from dssim import DSSimulation, DSAbsTime as _abs, DSPub, DSAgent
+from dssim import DSSimulation, DSPub, DSAgent
 import random
 
 
@@ -46,14 +46,14 @@ class Prince(DSAgent):
         if king is None:  # there is no king, so this prince will become king, immediately
             kings.append(("no king", lastkingdied, self.sim.time, self.sim.time - lastkingdied))
         with self.sim.consume(king_died):  # we consume event and noone else gets notified
-            event = yield from self.sim.check_and_gwait(_abs(self.live_till), cond=lambda e: king is None)  # any message will interrupt, because only king died messages are sent here
+            event = yield from self.sim.check_and_gwait(self.live_till - self.sim.time, cond=lambda e: king is None)  # any message will interrupt, because only king died messages are sent here
             if not event:  # timeout returns None event
                 print(self.sim.time, self, "dies before getting to the throne")
                 return
         king = self
         print(self.sim.time, self, "Vive le roi!")
         kings.append((self.name, self.sim.time, self.live_till, self.live_till - self.sim.time))
-        yield from self.sim.gwait(_abs(self.live_till))
+        yield from self.sim.gwait(self.live_till - self.sim.time)
         king, lastkingdied = None, self.sim.time
         print(self.sim.time, self, "Le roi est mort.")
         king_died.signal('king died')

@@ -18,7 +18,7 @@ a running simulation loop.
 '''
 import unittest
 from unittest.mock import Mock, call
-from dssim import DSAbsTime, DSSimulation, DSAbortException
+from dssim import DSSimulation, DSAbortException
 from dssim import DSSchedulable, DSProcess, DSCallback
 from dssim.pubsub.process import DSSubscriberContextManager, DSTimeoutContext, DSTimeoutContextError
 from dssim import DSPub
@@ -91,13 +91,14 @@ class TestScheduleRouting(unittest.TestCase):
         self.assertIs(result, cb)
         self.assertEqual(sim.time_queue.event_count(), 1)
 
-    def test7_negative_time_raises_value_error(self):
-        ''' Negative scheduling time raises ValueError. '''
+    def test7_negative_time_is_accepted(self):
+        ''' Negative relative schedule time is accepted without validation. '''
         sim = DSSimulation()
         def my_gen():
             yield
-        with self.assertRaises(ValueError):
-            sim.schedule(-1, my_gen())
+        process = sim.schedule(-1, my_gen())
+        self.assertIsNotNone(process)
+        self.assertEqual(sim.time_queue.event_count(), 1)
 
 
 class EventForwarder:
@@ -408,17 +409,14 @@ class TestSim(unittest.TestCase):
         ''' Assert the delay of scheduled process '''
         self.sim = DSSimulation()
         my_process = self.__my_time_process()
-        with self.assertRaises(ValueError):
-            _parent_process = self.sim.schedule(-0.5, my_process)
-        _parent_process = self.sim.schedule(2, my_process)
+        _parent_process = self.sim.schedule(-0.5, my_process)
+        self.assertIsNotNone(_parent_process)
         self.assertEqual(self.sim.time_queue.event_count(), 1)
 
     def test3_scheduling_events(self):
         ''' Assert working with time queue when pushing events '''
         self.sim = DSSimulation()
         my_process = self.__my_time_process()
-        with self.assertRaises(ValueError):
-            self.sim.schedule(-0.5, my_process)
 
         _parent_process = self.sim.schedule(0, my_process)
         self.assertNotEqual(_parent_process, my_process)
@@ -426,8 +424,11 @@ class TestSim(unittest.TestCase):
         self.sim.run(0.5)
         self.__time_process_event.assert_called_once_with('kick-on')
         self.__time_process_event.reset_mock()
-        with self.assertRaises(ValueError):
-            self.sim.schedule_event(-0.5, {'producer': _parent_process, 'data': 1})
+        negative_event = {'producer': _parent_process, 'data': 1}
+        self.sim.schedule_event(-0.5, negative_event)
+        neg_time, (neg_process, neg_payload) = _pop_timequeue_event(self.sim.time_queue)
+        self.assertEqual(neg_time, 0.0)
+        self.assertEqual(neg_payload, negative_event)
 
         self.assertEqual(self.sim.time, 0.5)
         event_obj = {'producer': _parent_process, 'data': 1}

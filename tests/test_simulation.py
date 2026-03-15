@@ -17,7 +17,7 @@ No DSProcess, DSPub or DSSub objects are used here.
 '''
 import unittest
 from unittest.mock import Mock, call
-from dssim import DSAbsTime, DSSimulation, DSSchedulable, LiteLayer2
+from dssim import DSSimulation, DSSchedulable, LiteLayer2
 from dssim.simulation import VoidSubscriber, void_subscriber
 
 
@@ -32,18 +32,12 @@ class SomeObj:
 class TestSim(unittest.TestCase):
     ''' Tests for the core DSSimulation time-queue and dispatch machinery. '''
 
-    def test1_time_conversion(self):
+    def test1_compute_time(self):
         sim = DSSimulation()
-        sim._simtime = 5
-        t = sim.to_abs_time(10)
-        self.assertEqual(t.value, 15)
-        self.assertEqual(t.to_number(), 15)
-        self.assertTrue(isinstance(t.to_number(), int))
         sim._simtime = 5.0
-        t = sim.to_abs_time(10)
-        self.assertEqual(t.value, 15)
-        self.assertEqual(t.to_number(), 15)
-        self.assertTrue(isinstance(t.to_number(), float))
+        self.assertEqual(sim.compute_time(10.0), 5.0)
+        with self.assertRaises(ValueError):
+            sim.compute_time(4.99)
 
     def test2_scheduling_events(self):
         ''' Assert working with time queue when pushing events '''
@@ -57,8 +51,8 @@ class TestSim(unittest.TestCase):
         sim.schedule_event(0, event_obj)
         sim.time_queue.add_element.assert_called_once_with(0, (123456, event_obj))
         sim.time_queue.add_element.reset_mock()
-        with self.assertRaises(ValueError):
-            sim.schedule_event(-0.5, event_obj)
+        sim.schedule_event(-0.5, event_obj)
+        sim.time_queue.add_element.assert_called_once_with(-0.5, (123456, event_obj))
 
     def test3_cleanup(self):
         ''' Assert deleting from time queue when deleting events '''
@@ -247,13 +241,14 @@ class TestSimScheduleGenerators(unittest.TestCase):
         sim.run()
         self.assertEqual(log, ['first', 'second'])
 
-    def test5_negative_time_raises_value_error(self):
-        ''' sim.schedule() with negative time raises ValueError. '''
+    def test5_negative_time_is_accepted(self):
+        ''' sim.schedule() accepts negative relative time without validation. '''
         sim = DSSimulation()
         def my_gen():
             yield
-        with self.assertRaises(ValueError):
-            sim.schedule(-1, my_gen())
+        process = sim.schedule(-1, my_gen())
+        self.assertIsNotNone(process)
+        self.assertEqual(sim.time_queue.event_count(), 1)
 
 
 # ---------------------------------------------------------------------------

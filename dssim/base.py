@@ -20,17 +20,7 @@ from typing import Any, Tuple, Callable, Union, Optional, Generator, TYPE_CHECKI
 
 
 NumericType = Union[float, int]
-
-class DSAbsTime:
-    ''' A class representing absolute time in the simulation '''
-    def __init__(self, value: NumericType) -> None:
-        self.value = value
-
-    def to_number(self) -> NumericType:
-        return self.value
-
-
-TimeType = Union[DSAbsTime, float, int]
+TimeType = Union[float, int]
 
 
 class DSEvent:

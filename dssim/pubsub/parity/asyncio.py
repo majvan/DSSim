@@ -15,7 +15,7 @@
 The light asyncio api implementation for dssim.
 '''
 import inspect
-from dssim import DSSimulation, DSAbsTime, DSAbortException
+from dssim import DSSimulation, DSAbortException
 from dssim import DSSchedulable, DSFuture, DSProcess, DSCallback
 from dssim.pubsub import DSPub
 # other imports
@@ -72,7 +72,7 @@ class DSAsyncSimulation(DSSimulation):
     
     def call_at(self, time, callback, *args, context=None):
         cb = DSSchedulable(DSCallback(callback(*args), sim=self))
-        self.schedule(DSAbsTime(time), cb)
+        self.schedule(max(0, time - self.time), cb)
 
     def create_task(self, coro):
         return Task(coro, sim=self).schedule(0)
@@ -236,7 +236,8 @@ _timeout = timeout
 
 @asynccontextmanager
 async def timeout_at(when):
-    async with timeout(DSAbsTime(when)) as cm:
+    loop = get_running_loop()
+    async with timeout(max(0, when - loop.time)) as cm:
         yield cm
 
 def run(coro_or_future):

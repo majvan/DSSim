@@ -18,7 +18,7 @@ directly — they do not run a full simulation loop (sim.run()).
 '''
 import unittest
 from unittest.mock import Mock, MagicMock, call
-from dssim import DSAbsTime, DSSimulation, DSAbortException
+from dssim import DSSimulation, DSAbortException
 from dssim import DSSchedulable, DSProcess
 from dssim.pubsub.process import DSSubscriberContextManager, DSTimeoutContext, DSTimeoutContextError
 from dssim import DSPub

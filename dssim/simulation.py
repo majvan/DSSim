@@ -19,7 +19,7 @@ import inspect
 from functools import wraps
 from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Optional, Iterator, TYPE_CHECKING
 from dssim.timequeue import TimeQueue, NowQueue
-from dssim.base import NumericType, TimeType, DSAbsTime, EventType, EventRetType, DSComponentSingleton, ISubscriber, IFuture
+from dssim.base import NumericType, TimeType, EventType, EventRetType, DSComponentSingleton, ISubscriber, IFuture
 from dssim.pubsub import SimPubsubMixin
 from dssim.pubsub.future import SimFutureMixin
 from dssim.pubsub.process import SimProcessMixin
@@ -131,7 +131,7 @@ class SimWaitMixin:
         if timeout == float('inf'):
             while True:
                 _ = yield from self.gwait(float('inf'))
-        end_time = self._compute_time(timeout)
+        end_time = self.time + timeout
         while True:
             remaining = end_time - self.time
             if remaining <= 0:
@@ -145,7 +145,7 @@ class SimWaitMixin:
         if timeout == float('inf'):
             while True:
                 _ = await self.wait(float('inf'))
-        end_time = self._compute_time(timeout)
+        end_time = self.time + timeout
         while True:
             remaining = end_time - self.time
             if remaining <= 0:
@@ -251,7 +251,7 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
         return self.name
 
     def restart(self, time: TimeType = 0) -> None:
-        self._simtime = time if isinstance(time, (float, int)) else time.value
+        self._simtime = time
         self._restart()
 
     @property
@@ -267,22 +267,11 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
         # By default, we use fake subscriber. It will be rewritten on the first 
         self._parent_process: ISubscriber = void_subscriber
 
-    def _compute_time(self, time: TimeType) -> NumericType:
-        ''' Recomputes a rel/abs time to absolute time value '''
-        if isinstance(time, DSAbsTime):
-            ftime = time.to_number()
-            if ftime < self.time:
-                raise ValueError('The time is absolute and cannot be lower than now')
-        elif time < 0:
-            raise ValueError('The time is relative from now and cannot be negative')
-        else:
-            ftime = self.time + time
-        return ftime
-
-    def to_abs_time(self, time: TimeType) -> DSAbsTime:
-        if isinstance(time, DSAbsTime):
-            return time
-        return DSAbsTime(self._simtime + time)
+    def compute_time(self, time: TimeType) -> NumericType:
+        ''' Convert absolute time value to a relative timeout from now. '''
+        if time < self.time:
+            raise ValueError('The time is absolute and cannot be lower than now')
+        return time - self.time
 
     def send_object(self, subscriber: ISubscriber, event: EventType) -> EventType:
         ''' Send an event object to a subscriber. Return value from the subscriber. '''
@@ -323,7 +312,7 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
 
     def schedule_event(self, time: TimeType, event: EventType, subscriber: Optional[ISubscriber] = None) -> EventType:
         ''' Schedules an event object into timequeue. Finally the target process will be signalled. '''
-        time = self._compute_time(time)
+        time = self.time + time
         subscriber = subscriber or self._parent_process  # schedule to a process or to itself
         self.time_queue.add_element(time, (subscriber, event))
         return event
@@ -334,8 +323,11 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
         self.now_queue.append((subscriber, event))
 
     def _gwait_for_event(self, timeout: TimeType, val: EventRetType = None) -> Generator[EventType, EventType, EventType]:
-        # Re-compute abs/relative time to abs for the timeout
-        time = float('inf') if timeout == float('inf') else self._compute_time(timeout)
+        # timeout is relative simulation time (or +inf); time_queue stores absolute times.
+        if timeout == float('inf'):
+            time = float('inf')
+        else:
+            time = self.time + timeout
         waiting_process = self._parent_process
         # Schedule the timeout to the time queue. The condition is only for higher performance
         if time != float('inf'):
@@ -357,8 +349,11 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
         return event
 
     async def _wait_for_event(self, timeout: TimeType, val: EventRetType = None) -> EventType:
-        # Re-compute abs/relative time to abs for the timeout
-        time = float('inf') if timeout == float('inf') else self._compute_time(timeout)
+        # timeout is relative simulation time (or +inf); time_queue stores absolute times.
+        if timeout == float('inf'):
+            time = float('inf')
+        else:
+            time = self.time + timeout
         waiting_process = self._parent_process
         # Schedule the timeout to the time queue. The condition is only for higher performance
         if time != float('inf'):
@@ -396,7 +391,7 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
         ''' This is the simulation machine. In a loop it takes first event and process it.
         The loop ends when the queue is empty or when the simulation time is over.
         '''
-        ftime = up_to.to_number() if isinstance(up_to, DSAbsTime) else up_to
+        ftime = up_to if up_to == float('inf') else self.time + self.compute_time(up_to)
         if self.now_queue:
             self.time_queue.insertleft(self.time, self.now_queue)
         while self.time_queue:

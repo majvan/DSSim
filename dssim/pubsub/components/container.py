@@ -161,10 +161,11 @@ class Container(DSStatefulComponent, SignalMixin):
                         retval = self.get_n_nowait()
         elif len(obj) > 0:
             retval = []
-            abs_timeout = self.sim.to_abs_time(timeout)
-            while self.sim.time < abs_timeout.to_number():
+            deadline = float('inf') if timeout == float('inf') else self.sim.time + timeout
+            while self.sim.time < deadline:
+                remaining = float('inf') if deadline == float('inf') else self.sim.compute_time(deadline)
                 with self.sim.consume(self.tx_changed, **policy_params):
-                    element = await self.sim.check_and_wait(timeout, cond=lambda e: any(el in self.container.keys() for el in obj))
+                    element = await self.sim.check_and_wait(remaining, cond=lambda e: any(el in self.container.keys() for el in obj))
                 if element is None:
                     break
                 retval += self.get_n_nowait(*obj)
@@ -205,10 +206,11 @@ class Container(DSStatefulComponent, SignalMixin):
                         retval = self.get_n_nowait()
         elif len(obj) > 0:
             retval = []
-            abs_timeout = self.sim.to_abs_time(timeout)
-            while self.sim.time < abs_timeout.to_number():
+            deadline = float('inf') if timeout == float('inf') else self.sim.time + timeout
+            while self.sim.time < deadline:
+                remaining = float('inf') if deadline == float('inf') else self.sim.compute_time(deadline)
                 with self.sim.consume(self.tx_changed, **policy_params):
-                    element = yield from self.sim.check_and_gwait(timeout, cond=lambda e: any(el in self.container.keys() for el in obj))
+                    element = yield from self.sim.check_and_gwait(remaining, cond=lambda e: any(el in self.container.keys() for el in obj))
                 if element is None:
                     break
                 retval += self.get_n_nowait(*obj)
