@@ -12,24 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Tests for LiteResource / LitePriorityResource (LiteLayer2-only components).
+Tests for DSLiteResource / DSLitePriorityResource (LiteLayer2-only components).
 '''
 import unittest
 
 from dssim.simulation import DSSimulation, LiteLayer2
 from dssim.lite import DSResourcePreempted
-from dssim.lite.components.literesource import LiteResource, LitePriorityResource
+from dssim.lite.components.literesource import DSLiteResource, DSLitePriorityResource
 
 
 def _make(amount=0, capacity=float('inf')):
     sim = DSSimulation(layer2=LiteLayer2)
-    r = LiteResource(amount=amount, capacity=capacity, sim=sim)
+    r = DSLiteResource(amount=amount, capacity=capacity, sim=sim)
     return sim, r
 
 
 def _make_prio(amount=0, capacity=float('inf'), preemptive=False):
     sim = DSSimulation(layer2=LiteLayer2)
-    r = LitePriorityResource(amount=amount, capacity=capacity, preemptive=preemptive, sim=sim)
+    r = DSLitePriorityResource(amount=amount, capacity=capacity, preemptive=preemptive, sim=sim)
     return sim, r
 
 
@@ -297,7 +297,7 @@ class TestSimLiteResourceMixin(unittest.TestCase):
     def test1_resource_factory(self):
         sim = DSSimulation(layer2=LiteLayer2)
         r = sim.resource(amount=2, capacity=3)
-        self.assertIsInstance(r, LiteResource)
+        self.assertIsInstance(r, DSLiteResource)
         self.assertEqual(r.amount, 2)
         self.assertEqual(r.capacity, 3)
         self.assertIs(r.sim, sim)
@@ -305,7 +305,7 @@ class TestSimLiteResourceMixin(unittest.TestCase):
     def test2_priority_resource_factory(self):
         sim = DSSimulation(layer2=LiteLayer2)
         r = sim.priority_resource(amount=1, capacity=4)
-        self.assertIsInstance(r, LitePriorityResource)
+        self.assertIsInstance(r, DSLitePriorityResource)
         self.assertIs(r.sim, sim)
 
     def test3_wrong_sim_raises(self):

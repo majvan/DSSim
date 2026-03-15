@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-The file implements the Container simulation component.
+The file implements the DSContainer simulation component.
 '''
 from typing import Any, List, Dict, Iterator, Optional, Generator, TYPE_CHECKING
 from dssim.base import TimeType, EventType, SignalMixin
@@ -23,14 +23,14 @@ if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
-class Container(DSStatefulComponent, SignalMixin):
+class DSContainer(DSStatefulComponent, SignalMixin):
     ''' The (FIFO) queue of events is a SW component which can dynamically
     be used to put an event in and get (or wait for- if the queue is empty)
     a queued event.
-    Queue does not use any routing of signals.
+    DSQueue does not use any routing of signals.
     '''
     def __init__(self, capacity: Optional[int] = None, *args: Any, **policy_params: Any) -> None:
-        ''' Init Container component. No special arguments here. '''
+        ''' Init DSContainer component. No special arguments here. '''
         super().__init__(*args, **policy_params)
         self.capacity = capacity
         self.container: Dict[EventType, int] = {}  # object: count; the dict is used for quick search
@@ -325,49 +325,49 @@ class Container(DSStatefulComponent, SignalMixin):
 
 # In the following, self is in fact of type DSAgent, but PyLance makes troubles with variable types
 class ContainerMixin:
-    async def enter(self: Any, container: Container, timeout: TimeType = float('inf'), **policy_params: Any) -> EventType:
+    async def enter(self: Any, container: DSContainer, timeout: TimeType = float('inf'), **policy_params: Any) -> EventType:
         try:
             retval = await container.put(timeout, self, **policy_params)
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
 
-    def genter(self: Any, container: Container, timeout: TimeType = float('inf'), **policy_params) -> Generator[EventType, EventType, EventType]:
+    def genter(self: Any, container: DSContainer, timeout: TimeType = float('inf'), **policy_params) -> Generator[EventType, EventType, EventType]:
         try:
             retval = yield from container.gput(timeout, self, **policy_params)
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
 
-    def enter_nowait(self: Any, container: Container) -> Optional[EventType]:
+    def enter_nowait(self: Any, container: DSContainer) -> Optional[EventType]:
         retval = container.put_nowait(self)
         return retval
 
-    def leave(self: Any, container: Container) -> None:
+    def leave(self: Any, container: DSContainer) -> None:
         container.remove(self)
 
-    async def pop(self: Any, container: Container, timeout: TimeType = float('inf'), **policy_params: Any) -> Optional[EventType]:
+    async def pop(self: Any, container: DSContainer, timeout: TimeType = float('inf'), **policy_params: Any) -> Optional[EventType]:
         try:
             retval = await container.get(timeout, **policy_params)
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
 
-    def gpop(self: Any, container: Container, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
+    def gpop(self: Any, container: DSContainer, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         try:
             retval = yield from container.gget(timeout, **policy_params)
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
 
-    def pop_nowait(self: Any, container: Container) -> EventType:
+    def pop_nowait(self: Any, container: DSContainer) -> EventType:
         return container.get_nowait()
 
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
 class SimContainerMixin:
-    def container(self: Any, *args: Any, **kwargs: Any) -> Container:
+    def container(self: Any, *args: Any, **kwargs: Any) -> DSContainer:
         sim: 'DSSimulation' = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in container() method should be set to the same simulation instance.')
-        return Container(*args, **kwargs, sim=sim)
+        return DSContainer(*args, **kwargs, sim=sim)

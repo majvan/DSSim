@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Tests for Resource, Mutex, and ResourceMixin components.
+Tests for DSResource, DSMutex, and ResourceMixin components.
 '''
 import unittest
 from dssim import DSSimulation
-from dssim.pubsub.components.resource import Resource, PriorityResource, DSResourcePreempted, Mutex, ResourceMixin
+from dssim.pubsub.components.resource import DSResource, DSPriorityResource, DSResourcePreempted, DSMutex, ResourceMixin
 
 
 # ---------------------------------------------------------------------------
@@ -28,7 +28,7 @@ class TestSimResourceMixin(unittest.TestCase):
     def test1_resource_factory_returns_resource_instance(self):
         sim = DSSimulation()
         r = sim.resource(amount=2, capacity=3)
-        self.assertIsInstance(r, Resource)
+        self.assertIsInstance(r, DSResource)
         self.assertIs(r.sim, sim)
         self.assertEqual(r.amount, 2)
         self.assertEqual(r.capacity, 3)
@@ -36,7 +36,7 @@ class TestSimResourceMixin(unittest.TestCase):
     def test2_priority_resource_factory_returns_priority_resource_instance(self):
         sim = DSSimulation()
         r = sim.priority_resource(amount=1, capacity=4)
-        self.assertIsInstance(r, PriorityResource)
+        self.assertIsInstance(r, DSPriorityResource)
         self.assertIs(r.sim, sim)
         self.assertEqual(r.amount, 1)
         self.assertEqual(r.capacity, 4)
@@ -58,7 +58,7 @@ class TestResourceNowait(unittest.TestCase):
 
     def setUp(self):
         self.sim = DSSimulation()
-        self.r = Resource(amount=5, capacity=10, sim=self.sim)
+        self.r = DSResource(amount=5, capacity=10, sim=self.sim)
 
     # ---- get_nowait / get_n_nowait -----------------------------------------
 
@@ -68,7 +68,7 @@ class TestResourceNowait(unittest.TestCase):
         self.assertEqual(self.r.amount, 4)
 
     def test2_get_nowait_fails_when_empty(self):
-        r = Resource(amount=0, capacity=5, sim=self.sim)
+        r = DSResource(amount=0, capacity=5, sim=self.sim)
         result = r.get_nowait()
         self.assertEqual(result, 0)
         self.assertEqual(r.amount, 0)
@@ -101,7 +101,7 @@ class TestResourceNowait(unittest.TestCase):
         self.assertEqual(self.r.amount, 6)
 
     def test8_put_nowait_fails_when_full(self):
-        r = Resource(amount=10, capacity=10, sim=self.sim)
+        r = DSResource(amount=10, capacity=10, sim=self.sim)
         result = r.put_nowait()
         self.assertEqual(result, 0)
         self.assertEqual(r.amount, 10)
@@ -125,15 +125,15 @@ class TestResourceNowait(unittest.TestCase):
 
     def test12_init_amount_exceeds_capacity_raises(self):
         with self.assertRaises(ValueError):
-            Resource(amount=10, capacity=5, sim=self.sim)
+            DSResource(amount=10, capacity=5, sim=self.sim)
 
     def test13_infinite_capacity_default(self):
-        r = Resource(sim=self.sim)
+        r = DSResource(sim=self.sim)
         self.assertEqual(r.amount, 0)
         self.assertEqual(r.capacity, float('inf'))
 
     def test14_put_n_nowait_large_amount_infinite_capacity(self):
-        r = Resource(amount=0, sim=self.sim)
+        r = DSResource(amount=0, sim=self.sim)
         result = r.put_n_nowait(1_000_000)
         self.assertEqual(result, 1_000_000)
         self.assertEqual(r.amount, 1_000_000)
@@ -149,7 +149,7 @@ class TestResourceGget(unittest.TestCase):
         self.sim = DSSimulation()
 
     def _make(self, amount=0, capacity=float('inf')):
-        return Resource(amount=amount, capacity=capacity, sim=self.sim)
+        return DSResource(amount=amount, capacity=capacity, sim=self.sim)
 
     def test1_gget_takes_one_immediately(self):
         r = self._make(amount=3)
@@ -276,7 +276,7 @@ class TestResourceGget(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# PriorityResource waiter ordering
+# DSPriorityResource waiter ordering
 # ---------------------------------------------------------------------------
 
 class TestPriorityResource(unittest.TestCase):
@@ -285,7 +285,7 @@ class TestPriorityResource(unittest.TestCase):
         self.sim = DSSimulation()
 
     def _make(self, amount=0, capacity=float('inf')):
-        return PriorityResource(amount=amount, capacity=capacity, sim=self.sim)
+        return DSPriorityResource(amount=amount, capacity=capacity, sim=self.sim)
 
     def test1_gget_serves_higher_priority_first(self):
         r = self._make(amount=0, capacity=3)
@@ -516,7 +516,7 @@ class TestPriorityResource(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Resource take_cond condition helper
+# DSResource take_cond condition helper
 # ---------------------------------------------------------------------------
 
 class TestResourceTakeCond(unittest.TestCase):
@@ -525,7 +525,7 @@ class TestResourceTakeCond(unittest.TestCase):
         self.sim = DSSimulation()
 
     def test1_take_cond_acquires_on_nempty_signal(self):
-        r = Resource(amount=0, capacity=1, sim=self.sim)
+        r = DSResource(amount=0, capacity=1, sim=self.sim)
         out = []
 
         def consumer():
@@ -546,7 +546,7 @@ class TestResourceTakeCond(unittest.TestCase):
         self.assertEqual(r.amount, 0)
 
     def test2_take_cond_check_and_gwait_precheck(self):
-        r = Resource(amount=2, capacity=2, sim=self.sim)
+        r = DSResource(amount=2, capacity=2, sim=self.sim)
         out = []
 
         def consumer():
@@ -561,8 +561,8 @@ class TestResourceTakeCond(unittest.TestCase):
         self.assertEqual(r.amount, 0)
 
     def test3_take_cond_composes_with_two_resources_via_dscircuit_without_consume(self):
-        r0 = Resource(amount=0, capacity=1, sim=self.sim)
-        r1 = Resource(amount=0, capacity=1, sim=self.sim)
+        r0 = DSResource(amount=0, capacity=1, sim=self.sim)
+        r1 = DSResource(amount=0, capacity=1, sim=self.sim)
         out = []
 
         def consumer():
@@ -587,7 +587,7 @@ class TestResourceTakeCond(unittest.TestCase):
         self.assertEqual(r1.amount, 0)
 
     def test4_priority_take_cond_supports_preempt(self):
-        r = PriorityResource(amount=1, capacity=1, preemptive=True, sim=self.sim)
+        r = DSPriorityResource(amount=1, capacity=1, preemptive=True, sim=self.sim)
         out = []
 
         def low():
@@ -619,8 +619,8 @@ class TestResourceTakeCond(unittest.TestCase):
         self.assertEqual(r.amount, 1)
 
     def test5_take_cond_composes_with_two_resources_async_without_consume(self):
-        r0 = Resource(amount=0, capacity=1, sim=self.sim)
-        r1 = Resource(amount=0, capacity=1, sim=self.sim)
+        r0 = DSResource(amount=0, capacity=1, sim=self.sim)
+        r1 = DSResource(amount=0, capacity=1, sim=self.sim)
         out = []
         filters = {}
 
@@ -653,7 +653,7 @@ class TestResourceAsyncGet(unittest.TestCase):
         self.sim = DSSimulation()
 
     def _make(self, amount=0, capacity=float('inf')):
-        return Resource(amount=amount, capacity=capacity, sim=self.sim)
+        return DSResource(amount=amount, capacity=capacity, sim=self.sim)
 
     def test1_get_takes_one_immediately(self):
         r = self._make(amount=3)
@@ -750,7 +750,7 @@ class TestResourceGput(unittest.TestCase):
         self.sim = DSSimulation()
 
     def _make(self, amount=0, capacity=10):
-        return Resource(amount=amount, capacity=capacity, sim=self.sim)
+        return DSResource(amount=amount, capacity=capacity, sim=self.sim)
 
     def test1_gput_adds_one_immediately(self):
         r = self._make(amount=5)
@@ -851,7 +851,7 @@ class TestResourceAsyncPut(unittest.TestCase):
         self.sim = DSSimulation()
 
     def _make(self, amount=0, capacity=10):
-        return Resource(amount=amount, capacity=capacity, sim=self.sim)
+        return DSResource(amount=amount, capacity=capacity, sim=self.sim)
 
     def test1_put_adds_one_immediately(self):
         r = self._make(amount=5)
@@ -948,7 +948,7 @@ class TestResourceInterplay(unittest.TestCase):
         self.sim = DSSimulation()
 
     def test1_gget_woken_by_gput(self):
-        r = Resource(amount=0, capacity=10, sim=self.sim)
+        r = DSResource(amount=0, capacity=10, sim=self.sim)
         log = []
 
         def consumer():
@@ -967,7 +967,7 @@ class TestResourceInterplay(unittest.TestCase):
         self.assertEqual(log[1], ('got', 5, 3))
 
     def test2_gput_woken_by_gget(self):
-        r = Resource(amount=10, capacity=10, sim=self.sim)
+        r = DSResource(amount=10, capacity=10, sim=self.sim)
         log = []
 
         def producer():
@@ -987,7 +987,7 @@ class TestResourceInterplay(unittest.TestCase):
 
     def test3_get_and_get_n_independent(self):
         '''get (1 unit) and get_n (N units) can coexist; each gets only what it asked for.'''
-        r = Resource(amount=0, capacity=10, sim=self.sim)
+        r = DSResource(amount=0, capacity=10, sim=self.sim)
         log = []
 
         def single():
@@ -1012,7 +1012,7 @@ class TestResourceInterplay(unittest.TestCase):
         self.assertEqual(r.amount, 0)
 
     def test4_gget_waits_on_tx_nempty(self):
-        r = Resource(amount=0, capacity=1, sim=self.sim)
+        r = DSResource(amount=0, capacity=1, sim=self.sim)
         seen = {}
 
         def consumer():
@@ -1035,7 +1035,7 @@ class TestResourceInterplay(unittest.TestCase):
         self.assertEqual(seen.get('result'), 1)
 
     def test5_gput_waits_on_tx_nfull(self):
-        r = Resource(amount=1, capacity=1, sim=self.sim)
+        r = DSResource(amount=1, capacity=1, sim=self.sim)
         seen = {}
 
         def producer():
@@ -1059,7 +1059,7 @@ class TestResourceInterplay(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Mutex
+# DSMutex
 # ---------------------------------------------------------------------------
 
 class TestMutex(unittest.TestCase):
@@ -1068,7 +1068,7 @@ class TestMutex(unittest.TestCase):
         self.sim = DSSimulation()
 
     def _make(self):
-        return Mutex(sim=self.sim)
+        return DSMutex(sim=self.sim)
 
     def test1_initial_state_unlocked(self):
         m = self._make()
@@ -1175,14 +1175,14 @@ class TestResourceStatsProbe(unittest.TestCase):
         self.sim = DSSimulation()
 
     def test0_stats_probe_name(self):
-        r = Resource(amount=0, capacity=2, name='r0', sim=self.sim)
+        r = DSResource(amount=0, capacity=2, name='r0', sim=self.sim)
         probe = r.add_stats_probe()
         self.assertEqual(probe.name, 'r0.stats_probe')
         probe2 = r.add_stats_probe(name='ops')
         self.assertEqual(probe2.name, 'r0.ops')
 
     def test1_stats_probe_counts(self):
-        r = Resource(amount=0, capacity=1, sim=self.sim)
+        r = DSResource(amount=0, capacity=1, sim=self.sim)
         probe = r.add_stats_probe()
 
         def actor():
@@ -1203,7 +1203,7 @@ class TestResourceStatsProbe(unittest.TestCase):
         self.assertEqual(stats['current_amount'], 0.0)
 
     def test2_stats_probe_time_weighted_amount(self):
-        r = Resource(amount=0, capacity=2, sim=self.sim)
+        r = DSResource(amount=0, capacity=2, sim=self.sim)
         probe = r.add_stats_probe()
 
         def actor():
@@ -1227,7 +1227,7 @@ class TestResourceStatsProbe(unittest.TestCase):
         self.assertEqual(stats['min_amount'], 0.0)
 
     def test3_stats_probe_reset(self):
-        r = Resource(amount=0, capacity=2, sim=self.sim)
+        r = DSResource(amount=0, capacity=2, sim=self.sim)
         probe = r.add_stats_probe()
         r.put_nowait()
         self.sim.run(5)
@@ -1244,7 +1244,7 @@ class TestResourceStatsProbe(unittest.TestCase):
         self.assertEqual(after_reset['get_count'], 1)
 
     def test4_stats_probe_preemption_count(self):
-        r = PriorityResource(amount=1, capacity=1, preemptive=True, sim=self.sim)
+        r = DSPriorityResource(amount=1, capacity=1, preemptive=True, sim=self.sim)
         probe = r.add_stats_probe()
 
         def low():
@@ -1276,7 +1276,7 @@ class TestResourceStatsProbe(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestResourceMixin(unittest.TestCase):
-    '''ResourceMixin delegates to the underlying Resource methods.
+    '''ResourceMixin delegates to the underlying DSResource methods.
     Tested using plain ResourceMixin() instances with standalone generators
     and coroutines to avoid DSAgent singleton name collisions.
     '''
@@ -1285,7 +1285,7 @@ class TestResourceMixin(unittest.TestCase):
         self.sim = DSSimulation()
 
     def _make_resource(self, amount=5, capacity=10):
-        return Resource(amount=amount, capacity=capacity, sim=self.sim)
+        return DSResource(amount=amount, capacity=capacity, sim=self.sim)
 
     def test1_gget_takes_one(self):
         r = self._make_resource(amount=3)

@@ -31,8 +31,8 @@ from dssim.lite.pubsub import DSLiteCallback, DSLitePub
 if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
-class LiteDelay(DSComponent):
-    '''Delay component that forwards each event after a fixed delay.'''
+class DSLiteDelay(DSComponent):
+    '''DSDelay component that forwards each event after a fixed delay.'''
 
     def __init__(self, delay: float, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -47,8 +47,8 @@ class LiteDelay(DSComponent):
         self.sim.schedule_event(self.delay, event, self.tx)
 
 
-class LiteLimiter(DSComponent):
-    '''Limiter which passes events with max. limited throughput.'''
+class DSLiteLimiter(DSComponent):
+    '''DSLimiter which passes events with max. limited throughput.'''
 
     def __init__(self, throughput: float, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -96,7 +96,7 @@ class LiteLimiter(DSComponent):
                 next_send_at = last_sent_at + self.report_period
 
 
-class LiteTimer(DSComponent):
+class DSLiteTimer(DSComponent):
     '''Periodic clock component with start/stop/pause/resume control.'''
 
     class Status(Enum):
@@ -108,7 +108,7 @@ class LiteTimer(DSComponent):
         super().__init__(**kwargs)
         self.period = period
         self.counter: float = repeats or float('inf')
-        self.status: LiteTimer.Status = LiteTimer.Status.STOPPED
+        self.status: DSLiteTimer.Status = DSLiteTimer.Status.STOPPED
         self._remaining = self.period
         self._tick_nr = 0
         self._restart_cycle = False
@@ -123,19 +123,19 @@ class LiteTimer(DSComponent):
         self.counter -= 1
         self.sim.signal({'tick': self._tick_nr}, self.tx)
         if self.counter <= 0:
-            self.status = LiteTimer.Status.STOPPED
+            self.status = DSLiteTimer.Status.STOPPED
             self._remaining = self.period
         else:
             self._remaining = self.period
 
     async def process(self) -> EventType:
         while True:
-            if self.status is LiteTimer.Status.STOPPED:
+            if self.status is DSLiteTimer.Status.STOPPED:
                 await self.sim.wait()
                 self._remaining = self.period
                 continue
 
-            if self.status is LiteTimer.Status.PAUSED:
+            if self.status is DSLiteTimer.Status.PAUSED:
                 await self.sim.wait()
                 continue
 
@@ -150,35 +150,35 @@ class LiteTimer(DSComponent):
                 self._emit_tick()
                 continue
 
-            if self.status is LiteTimer.Status.STOPPED:
+            if self.status is DSLiteTimer.Status.STOPPED:
                 self._remaining = self.period
             else:
                 elapsed = self.sim.time - wait_started_at
                 self._remaining = max(self._remaining - elapsed, 0)
 
-    def start(self, period: Optional[float] = None, repeats: Optional[int] = None) -> "LiteTimer":
+    def start(self, period: Optional[float] = None, repeats: Optional[int] = None) -> "DSLiteTimer":
         if period is not None:
             self.period = period
         self.counter = repeats or float('inf')
-        self.status = LiteTimer.Status.RUNNING
+        self.status = DSLiteTimer.Status.RUNNING
         self._restart_cycle = True
         self._wake_process()
         return self
 
-    def stop(self, event: Optional[EventType] = None) -> "LiteTimer":
-        self.status = LiteTimer.Status.STOPPED
+    def stop(self, event: Optional[EventType] = None) -> "DSLiteTimer":
+        self.status = DSLiteTimer.Status.STOPPED
         self._remaining = self.period
         self._restart_cycle = False
         self._wake_process()
         return self
 
-    def pause(self, event: Optional[EventType] = None) -> "LiteTimer":
-        self.status = LiteTimer.Status.PAUSED
+    def pause(self, event: Optional[EventType] = None) -> "DSLiteTimer":
+        self.status = DSLiteTimer.Status.PAUSED
         self._wake_process()
         return self
 
-    def resume(self, event: Optional[EventType] = None) -> "LiteTimer":
-        self.status = LiteTimer.Status.RUNNING
+    def resume(self, event: Optional[EventType] = None) -> "DSLiteTimer":
+        self.status = DSLiteTimer.Status.RUNNING
         self._wake_process()
         return self
 
@@ -186,20 +186,20 @@ class LiteTimer(DSComponent):
 class SimLiteTimeMixin:
     '''Factory mixin for lite timer/delay/limiter components.'''
 
-    def timer(self: Any, *args: Any, **kwargs: Any) -> LiteTimer:
+    def timer(self: Any, *args: Any, **kwargs: Any) -> DSLiteTimer:
         sim: 'DSSimulation' = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in timer() method should be set to the same simulation instance.')
-        return LiteTimer(*args, **kwargs, sim=sim)
+        return DSLiteTimer(*args, **kwargs, sim=sim)
 
-    def delay(self: Any, *args: Any, **kwargs: Any) -> LiteDelay:
+    def delay(self: Any, *args: Any, **kwargs: Any) -> DSLiteDelay:
         sim: 'DSSimulation' = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in delay() method should be set to the same simulation instance.')
-        return LiteDelay(*args, **kwargs, sim=sim)
+        return DSLiteDelay(*args, **kwargs, sim=sim)
 
-    def limiter(self: Any, *args: Any, **kwargs: Any) -> LiteLimiter:
+    def limiter(self: Any, *args: Any, **kwargs: Any) -> DSLiteLimiter:
         sim: 'DSSimulation' = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in limiter() method should be set to the same simulation instance.')
-        return LiteLimiter(*args, **kwargs, sim=sim)
+        return DSLiteLimiter(*args, **kwargs, sim=sim)

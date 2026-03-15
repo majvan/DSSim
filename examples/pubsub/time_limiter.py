@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Limiter component example (pubsub layer).
+DSLimiter component example (pubsub layer).
 '''
 from dssim import DSSimulation
 

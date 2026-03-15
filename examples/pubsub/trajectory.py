@@ -34,5 +34,5 @@ for probe in (c0_probe, i0_probe, c1_probe):
         f'gets={stats["get_count"]}'
     )
 assert 135 < time <= 150, f"Unexpected value of the time of last event the simulation: {time}"
-# Queue probe callbacks add observer work, so total event count is higher than the uninstrumented variant.
+# DSQueue probe callbacks add observer work, so total event count is higher than the uninstrumented variant.
 assert 120 < ev <= 160, f"Unexpected number of events: {ev}"

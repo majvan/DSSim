@@ -54,9 +54,9 @@ env = sim.Environment()
 CustomerGenerator()
 stat = {'balked': 0, 'reneged': 0}
 clerks = [Clerk() for _ in range(3)]
-waiting_line = sim.Queue(5, name="waiting_line")
+waiting_line = sim.queue(5, name="waiting_line")
 waiting_line_probe = waiting_line.add_stats_probe(name='users')
-worktodo = sim.State(name="worktodo")
+worktodo = sim.state(name="worktodo")
 worktodo['request'] = False
 time, events = env.run(300000)
 # waiting_line.length.print_histogram(30, 0, 1)
@@ -75,5 +75,5 @@ print(
 assert stat['reneged'] == 6665, f"Unexpected number of reneged."
 assert stat['balked'] == 23330, f"Unexpected number of balked."
 assert time == 299995, f"Time {time} is out of expected range."
-# Queue probe callbacks add observer work, so total event count is higher than the uninstrumented variant.
+# DSQueue probe callbacks add observer work, so total event count is higher than the uninstrumented variant.
 assert events == 423328, f"Number of events {events} is out of expected range."

@@ -1,8 +1,8 @@
 # Copyright 2026- majvan (majvan@gmail.com)
 #
-# LiteLayer2 counterpart of examples/pubsub/PriorityResource pubsub.py.
+# LiteLayer2 counterpart of examples/pubsub/DSPriorityResource pubsub.py.
 #
-# Uses LitePriorityResource (priority + optional preemption) available in
+# Uses DSLitePriorityResource (priority + optional preemption) available in
 # dssim.lite.components.literesource via sim.priority_resource(...).
 from dssim import DSSimulation, LiteLayer2
 from dssim.lite import DSResourcePreempted
@@ -79,7 +79,7 @@ def run_lite_preemptive():
 
 
 if __name__ == '__main__':
-    print('Demo 1: LitePriorityResource (non-preemptive) — DSSim Lite')
+    print('Demo 1: DSLitePriorityResource (non-preemptive) — DSSim Lite')
     lite_starts = run_lite_non_preemptive()
     print('Lite starts:', lite_starts)
     assert lite_starts == [('low', 0), ('high', 4), ('mid', 5)]

@@ -47,7 +47,7 @@ class Customer(sim.Component):
 env = sim.Environment()
 CustomerGenerator()
 stat = {'balked': 0, 'reneged': 0}
-clerks = sim.Resource(3, name="clerks")
+clerks = sim.resource(3, name="clerks")
 clerks_probe = clerks.add_stats_probe(name='usage')
 time, events = env.run(300000)
 # waitingline.length.print_histogram(30, 0, 1)
@@ -70,5 +70,5 @@ print(
 assert stat['reneged'] == 6665, f"Unexpected number of reneged."
 assert stat['balked'] == 23330, f"Unexpected number of balked."
 assert time == 299995, f"Time {time} is out of expected range."
-# Resource probe callbacks add observer work, so total event count is higher than the uninstrumented variant.
+# DSResource probe callbacks add observer work, so total event count is higher than the uninstrumented variant.
 assert events == 276651, f"Number of events {events} is out of expected range."

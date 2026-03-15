@@ -22,12 +22,12 @@ from dssim.base import EventType, TimeType, DSComponent, NumericType
 from dssim.pubsub.base import CondType, DSAbortException, AlwaysTrue
 from dssim.pubsub.process import DSProcess
 from dssim.simulation import DSSchedulable
-from dssim.pubsub.components.container import Container
-from dssim.pubsub.components.resource import Resource
+from dssim.pubsub.components.container import DSContainer
+from dssim.pubsub.components.resource import DSResource
 
 
 class AgentContainerMixin:
-    async def enter(self: Any, container: Container, timeout: TimeType = float('inf'), **policy_params: Any) -> EventType:
+    async def enter(self: Any, container: DSContainer, timeout: TimeType = float('inf'), **policy_params: Any) -> EventType:
         try:
             retval = await container.put(timeout, self, **policy_params)
         except DSAbortException:
@@ -35,7 +35,7 @@ class AgentContainerMixin:
             raise
         return retval
 
-    def genter(self: Any, container: Container, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
+    def genter(self: Any, container: DSContainer, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         try:
             retval = yield from container.gput(timeout, self, **policy_params)
         except DSAbortException:
@@ -43,13 +43,13 @@ class AgentContainerMixin:
             raise
         return retval
 
-    def enter_nowait(self: Any, container: Container) -> Optional[EventType]:
+    def enter_nowait(self: Any, container: DSContainer) -> Optional[EventType]:
         return container.put_nowait(self)
 
-    def leave(self: Any, container: Container) -> None:
+    def leave(self: Any, container: DSContainer) -> None:
         container.remove(self)
 
-    async def pop(self: Any, container: Container, timeout: TimeType = float('inf'), **policy_params: Any) -> Optional[EventType]:
+    async def pop(self: Any, container: DSContainer, timeout: TimeType = float('inf'), **policy_params: Any) -> Optional[EventType]:
         try:
             retval = await container.get(timeout, **policy_params)
         except DSAbortException:
@@ -57,7 +57,7 @@ class AgentContainerMixin:
             raise
         return retval
 
-    def gpop(self: Any, container: Container, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
+    def gpop(self: Any, container: DSContainer, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         try:
             retval = yield from container.gget(timeout, **policy_params)
         except DSAbortException:
@@ -65,39 +65,39 @@ class AgentContainerMixin:
             raise
         return retval
 
-    def pop_nowait(self: Any, container: Container) -> Optional[EventType]:
+    def pop_nowait(self: Any, container: DSContainer) -> Optional[EventType]:
         return container.get_nowait()
 
 
 class AgentResourceMixin:
-    async def get(self: Any, resource: Resource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+    async def get(self: Any, resource: DSResource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
         return await resource.get(timeout, **policy_params)
 
-    def gget(self: Any, resource: Resource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+    def gget(self: Any, resource: DSResource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
         return (yield from resource.gget(timeout, **policy_params))
 
-    async def get_n(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+    async def get_n(self: Any, resource: DSResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
         return await resource.get_n(timeout, amount, **policy_params)
 
-    def gget_n(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+    def gget_n(self: Any, resource: DSResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
         return (yield from resource.gget_n(timeout, amount, **policy_params))
 
-    async def put(self: Any, resource: Resource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+    async def put(self: Any, resource: DSResource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
         return await resource.put(timeout, **policy_params)
 
-    def gput(self: Any, resource: Resource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+    def gput(self: Any, resource: DSResource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
         return (yield from resource.gput(timeout, **policy_params))
 
-    async def put_n(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+    async def put_n(self: Any, resource: DSResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
         return await resource.put_n(timeout, amount, **policy_params)
 
-    def gput_n(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+    def gput_n(self: Any, resource: DSResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
         return (yield from resource.gput_n(timeout, amount, **policy_params))
 
-    def put_nowait(self: Any, resource: Resource) -> NumericType:
+    def put_nowait(self: Any, resource: DSResource) -> NumericType:
         return resource.put_nowait()
 
-    def put_n_nowait(self: Any, resource: Resource, amount: NumericType = 1) -> NumericType:
+    def put_n_nowait(self: Any, resource: DSResource, amount: NumericType = 1) -> NumericType:
         return resource.put_n_nowait(amount)
 
 

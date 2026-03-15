@@ -14,7 +14,7 @@
 '''
 The example is showing a code parity with example from salabim project
 '''
-from dssim import DSSimulation, DSAgent, Queue
+from dssim import DSSimulation, DSAgent
 import random
 
 
@@ -51,7 +51,7 @@ sim = DSSimulation()
 
 CustomerGenerator()
 clerk = Clerk()
-waitingline = Queue(name="waitingline")
+waitingline = sim.queue(name="waitingline")
 waitingline_probe = waitingline.add_stats_probe(name='users')
 stat = {'completed': 0, 'balked': 0}
 

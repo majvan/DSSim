@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-LiteQueue — a minimal queue for use with LiteLayer2.
+DSLiteQueue — a minimal queue for use with LiteLayer2.
 
-Unlike :class:`Queue`, LiteQueue requires no pubsub layer and no condition
+Unlike :class:`DSQueue`, DSLiteQueue requires no pubsub layer and no condition
 machinery.  It works purely with two simulation primitives:
 
   * ``sim.signal(event, subscriber)``
@@ -31,7 +31,7 @@ Two singleton sentinels drive all wakeups:
   full buffer non-full.  :meth:`send` receives it and enqueues the first
   waiting putter's item, then wakes that putter.
 
-Because LiteQueue itself is the ISubscriber target for both sentinels,
+Because DSLiteQueue itself is the ISubscriber target for both sentinels,
 :meth:`send` acts as the internal dispatcher — no separate DSPub or
 pubsub fan-out is involved.
 
@@ -51,7 +51,7 @@ from collections import deque
 from typing import Any, Iterator, Optional, Generator, TYPE_CHECKING
 
 from dssim.base import NumericType, EventType, EventRetType, ISubscriber, DSComponent
-from dssim.base_components import DSQueue
+from dssim.base_components import DSBaseOrder
 
 if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
@@ -64,7 +64,7 @@ _GET_READY = object()   # "at least one item is available for a waiting getter"
 _PUT_READY = object()   # "at least one slot is available for a waiting putter"
 
 
-class LiteQueue(DSComponent, ISubscriber):
+class DSLiteQueue(DSComponent, ISubscriber):
     '''Minimal FIFO queue for LiteLayer2 simulations.
 
     Parameters
@@ -72,16 +72,16 @@ class LiteQueue(DSComponent, ISubscriber):
     capacity:
         Maximum number of items the queue can hold.  Default: unlimited.
     policy:
-        A :class:`~dssim.base_components.DSQueue`-compatible object
+        A :class:`~dssim.base_components.DSBaseOrder`-compatible object
         that provides ``enqueue`` / ``dequeue`` / ``__len__`` / ``__bool__``
-        methods.  Default: plain FIFO :class:`DSQueue`.
+        methods.  Default: plain FIFO :class:`DSBaseOrder`.
     '''
 
     def __init__(self, capacity: NumericType = float('inf'),
-                 policy: Optional[DSQueue] = None, *args: Any, **kwargs: Any) -> None:
+                 policy: Optional[DSBaseOrder] = None, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.capacity = capacity
-        self._buffer: DSQueue = policy if policy is not None else DSQueue()
+        self._buffer: DSBaseOrder = policy if policy is not None else DSBaseOrder()
         self._getters: deque = deque()   # waiting getter generators
         self._putters: deque = deque()   # (putter_generator, item) pairs
 
@@ -219,7 +219,7 @@ class LiteQueue(DSComponent, ISubscriber):
         return len(self._buffer)
 
     def __bool__(self) -> bool:
-        # Must be True regardless of buffer contents — LiteQueue is a simulation
+        # Must be True regardless of buffer contents — DSLiteQueue is a simulation
         # component, not a plain container.  Python would otherwise fall back to
         # __len__ and treat an empty queue as falsy, which breaks the
         # `subscriber or self._parent_process` fallback inside sim.signal.
@@ -234,8 +234,8 @@ class LiteQueue(DSComponent, ISubscriber):
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
 class SimLiteQueueMixin:
-    def queue(self: Any, *args: Any, **kwargs: Any) -> LiteQueue:
+    def queue(self: Any, *args: Any, **kwargs: Any) -> DSLiteQueue:
         sim: 'DSSimulation' = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in queue() method should be set to the same simulation instance.')
-        return LiteQueue(*args, **kwargs, sim=sim)
+        return DSLiteQueue(*args, **kwargs, sim=sim)

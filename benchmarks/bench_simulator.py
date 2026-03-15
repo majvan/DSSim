@@ -751,7 +751,7 @@ def simpy_bucketed_burst(n, k, l):
 # ===========================================================================
 def salabim_timed_callbacks(n):
     '''
-    Timer component holds 1 time unit, activates Sink, repeats N times.
+    DSTimer component holds 1 time unit, activates Sink, repeats N times.
     Sink passivates between wakeups.  Stresses salabim's time-queue and the
     passivate/activate path.
     '''
@@ -765,14 +765,14 @@ def salabim_timed_callbacks(n):
                 yield self.passivate()
                 handled[0] += 1
 
-    class Timer(_salabim.Component):
+    class DSTimer(_salabim.Component):
         def process(self):
             for _ in range(n):
                 yield self.hold(1)
                 sink_ref[0].activate()
 
     sink_ref[0] = Sink(env=env)
-    Timer(env=env)
+    DSTimer(env=env)
     env.run()
     assert handled[0] == n, f'salabim timed-callbacks: expected {n}, got {handled[0]}'
 

@@ -2,11 +2,11 @@
 import unittest
 
 from dssim.base_components import (
-    DSQueue,
-    DSLifoQueue,
-    DSKeyQueue,
-    DSResource,
-    DSPriorityResource,
+    DSBaseOrder,
+    DSLifoOrder,
+    DSKeyOrder,
+    _ResourceBookkeeper,
+    DSBasePriorityResource,
     DSPriorityPreemption,
 )
 
@@ -18,7 +18,7 @@ class _Owner:
 class TestDSQueue(unittest.TestCase):
 
     def setUp(self):
-        self.q = DSQueue()
+        self.q = DSBaseOrder()
 
     def test1_init_empty(self):
         self.assertEqual(len(self.q), 0)
@@ -162,7 +162,7 @@ class TestDSQueue(unittest.TestCase):
 class TestDSLifoQueue(unittest.TestCase):
 
     def setUp(self):
-        self.q = DSLifoQueue()
+        self.q = DSLifoOrder()
 
     def test1_lifo_order(self):
         self.q.enqueue('a')
@@ -200,40 +200,40 @@ class TestDSLifoQueue(unittest.TestCase):
 class TestDSKeyQueue(unittest.TestCase):
 
     def test1_init_empty(self):
-        q = DSKeyQueue()
+        q = DSKeyOrder()
         self.assertEqual(len(q), 0)
         self.assertFalse(q)
         self.assertIsNone(q.head)
         self.assertIsNone(q.tail)
 
     def test2_default_key_orders_ascending(self):
-        q = DSKeyQueue()
+        q = DSKeyOrder()
         q.enqueue(3)
         q.enqueue(1)
         q.enqueue(2)
         self.assertEqual([q.dequeue() for _ in range(3)], [1, 2, 3])
 
     def test3_single_item(self):
-        q = DSKeyQueue()
+        q = DSKeyOrder()
         q.enqueue(42)
         self.assertEqual(q.peek(), 42)
         self.assertEqual(q.dequeue(), 42)
         self.assertEqual(len(q), 0)
 
     def test4_min_priority_integers(self):
-        q = DSKeyQueue(key=lambda x: x)
+        q = DSKeyOrder(key=lambda x: x)
         for v in [5, 1, 3, 2, 4]:
             q.enqueue(v)
         self.assertEqual([q.dequeue() for _ in range(5)], [1, 2, 3, 4, 5])
 
     def test5_max_priority_negated_key(self):
-        q = DSKeyQueue(key=lambda x: -x)
+        q = DSKeyOrder(key=lambda x: -x)
         for v in [5, 1, 3, 2, 4]:
             q.enqueue(v)
         self.assertEqual([q.dequeue() for _ in range(5)], [5, 4, 3, 2, 1])
 
     def test6_key_on_dict_field(self):
-        q = DSKeyQueue(key=lambda item: item['priority'])
+        q = DSKeyOrder(key=lambda item: item['priority'])
         q.enqueue({'name': 'low',  'priority': 10})
         q.enqueue({'name': 'high', 'priority': 1})
         q.enqueue({'name': 'mid',  'priority': 5})
@@ -246,7 +246,7 @@ class TestDSKeyQueue(unittest.TestCase):
             def __init__(self, name, prio):
                 self.name = name
                 self.prio = prio
-        q = DSKeyQueue(key=lambda t: t.prio)
+        q = DSKeyOrder(key=lambda t: t.prio)
         q.enqueue(Task('c', 30))
         q.enqueue(Task('a', 10))
         q.enqueue(Task('b', 20))
@@ -255,7 +255,7 @@ class TestDSKeyQueue(unittest.TestCase):
         self.assertEqual(q.dequeue().name, 'c')
 
     def test8_equal_keys_stable_order(self):
-        q = DSKeyQueue(key=lambda x: x[0])
+        q = DSKeyOrder(key=lambda x: x[0])
         q.enqueue((1, 'first'))
         q.enqueue((1, 'second'))
         q.enqueue((1, 'third'))
@@ -264,7 +264,7 @@ class TestDSKeyQueue(unittest.TestCase):
         self.assertEqual(q.dequeue()[1], 'third')
 
     def test9_peek_does_not_remove(self):
-        q = DSKeyQueue(key=lambda x: x)
+        q = DSKeyOrder(key=lambda x: x)
         q.enqueue(5)
         q.enqueue(2)
         self.assertEqual(q.peek(), 2)
@@ -272,15 +272,15 @@ class TestDSKeyQueue(unittest.TestCase):
         self.assertEqual(q.peek(), 2)
 
     def test10_peek_empty(self):
-        self.assertIsNone(DSKeyQueue().peek())
+        self.assertIsNone(DSKeyOrder().peek())
 
     def test11_enqueue_returns_item(self):
-        q = DSKeyQueue()
+        q = DSKeyOrder()
         obj = object()
         self.assertIs(q.enqueue(obj), obj)
 
     def test12_interleaved_operations(self):
-        q = DSKeyQueue(key=lambda x: x)
+        q = DSKeyOrder(key=lambda x: x)
         q.enqueue(4)
         q.enqueue(2)
         self.assertEqual(q.dequeue(), 2)
@@ -289,7 +289,7 @@ class TestDSKeyQueue(unittest.TestCase):
         self.assertEqual([q.dequeue() for _ in range(3)], [1, 3, 4])
 
     def test13_contains_and_iter(self):
-        q = DSKeyQueue(key=lambda x: x)
+        q = DSKeyOrder(key=lambda x: x)
         q.enqueue(10)
         q.enqueue(5)
         self.assertIn(5, q)
@@ -297,7 +297,7 @@ class TestDSKeyQueue(unittest.TestCase):
         self.assertEqual(sorted(q), [5, 10])
 
     def test14_remove(self):
-        q = DSKeyQueue(key=lambda x: x)
+        q = DSKeyOrder(key=lambda x: x)
         q.enqueue(3)
         q.enqueue(1)
         q.enqueue(2)
@@ -305,21 +305,21 @@ class TestDSKeyQueue(unittest.TestCase):
         self.assertEqual([q.dequeue() for _ in range(2)], [2, 3])
 
     def test15_remove_if(self):
-        q = DSKeyQueue(key=lambda x: x)
+        q = DSKeyOrder(key=lambda x: x)
         for v in [4, 1, 3, 2]:
             q.enqueue(v)
         q.remove_if(lambda e: e % 2 == 0)
         self.assertEqual([q.dequeue() for _ in range(2)], [1, 3])
 
     def test16_pop_at(self):
-        q = DSKeyQueue(key=lambda x: x)
+        q = DSKeyOrder(key=lambda x: x)
         for v in [3, 1, 2]:
             q.enqueue(v)
         self.assertEqual(q.pop_at(1), 2)
         self.assertEqual([q.dequeue() for _ in range(2)], [1, 3])
 
     def test17_len_and_bool(self):
-        q = DSKeyQueue()
+        q = DSKeyOrder()
         self.assertFalse(q)
         q.enqueue(0)
         self.assertTrue(q)
@@ -329,16 +329,16 @@ class TestDSKeyQueue(unittest.TestCase):
 class TestDSResource(unittest.TestCase):
 
     def test1_init_valid(self):
-        r = DSResource(amount=2, capacity=5)
+        r = _ResourceBookkeeper(amount=2, capacity=5)
         self.assertEqual(r.amount, 2)
         self.assertEqual(r.capacity, 5)
 
     def test2_init_invalid_amount_gt_capacity(self):
         with self.assertRaises(ValueError):
-            DSResource(amount=6, capacity=5)
+            _ResourceBookkeeper(amount=6, capacity=5)
 
     def test3_put_get_nowait(self):
-        r = DSResource(amount=1, capacity=3)
+        r = _ResourceBookkeeper(amount=1, capacity=3)
         self.assertEqual(r.put_n_nowait(2), 2)
         self.assertEqual(r.amount, 3)
         self.assertEqual(r.put_n_nowait(1), 0)  # full
@@ -348,7 +348,7 @@ class TestDSResource(unittest.TestCase):
 
     def test4_owner_mapping_updates_owner_attrs(self):
         owner = _Owner()
-        r = DSResource(amount=2, capacity=4, owner=owner)
+        r = _ResourceBookkeeper(amount=2, capacity=4, owner=owner)
         self.assertEqual(owner.amount, 2)
         self.assertEqual(owner.capacity, 4)
         self.assertEqual(r.put_n_nowait(1), 1)
@@ -360,13 +360,13 @@ class TestDSResource(unittest.TestCase):
 class TestDSPriorityResource(unittest.TestCase):
 
     def test1_remember_and_held_amount(self):
-        p = DSPriorityResource()
+        p = DSBasePriorityResource()
         p.remember_acquire('a', 3, 5)
         self.assertEqual(p.held_amount('a'), 3)
         self.assertEqual(p.holders_by_priority, {5: ['a']})
 
     def test2_same_owner_same_priority_accumulates_and_refreshes_recency(self):
-        p = DSPriorityResource()
+        p = DSBasePriorityResource()
         p.remember_acquire('a', 1, 5)
         p.remember_acquire('b', 1, 5)
         p.remember_acquire('a', 2, 5)  # refresh recency -> 'a' should move to end
@@ -374,7 +374,7 @@ class TestDSPriorityResource(unittest.TestCase):
         self.assertEqual(p.holders_by_priority[5], ['b', 'a'])
 
     def test3_better_priority_moves_bucket(self):
-        p = DSPriorityResource()
+        p = DSBasePriorityResource()
         p.remember_acquire('a', 1, 7)
         p.remember_acquire('a', 2, 3)
         self.assertNotIn(7, p.holders_by_priority)
@@ -383,7 +383,7 @@ class TestDSPriorityResource(unittest.TestCase):
         self.assertEqual(p.holders_by_owner['a'][1], 3)  # priority
 
     def test4_set_holder_amount_zero_removes_owner_and_bucket(self):
-        p = DSPriorityResource()
+        p = DSBasePriorityResource()
         p.remember_acquire('a', 2, 4)
         p.set_holder_amount('a', 0)
         self.assertEqual(p.held_amount('a'), 0)
@@ -391,7 +391,7 @@ class TestDSPriorityResource(unittest.TestCase):
         self.assertNotIn(4, p.holders_by_priority)
 
     def test5_consume_reclaimed_release(self):
-        p = DSPriorityResource()
+        p = DSBasePriorityResource()
         p.reclaimed['a'] = 5
         self.assertEqual(p.consume_reclaimed_release('a', 3), 0)
         self.assertEqual(p.reclaimed['a'], 2)
@@ -403,7 +403,7 @@ class TestDSPriorityResource(unittest.TestCase):
 class TestDSPriorityPreemption(unittest.TestCase):
 
     def test1_reclaim_order_and_amount(self):
-        p = DSPriorityResource()
+        p = DSBasePriorityResource()
         # priority 10 bucket insertion order: b then c (newest c)
         p.remember_acquire('a', 2, 5)
         p.remember_acquire('b', 3, 10)
@@ -434,7 +434,7 @@ class TestDSPriorityPreemption(unittest.TestCase):
         self.assertEqual(p.reclaimed['b'], 1)
 
     def test2_skips_requester_and_equal_or_better_priorities(self):
-        p = DSPriorityResource()
+        p = DSBasePriorityResource()
         p.remember_acquire('req', 5, 8)
         p.remember_acquire('same', 5, 8)
         p.remember_acquire('better', 5, 2)
@@ -457,7 +457,7 @@ class TestDSPriorityPreemption(unittest.TestCase):
         self.assertEqual(p.held_amount('worse'), 1)
 
     def test3_noop_for_nonpositive_need(self):
-        p = DSPriorityResource()
+        p = DSBasePriorityResource()
         p.remember_acquire('a', 3, 9)
         pre = DSPriorityPreemption(p)
 

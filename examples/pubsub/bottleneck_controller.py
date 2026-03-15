@@ -11,12 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSComponent, DSCallback, DSProcess, DSPub, DSSimulation, Limiter
+from dssim import DSComponent, DSCallback, DSProcess, DSPub, DSSimulation
 
 class MCU(DSComponent):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.limiter = Limiter(0, name=self.name + '.(internal) limiter0', sim=self.sim)
+        self.limiter = self.sim.limiter(0, name=self.name + '.(internal) limiter0')
         self._producer = self.sim.publisher(name=self.name + '.(internal) event producer')
         self._producer.add_subscriber(self.limiter.rx)
         consumer = self.sim.callback(self._on_output, name=self.name + '.(internal) output')

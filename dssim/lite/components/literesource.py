@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-LiteResource / LitePriorityResource for LiteLayer2.
+DSLiteResource / DSLitePriorityResource for LiteLayer2.
 
 These components avoid pubsub/conditions and rely only on LiteLayer2 primitives:
   - sim.signal(event, subscriber)
@@ -25,7 +25,7 @@ from collections import deque
 from typing import Any, Deque, Generator, List, Optional, TYPE_CHECKING
 
 from dssim.base import DSComponent, NumericType, EventType, EventRetType, ISubscriber, TimeType
-from dssim.base_components import DSResource, DSPriorityResource, DSPriorityPreemption
+from dssim.base_components import _ResourceBookkeeper, DSBasePriorityResource, DSPriorityPreemption
 
 
 if TYPE_CHECKING:
@@ -72,7 +72,7 @@ class _WaitTimeout:
         self.waiter = waiter
 
 
-class LiteResource(DSComponent, ISubscriber):
+class DSLiteResource(DSComponent, ISubscriber):
     '''Minimal resource for LiteLayer2 simulations.
 
     * ``get`` consumes amount from the pool.
@@ -83,13 +83,13 @@ class LiteResource(DSComponent, ISubscriber):
     def __init__(self, amount: NumericType = 0, capacity: NumericType = float('inf'),
                  *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._resource = DSResource(amount=amount, capacity=capacity, owner=self)
+        self._resource = _ResourceBookkeeper(amount=amount, capacity=capacity, owner=self)
         self._getters: Deque[_Waiter] = deque()
         self._putters: Deque[_Waiter] = deque()
         self._dispatch_scheduled = False
 
     # ------------------------------------------------------------------
-    # Internal queue policy hooks (LitePriorityResource overrides getter policy)
+    # Internal queue policy hooks (DSLitePriorityResource overrides getter policy)
     # ------------------------------------------------------------------
 
     def _enqueue_getter(self, waiter: _Waiter, **policy_params: Any) -> None:
@@ -277,8 +277,8 @@ class LiteResource(DSComponent, ISubscriber):
         return 0 if event is None else event
 
 
-class LitePriorityResource(LiteResource):
-    '''LiteResource variant with priority-ordered getter wakeups.
+class DSLitePriorityResource(DSLiteResource):
+    '''DSLiteResource variant with priority-ordered getter wakeups.
 
     Lower numeric priority value is served first. Same priority preserves FIFO.
     '''
@@ -289,19 +289,19 @@ class LitePriorityResource(LiteResource):
         self.preemptive = preemptive
         self._getters: List[_PriorityWaiter] = []
         self._prio_seq = 0
-        self._priority = DSPriorityResource()
+        self._priority = DSBasePriorityResource()
         self._preemption = DSPriorityPreemption(self._priority)
-        # Resource-specific exception subtype allows clear nested catches:
+        # DSResource-specific exception subtype allows clear nested catches:
         # except r1.Preempted / except r0.Preempted.
         self.Preempted = type(f'Preempted_{id(self):x}', (DSResourcePreempted,), {'__module__': __name__})
 
     class _HoldContext:
-        def __init__(self, resource: "LitePriorityResource") -> None:
+        def __init__(self, resource: "DSLitePriorityResource") -> None:
             self.resource = resource
             self.owner = None
             self._held_before: NumericType = 0
 
-        def __enter__(self) -> "LitePriorityResource._HoldContext":
+        def __enter__(self) -> "DSLitePriorityResource._HoldContext":
             self.owner = self.resource.sim.pid
             self._held_before = self.resource._held_amount(self.owner)
             return self
@@ -424,7 +424,7 @@ class LitePriorityResource(LiteResource):
         if remaining <= 0:
             return accepted
 
-        # Finally allow explicit external top-up behavior of Resource.
+        # Finally allow explicit external top-up behavior of DSResource.
         accepted += super().put_n_nowait(remaining)
         return accepted
 
@@ -495,14 +495,14 @@ class LitePriorityResource(LiteResource):
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
 class SimLiteResourceMixin:
-    def resource(self: Any, *args: Any, **kwargs: Any) -> LiteResource:
+    def resource(self: Any, *args: Any, **kwargs: Any) -> DSLiteResource:
         sim: 'DSSimulation' = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in resource() method should be set to the same simulation instance.')
-        return LiteResource(*args, **kwargs, sim=sim)
+        return DSLiteResource(*args, **kwargs, sim=sim)
 
-    def priority_resource(self: Any, *args: Any, **kwargs: Any) -> LitePriorityResource:
+    def priority_resource(self: Any, *args: Any, **kwargs: Any) -> DSLitePriorityResource:
         sim: 'DSSimulation' = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in priority_resource() method should be set to the same simulation instance.')
-        return LitePriorityResource(*args, **kwargs, sim=sim)
+        return DSLitePriorityResource(*args, **kwargs, sim=sim)

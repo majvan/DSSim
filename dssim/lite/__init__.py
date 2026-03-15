@@ -1,15 +1,15 @@
-from dssim.lite.components.litequeue import LiteQueue, SimLiteQueueMixin
+from dssim.lite.components.litequeue import DSLiteQueue, SimLiteQueueMixin
 from dssim.lite.components.literesource import (
     DSResourcePreempted,
-    LitePriorityResource,
-    LiteResource,
+    DSLitePriorityResource,
+    DSLiteResource,
     SimLiteResourceMixin,
 )
 from dssim.lite.pubsub import DSLiteCallback, DSLitePub, DSLiteSub
 from dssim.lite.components.litetime import (
-    LiteDelay,
-    LiteLimiter,
-    LiteTimer,
+    DSLiteDelay,
+    DSLiteLimiter,
+    DSLiteTimer,
     SimLiteTimeMixin,
 )
 
@@ -18,13 +18,13 @@ __all__ = [
     'DSLiteCallback',
     'DSLitePub',
     'DSLiteSub',
-    'LiteDelay',
-    'LiteLimiter',
-    'LiteQueue',
-    'LiteTimer',
+    'DSLiteDelay',
+    'DSLiteLimiter',
+    'DSLiteQueue',
+    'DSLiteTimer',
     'SimLiteQueueMixin',
-    'LiteResource',
-    'LitePriorityResource',
+    'DSLiteResource',
+    'DSLitePriorityResource',
     'SimLiteResourceMixin',
     'SimLiteTimeMixin',
     'SimLiteProcessMixin',

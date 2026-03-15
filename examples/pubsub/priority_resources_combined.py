@@ -7,7 +7,7 @@ This demonstrates two phases using check_and_wait + filter circuits:
 1) OR filtering: immediate acquire (waiting time == 0)
 2) AND filtering: blocked acquire (waiting time > 0)
 
-The resources are preemptive PriorityResource instances.
+The resources are preemptive DSPriorityResource instances.
 
 For a nested ownership/preemption example, see priority_resources_nested.py.
 '''

@@ -425,15 +425,15 @@ class TestSimLiteQueueMixin(unittest.TestCase):
     ''' Tests for SimLiteQueueMixin.queue() factory. '''
 
     def test1_queue_returns_lite_queue_instance(self):
-        ''' sim.queue() on LiteLayer2 returns a LiteQueue bound to the sim. '''
-        from dssim.lite.components.litequeue import LiteQueue
+        ''' sim.queue() on LiteLayer2 returns a DSLiteQueue bound to the sim. '''
+        from dssim.lite.components.litequeue import DSLiteQueue
         sim = DSSimulation(layer2=LiteLayer2)
         q = sim.queue()
-        self.assertIsInstance(q, LiteQueue)
+        self.assertIsInstance(q, DSLiteQueue)
         self.assertIs(q.sim, sim)
 
     def test2_queue_passes_capacity(self):
-        ''' Capacity keyword argument is forwarded to LiteQueue. '''
+        ''' Capacity keyword argument is forwarded to DSLiteQueue. '''
         sim = DSSimulation(layer2=LiteLayer2)
         q = sim.queue(capacity=3)
         self.assertEqual(q.capacity, 3)

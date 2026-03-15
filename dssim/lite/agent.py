@@ -27,8 +27,8 @@ from functools import wraps
 from dssim.base import DSComponent, EventType, EventRetType, TimeType, NumericType
 from dssim.pubsub.base import DSAbortException
 from dssim.lite.process import DSLiteProcess
-from dssim.lite.components.litequeue import LiteQueue
-from dssim.lite.components.literesource import LiteResource, LitePriorityResource
+from dssim.lite.components.litequeue import DSLiteQueue
+from dssim.lite.components.literesource import DSLiteResource, DSLitePriorityResource
 
 
 def _as_schedulable(api_func: Callable[..., Any]) -> Callable[..., Generator[Any, Any, Any]]:
@@ -48,17 +48,17 @@ def _as_schedulable(api_func: Callable[..., Any]) -> Callable[..., Generator[Any
 
 
 class AgentLiteQueueMixin:
-    '''Queue helper methods for DSLiteAgent.
+    '''DSQueue helper methods for DSLiteAgent.
 
-    LiteQueue provides generator + nowait APIs only, so async enter/pop are not
+    DSLiteQueue provides generator + nowait APIs only, so async enter/pop are not
     exposed here.
     '''
 
-    def enter_nowait(self: Any, queue: LiteQueue, item: Any = None) -> Optional[Any]:
+    def enter_nowait(self: Any, queue: DSLiteQueue, item: Any = None) -> Optional[Any]:
         item = self if item is None else item
         return queue.put_nowait(item)
 
-    def genter(self: Any, queue: LiteQueue, item: Any = None) -> Generator[EventType, EventType, Any]:
+    def genter(self: Any, queue: DSLiteQueue, item: Any = None) -> Generator[EventType, EventType, Any]:
         item = self if item is None else item
         try:
             retval = yield from queue.gput(item)
@@ -67,10 +67,10 @@ class AgentLiteQueueMixin:
             raise
         return retval
 
-    def pop_nowait(self: Any, queue: LiteQueue) -> Optional[Any]:
+    def pop_nowait(self: Any, queue: DSLiteQueue) -> Optional[Any]:
         return queue.get_nowait()
 
-    def gpop(self: Any, queue: LiteQueue) -> Generator[EventType, EventType, Any]:
+    def gpop(self: Any, queue: DSLiteQueue) -> Generator[EventType, EventType, Any]:
         try:
             retval = yield from queue.gget()
         except DSAbortException:
@@ -80,42 +80,42 @@ class AgentLiteQueueMixin:
 
 
 class AgentLiteResourceMixin:
-    '''Resource helper methods for DSLiteAgent.'''
+    '''DSResource helper methods for DSLiteAgent.'''
 
-    async def get(self: Any, resource: LiteResource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+    async def get(self: Any, resource: DSLiteResource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
         return await resource.get(timeout=timeout, **policy_params)
 
-    def gget(self: Any, resource: LiteResource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, NumericType]:
+    def gget(self: Any, resource: DSLiteResource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, NumericType]:
         return (yield from resource.gget(timeout=timeout, **policy_params))
 
-    async def get_n(self: Any, resource: LiteResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+    async def get_n(self: Any, resource: DSLiteResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
         return await resource.get_n(timeout=timeout, amount=amount, **policy_params)
 
-    def gget_n(self: Any, resource: LiteResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, NumericType]:
+    def gget_n(self: Any, resource: DSLiteResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, NumericType]:
         return (yield from resource.gget_n(timeout=timeout, amount=amount, **policy_params))
 
-    async def put(self: Any, resource: LiteResource, timeout: TimeType = float('inf')) -> NumericType:
+    async def put(self: Any, resource: DSLiteResource, timeout: TimeType = float('inf')) -> NumericType:
         return await resource.put(timeout=timeout)
 
-    def gput(self: Any, resource: LiteResource, timeout: TimeType = float('inf')) -> Generator[EventType, EventType, NumericType]:
+    def gput(self: Any, resource: DSLiteResource, timeout: TimeType = float('inf')) -> Generator[EventType, EventType, NumericType]:
         return (yield from resource.gput(timeout=timeout))
 
-    async def put_n(self: Any, resource: LiteResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+    async def put_n(self: Any, resource: DSLiteResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
         return await resource.put_n(timeout=timeout, amount=amount, **policy_params)
 
-    def gput_n(self: Any, resource: LiteResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, NumericType]:
+    def gput_n(self: Any, resource: DSLiteResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, NumericType]:
         return (yield from resource.gput_n(timeout=timeout, amount=amount, **policy_params))
 
-    def put_nowait(self: Any, resource: LiteResource) -> NumericType:
+    def put_nowait(self: Any, resource: DSLiteResource) -> NumericType:
         return resource.put_nowait()
 
-    def put_n_nowait(self: Any, resource: LiteResource, amount: NumericType = 1) -> NumericType:
+    def put_n_nowait(self: Any, resource: DSLiteResource, amount: NumericType = 1) -> NumericType:
         return resource.put_n_nowait(amount)
 
-    def get_nowait(self: Any, resource: LiteResource, **policy_params: Any) -> NumericType:
+    def get_nowait(self: Any, resource: DSLiteResource, **policy_params: Any) -> NumericType:
         return resource.get_nowait(**policy_params)
 
-    def get_n_nowait(self: Any, resource: LiteResource, amount: NumericType = 1, **policy_params: Any) -> NumericType:
+    def get_n_nowait(self: Any, resource: DSLiteResource, amount: NumericType = 1, **policy_params: Any) -> NumericType:
         return resource.get_n_nowait(amount, **policy_params)
 
 

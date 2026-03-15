@@ -19,7 +19,7 @@ Demonstrates:
 - context-based auto-release (resource.autorelease())
 - manual acquire/release flow without context (still preempted)
 '''
-from dssim import DSSimulation, PriorityResource, DSResourcePreempted
+from dssim import DSSimulation, DSResourcePreempted
 
 
 def t(value):
@@ -28,7 +28,7 @@ def t(value):
 
 def run_with_autorelease_context():
     sim = DSSimulation()
-    machine = PriorityResource(amount=1, capacity=1, preemptive=True, name='machine', sim=sim)
+    machine = sim.priority_resource(amount=1, capacity=1, preemptive=True, name='machine')
     machine_probe = machine.add_stats_probe(name='usage')
     log = []
 
@@ -90,7 +90,7 @@ def run_with_autorelease_context():
 
 def run_without_context_manual_release():
     sim = DSSimulation()
-    machine = PriorityResource(amount=1, capacity=1, preemptive=True, name='machine', sim=sim)
+    machine = sim.priority_resource(amount=1, capacity=1, preemptive=True, name='machine')
     machine_probe = machine.add_stats_probe(name='usage')
     log = []
 

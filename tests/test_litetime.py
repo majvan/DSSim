@@ -18,7 +18,7 @@ import unittest
 
 from dssim.base import DSComponent, ISubscriber, EventType
 from dssim.simulation import DSSimulation, LiteLayer2
-from dssim.lite.components.litetime import LiteDelay, LiteLimiter, LiteTimer
+from dssim.lite.components.litetime import DSLiteDelay, DSLiteLimiter, DSLiteTimer
 
 
 class _Sink(DSComponent, ISubscriber):
@@ -39,9 +39,9 @@ class TestSimLiteTimeMixin(unittest.TestCase):
         t = sim.timer()
         d = sim.delay(2)
         l = sim.limiter(5)
-        self.assertIsInstance(t, LiteTimer)
-        self.assertIsInstance(d, LiteDelay)
-        self.assertIsInstance(l, LiteLimiter)
+        self.assertIsInstance(t, DSLiteTimer)
+        self.assertIsInstance(d, DSLiteDelay)
+        self.assertIsInstance(l, DSLiteLimiter)
         self.assertIs(t.sim, sim)
         self.assertIs(d.sim, sim)
         self.assertIs(l.sim, sim)

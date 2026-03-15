@@ -15,7 +15,7 @@
 LiteLayer2 counterpart of examples/pubsub/agent.py.
 
 Note:
-- LiteQueue does not support prioritized waiter routing.
+- DSLiteQueue does not support prioritized waiter routing.
 - This port keeps the same customer/clerk flow without queue-priority assertions.
 '''
 from dssim import DSSimulation, DSLiteAgent, LiteLayer2, PCLiteGenerator

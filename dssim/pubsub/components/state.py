@@ -26,11 +26,11 @@ if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
-class State(DSStatefulComponent):
-    ''' The State components holds a dictionary of state variables and their values.
+class DSState(DSStatefulComponent):
+    ''' The DSState components holds a dictionary of state variables and their values.
     '''
     def __init__(self, state: Dict = {}, *args: Any, **kwargs: Any) -> None:
-        ''' Init Queue component. No special arguments here. '''
+        ''' Init DSState component. No special arguments here. '''
         super().__init__(*args, **kwargs)
         self.state = state
 
@@ -50,8 +50,8 @@ class State(DSStatefulComponent):
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
 class SimStateMixin:
-    def state(self: Any, *args: Any, **kwargs: Any) -> State:
+    def state(self: Any, *args: Any, **kwargs: Any) -> DSState:
         sim: DSSimulation = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in state() method should be set to the same simulation instance.')
-        return State(*args, **kwargs, sim=sim)
+        return DSState(*args, **kwargs, sim=sim)

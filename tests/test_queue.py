@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Tests for Queue component.
+Tests for DSQueue component.
 '''
 import unittest
-from dssim import DSSimulation, Queue
-from dssim.base_components import DSQueue, DSLifoQueue, DSKeyQueue
+from dssim import DSSimulation, DSQueue
+from dssim.base_components import DSBaseOrder, DSLifoOrder, DSKeyOrder
 
 # ---------------------------------------------------------------------------
 # SimQueueMixin factory
@@ -27,7 +27,7 @@ class TestSimQueueMixin(unittest.TestCase):
     def test1_queue_factory_returns_queue_instance(self):
         sim = DSSimulation()
         q = sim.queue(capacity=3)
-        self.assertIsInstance(q, Queue)
+        self.assertIsInstance(q, DSQueue)
         self.assertIs(q.sim, sim)
         self.assertEqual(q.capacity, 3)
 
@@ -39,7 +39,7 @@ class TestSimQueueMixin(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Queue component tests (requires DSSimulation)
+# DSQueue component tests (requires DSSimulation)
 # ---------------------------------------------------------------------------
 
 class TestQueue(unittest.TestCase):
@@ -50,7 +50,7 @@ class TestQueue(unittest.TestCase):
     # ---- put_nowait / get_nowait -------------------------------------------
 
     def test1_put_nowait_and_get_nowait_basic(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         result = q.put_nowait('item')
         self.assertIsNotNone(result)
         self.assertEqual(len(q), 1)
@@ -59,7 +59,7 @@ class TestQueue(unittest.TestCase):
         self.assertEqual(len(q), 0)
 
     def test2_put_nowait_multiple(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('a', 'b', 'c')
         self.assertEqual(len(q), 3)
         self.assertEqual(q.get_n_nowait(), ['a'])
@@ -67,26 +67,26 @@ class TestQueue(unittest.TestCase):
         self.assertEqual(q.get_n_nowait(), ['c'])
 
     def test3_put_nowait_full_returns_none(self):
-        q = Queue(capacity=2, sim=self.sim)
+        q = DSQueue(capacity=2, sim=self.sim)
         q.put_nowait('a', 'b')
         result = q.put_nowait('c')
         self.assertIsNone(result)
         self.assertEqual(len(q), 2)
 
     def test4_get_nowait_empty_returns_none(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         result = q.get_n_nowait()
         self.assertIsNone(result)
 
     def test5_get_nowait_amount(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('a', 'b', 'c')
         items = q.get_n_nowait(amount=2)
         self.assertEqual(items, ['a', 'b'])
         self.assertEqual(len(q), 1)
 
     def test6_get_nowait_cond_head(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('skip')
         result = q.get_n_nowait(cond=lambda e: e != 'skip')
         self.assertIsNone(result)   # head doesn't pass cond
@@ -96,7 +96,7 @@ class TestQueue(unittest.TestCase):
     # ---- fifo ordering -----------------------------------------------------
 
     def test7_fifo_order(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         for i in range(5):
             q.put_nowait(i)
         for i in range(5):
@@ -105,13 +105,13 @@ class TestQueue(unittest.TestCase):
     # ---- capacity ----------------------------------------------------------
 
     def test8_infinite_capacity_default(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         for i in range(1000):
             self.assertIsNotNone(q.put_nowait(i))
         self.assertEqual(len(q), 1000)
 
     def test9_capacity_enforced(self):
-        q = Queue(capacity=3, sim=self.sim)
+        q = DSQueue(capacity=3, sim=self.sim)
         self.assertIsNotNone(q.put_nowait(1))
         self.assertIsNotNone(q.put_nowait(2))
         self.assertIsNotNone(q.put_nowait(3))
@@ -120,19 +120,19 @@ class TestQueue(unittest.TestCase):
     # ---- sequence protocol -------------------------------------------------
 
     def test10_getitem_setitem(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('x')
         self.assertEqual(q[0], 'x')
         q[0] = 'y'
         self.assertEqual(q[0], 'y')
 
     def test11_iter(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('a', 'b', 'c')
         self.assertEqual(list(q), ['a', 'b', 'c'])
 
     def test12_contains(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('needle')
         self.assertIn('needle', q)
         self.assertNotIn('haystack', q)
@@ -140,19 +140,19 @@ class TestQueue(unittest.TestCase):
     # ---- pop ---------------------------------------------------------------
 
     def test13_pop_head(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('a', 'b', 'c')
         self.assertEqual(q.pop(0), 'a')
         self.assertEqual(list(q), ['b', 'c'])
 
     def test14_pop_middle(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('a', 'b', 'c')
         self.assertEqual(q.pop(1), 'b')
         self.assertEqual(list(q), ['a', 'c'])
 
     def test15_pop_out_of_range(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('a')
         self.assertIsNone(q.pop(5))
         self.assertIs(q.pop(5, 'default'), 'default')
@@ -160,7 +160,7 @@ class TestQueue(unittest.TestCase):
     # ---- remove ------------------------------------------------------------
 
     def test16_remove_exact_item(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         obj = object()
         q.put_nowait(obj)
         q.put_nowait('other')
@@ -169,13 +169,13 @@ class TestQueue(unittest.TestCase):
         self.assertEqual(len(q), 1)
 
     def test17_remove_callable_cond(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait(1, 2, 3, 4)
         q.remove(lambda e: e % 2 == 0)
         self.assertEqual(list(q), [1, 3])
 
     def test18_remove_no_match_is_noop(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('a', 'b')
         q.remove('z')
         self.assertEqual(len(q), 2)
@@ -194,7 +194,7 @@ class TestQueue(unittest.TestCase):
             yield from self.sim.gwait(5)
             q.put_nowait('hello')
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         self.sim.schedule(0, consumer())
         self.sim.schedule(0, producer())
         self.sim.run(20)
@@ -215,7 +215,7 @@ class TestQueue(unittest.TestCase):
             items = q.get_n_nowait()  # free up space
             results.append(('got', self.sim.time, items))
 
-        q = Queue(capacity=1, sim=self.sim)
+        q = DSQueue(capacity=1, sim=self.sim)
         self.sim.schedule(0, producer())
         self.sim.schedule(0, consumer())
         self.sim.run(20)
@@ -237,7 +237,7 @@ class TestQueue(unittest.TestCase):
             yield from self.sim.gwait(2)
             q.put_nowait('wanted')
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         self.sim.schedule(0, consumer())
         self.sim.schedule(0, producer())
         self.sim.run(20)
@@ -258,7 +258,7 @@ class TestQueue(unittest.TestCase):
             items = yield from q.gget_n(timeout=3)
             results.append(items)
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         self.sim.schedule(0, consumer())
         self.sim.run(10)
         self.assertEqual(results, [None])
@@ -272,7 +272,7 @@ class TestQueue(unittest.TestCase):
             retval = yield from q.gput(3, 'second')
             results.append(retval)
 
-        q = Queue(capacity=1, sim=self.sim)
+        q = DSQueue(capacity=1, sim=self.sim)
         self.sim.schedule(0, producer())
         self.sim.run(10)
         self.assertEqual(results, [None])
@@ -291,7 +291,7 @@ class TestQueue(unittest.TestCase):
             q.put_nowait('i2')
             q.put_nowait('i3')
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         self.sim.schedule(0, consumer('c1'))
         self.sim.schedule(0, consumer('c2'))
         self.sim.schedule(0, consumer('c3'))
@@ -302,7 +302,7 @@ class TestQueue(unittest.TestCase):
         for name, t in order:
             self.assertEqual(t, 5)
 
-    # ---- gwait / wait / check_and_gwait / check_and_wait on Queue ----------
+    # ---- gwait / wait / check_and_gwait / check_and_wait on DSQueue ----------
 
     def test25_queue_gwait_membership(self):
         '''gwait wakes when condition passes after a change.'''
@@ -319,7 +319,7 @@ class TestQueue(unittest.TestCase):
             yield from self.sim.gwait(3)
             q.remove(obj)
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         self.sim.schedule(0, actor())
         self.sim.schedule(0, watcher())
         self.sim.run(10)
@@ -337,7 +337,7 @@ class TestQueue(unittest.TestCase):
             yield from self.sim.gwait(4)
             q.put_nowait('wake')
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         self.sim.schedule(0, watcher())
         self.sim.schedule(0, actor())
         self.sim.run(10)
@@ -356,7 +356,7 @@ class TestQueue(unittest.TestCase):
             yield from self.sim.gwait(3)
             q.get_n_nowait()
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         self.sim.schedule(0, watcher())
         self.sim.schedule(0, actor())
         self.sim.run(10)
@@ -375,7 +375,7 @@ class TestQueue(unittest.TestCase):
             await self.sim.wait(4)
             q.put_nowait('async_item')
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         self.sim.schedule(0, consumer())
         self.sim.schedule(0, producer())
         self.sim.run(20)
@@ -383,7 +383,7 @@ class TestQueue(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Queue with DSLifoQueue policy
+# DSQueue with DSLifoOrder policy
 # ---------------------------------------------------------------------------
 
 class TestQueueLifo(unittest.TestCase):
@@ -392,7 +392,7 @@ class TestQueueLifo(unittest.TestCase):
         self.sim = DSSimulation()
 
     def test1_lifo_order_nowait(self):
-        q = Queue(policy=DSLifoQueue(), sim=self.sim)
+        q = DSQueue(policy=DSLifoOrder(), sim=self.sim)
         q.put_nowait('a')
         q.put_nowait('b')
         q.put_nowait('c')
@@ -401,13 +401,13 @@ class TestQueueLifo(unittest.TestCase):
         self.assertEqual(q.get_n_nowait(), ['a'])
 
     def test2_buffer_is_dslifoqueue(self):
-        q = Queue(policy=DSLifoQueue(), sim=self.sim)
-        self.assertIsInstance(q._buffer, DSLifoQueue)
+        q = DSQueue(policy=DSLifoOrder(), sim=self.sim)
+        self.assertIsInstance(q._buffer, DSLifoOrder)
 
     def test3_fifo_is_default(self):
-        q = Queue(sim=self.sim)
-        self.assertIsInstance(q._buffer, DSQueue)
-        self.assertNotIsInstance(q._buffer, DSLifoQueue)
+        q = DSQueue(sim=self.sim)
+        self.assertIsInstance(q._buffer, DSBaseOrder)
+        self.assertNotIsInstance(q._buffer, DSLifoOrder)
 
     def test4_lifo_blocking_gget(self):
         '''LIFO queue gives last-added item to a waiting consumer.'''
@@ -422,7 +422,7 @@ class TestQueueLifo(unittest.TestCase):
             q.put_nowait('first')
             q.put_nowait('second')
 
-        q = Queue(policy=DSLifoQueue(), sim=self.sim)
+        q = DSQueue(policy=DSLifoOrder(), sim=self.sim)
         self.sim.schedule(0, consumer())
         self.sim.schedule(0, producer())
         self.sim.run(10)
@@ -435,7 +435,7 @@ class TestQueueLifo(unittest.TestCase):
 
 class TestQueueSingleItemGet(unittest.TestCase):
     '''
-    Queue.get_nowait() / .gget() / .get() return a single element (not
+    DSQueue.get_nowait() / .gget() / .get() return a single element (not
     wrapped in a list), in contrast to get_n_nowait / gget_n / get_n which
     always return a list.
     '''
@@ -446,7 +446,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
     # ---- get_nowait --------------------------------------------------------
 
     def test1_get_nowait_returns_single_element(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('A')
         result = q.get_nowait()
         self.assertEqual(result, 'A')
@@ -454,32 +454,32 @@ class TestQueueSingleItemGet(unittest.TestCase):
         self.assertEqual(len(q), 0)
 
     def test2_get_nowait_returns_none_when_empty(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         result = q.get_nowait()
         self.assertIsNone(result)
 
     def test3_get_nowait_fifo_order(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('first', 'second', 'third')
         self.assertEqual(q.get_nowait(), 'first')
         self.assertEqual(q.get_nowait(), 'second')
         self.assertEqual(q.get_nowait(), 'third')
 
     def test4_get_nowait_with_passing_cond(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('match')
         result = q.get_nowait(cond=lambda e: e == 'match')
         self.assertEqual(result, 'match')
 
     def test5_get_nowait_with_failing_cond_returns_none(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('item')
         result = q.get_nowait(cond=lambda e: e == 'other')
         self.assertIsNone(result)
         self.assertEqual(len(q), 1)  # item still in queue
 
     def test6_get_nowait_vs_get_n_nowait_return_types(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('a')
         q.put_nowait('b')
         single = q.get_nowait()
@@ -496,7 +496,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
             item = yield from q.gget()
             results.append(item)
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('hello')
         self.sim.schedule(0, consumer())
         self.sim.run(5)
@@ -514,7 +514,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
             yield from self.sim.gwait(5)
             q.put_nowait('deferred')
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         self.sim.schedule(0, consumer())
         self.sim.schedule(0, producer())
         self.sim.run(20)
@@ -527,7 +527,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
             item = yield from q.gget(timeout=3)
             results.append(item)
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         self.sim.schedule(0, consumer())
         self.sim.run(10)
         self.assertEqual(results, [None])
@@ -548,7 +548,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
             q.get_nowait()
             q.put_nowait('wanted')
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         self.sim.schedule(0, consumer())
         self.sim.schedule(0, producer())
         self.sim.run(20)
@@ -566,7 +566,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
             items = yield from q.gget_n()
             results_list.append(items)
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('x')
         q.put_nowait('y')
         self.sim.schedule(0, single_consumer())
@@ -588,7 +588,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
             q.put_nowait('i2')
             q.put_nowait('i3')
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         self.sim.schedule(0, consumer('c1'))
         self.sim.schedule(0, consumer('c2'))
         self.sim.schedule(0, consumer('c3'))
@@ -607,7 +607,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
             item = await q.get()
             results.append(item)
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         q.put_nowait('async_item')
         self.sim.schedule(0, consumer())
         self.sim.run(5)
@@ -625,7 +625,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
             await self.sim.wait(4)
             q.put_nowait('late')
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         self.sim.schedule(0, consumer())
         self.sim.schedule(0, producer())
         self.sim.run(20)
@@ -638,7 +638,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
             item = await q.get(timeout=2)
             results.append(item)
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         self.sim.schedule(0, consumer())
         self.sim.run(10)
         self.assertEqual(results, [None])
@@ -657,7 +657,7 @@ class TestQueueSingleItemGet(unittest.TestCase):
             q.get_nowait()        # remove 'string' so int becomes head
             q.put_nowait(42)
 
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         self.sim.schedule(0, consumer())
         self.sim.schedule(0, producer())
         self.sim.run(20)
@@ -665,14 +665,14 @@ class TestQueueSingleItemGet(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Queue with DSKeyQueue policy (priority queue integration tests)
+# DSQueue with DSKeyOrder policy (priority queue integration tests)
 # ---------------------------------------------------------------------------
 
 class TestQueuePriority(unittest.TestCase):
-    '''Integration tests for Queue backed by DSKeyQueue.
+    '''Integration tests for DSQueue backed by DSKeyOrder.
 
-    These tests verify that the priority ordering provided by DSKeyQueue is
-    preserved end-to-end through the Queue simulation component.
+    These tests verify that the priority ordering provided by DSKeyOrder is
+    preserved end-to-end through the DSQueue simulation component.
     '''
 
     def setUp(self):
@@ -681,14 +681,14 @@ class TestQueuePriority(unittest.TestCase):
     # ---- construction ------------------------------------------------------
 
     def test1_buffer_is_dskeyqueue(self):
-        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
-        self.assertIsInstance(q._buffer, DSKeyQueue)
+        q = DSQueue(policy=DSKeyOrder(key=lambda x: x), sim=self.sim)
+        self.assertIsInstance(q._buffer, DSKeyOrder)
 
     # ---- nowait API --------------------------------------------------------
 
     def test2_get_nowait_priority_order(self):
         '''Items are dequeued in ascending key order regardless of insertion order.'''
-        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        q = DSQueue(policy=DSKeyOrder(key=lambda x: x), sim=self.sim)
         q.put_nowait(5)
         q.put_nowait(1)
         q.put_nowait(3)
@@ -698,7 +698,7 @@ class TestQueuePriority(unittest.TestCase):
 
     def test3_get_nowait_single_priority_order(self):
         '''get_nowait (single-item) respects priority.'''
-        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        q = DSQueue(policy=DSKeyOrder(key=lambda x: x), sim=self.sim)
         q.put_nowait(10)
         q.put_nowait(2)
         q.put_nowait(7)
@@ -708,7 +708,7 @@ class TestQueuePriority(unittest.TestCase):
 
     def test4_max_priority_negated_key(self):
         '''Negating the key turns min-heap into max-heap.'''
-        q = Queue(policy=DSKeyQueue(key=lambda x: -x), sim=self.sim)
+        q = DSQueue(policy=DSKeyOrder(key=lambda x: -x), sim=self.sim)
         for v in [3, 1, 4, 1, 5]:
             q.put_nowait(v)
         order = [q.get_n_nowait()[0] for _ in range(5)]
@@ -716,7 +716,7 @@ class TestQueuePriority(unittest.TestCase):
 
     def test5_equal_keys_fifo_order(self):
         '''Items with equal keys come out in FIFO (insertion) order.'''
-        q = Queue(policy=DSKeyQueue(key=lambda x: x[0]), sim=self.sim)
+        q = DSQueue(policy=DSKeyOrder(key=lambda x: x[0]), sim=self.sim)
         q.put_nowait((1, 'first'))
         q.put_nowait((1, 'second'))
         q.put_nowait((1, 'third'))
@@ -731,7 +731,7 @@ class TestQueuePriority(unittest.TestCase):
                 self.name = name
                 self.prio = prio
 
-        q = Queue(policy=DSKeyQueue(key=lambda j: j.prio), sim=self.sim)
+        q = DSQueue(policy=DSKeyOrder(key=lambda j: j.prio), sim=self.sim)
         q.put_nowait(Job('low', 100))
         q.put_nowait(Job('high', 1))
         q.put_nowait(Job('mid', 50))
@@ -741,7 +741,7 @@ class TestQueuePriority(unittest.TestCase):
 
     def test7_capacity_enforced(self):
         '''Capacity limit applies to priority queue as well.'''
-        q = Queue(capacity=2, policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        q = DSQueue(capacity=2, policy=DSKeyOrder(key=lambda x: x), sim=self.sim)
         self.assertIsNotNone(q.put_nowait(3))
         self.assertIsNotNone(q.put_nowait(1))
         self.assertIsNone(q.put_nowait(2))
@@ -750,8 +750,8 @@ class TestQueuePriority(unittest.TestCase):
     # ---- pop / remove ------------------------------------------------------
 
     def test8_pop_at_sorted_index(self):
-        '''Queue.pop(index) removes item at sorted-priority index.'''
-        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        '''DSQueue.pop(index) removes item at sorted-priority index.'''
+        q = DSQueue(policy=DSKeyOrder(key=lambda x: x), sim=self.sim)
         q.put_nowait(30)
         q.put_nowait(10)
         q.put_nowait(20)
@@ -761,8 +761,8 @@ class TestQueuePriority(unittest.TestCase):
         self.assertEqual(q.get_n_nowait(), [30])
 
     def test9_remove_exact_item(self):
-        '''Queue.remove() by exact object works with priority buffer.'''
-        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        '''DSQueue.remove() by exact object works with priority buffer.'''
+        q = DSQueue(policy=DSKeyOrder(key=lambda x: x), sim=self.sim)
         q.put_nowait(3)
         q.put_nowait(1)
         q.put_nowait(2)
@@ -772,8 +772,8 @@ class TestQueuePriority(unittest.TestCase):
         self.assertEqual(q.get_n_nowait(), [3])
 
     def test10_remove_callable_cond(self):
-        '''Queue.remove(callable) removes matching items from priority buffer.'''
-        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        '''DSQueue.remove(callable) removes matching items from priority buffer.'''
+        q = DSQueue(policy=DSKeyOrder(key=lambda x: x), sim=self.sim)
         for v in [1, 2, 3, 4, 5]:
             q.put_nowait(v)
         q.remove(lambda e: e % 2 == 0)
@@ -796,7 +796,7 @@ class TestQueuePriority(unittest.TestCase):
             q.put_nowait(3)
             q.put_nowait(6)
 
-        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        q = DSQueue(policy=DSKeyOrder(key=lambda x: x), sim=self.sim)
         self.sim.schedule(0, consumer())
         self.sim.schedule(0, producer())
         self.sim.run(20)
@@ -816,7 +816,7 @@ class TestQueuePriority(unittest.TestCase):
             q.put_nowait(10)
             q.put_nowait(30)
 
-        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        q = DSQueue(policy=DSKeyOrder(key=lambda x: x), sim=self.sim)
         self.sim.schedule(0, consumer())
         self.sim.schedule(0, producer())
         self.sim.run(20)
@@ -836,7 +836,7 @@ class TestQueuePriority(unittest.TestCase):
             q.put_nowait(10)
             q.put_nowait(20)
 
-        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        q = DSQueue(policy=DSKeyOrder(key=lambda x: x), sim=self.sim)
         self.sim.schedule(0, consumer('c1'))
         self.sim.schedule(0, consumer('c2'))
         self.sim.schedule(0, consumer('c3'))
@@ -855,7 +855,7 @@ class TestQueuePriority(unittest.TestCase):
             item = yield from q.gget(timeout=3)
             results.append(item)
 
-        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        q = DSQueue(policy=DSKeyOrder(key=lambda x: x), sim=self.sim)
         self.sim.schedule(0, consumer())
         self.sim.run(10)
         self.assertEqual(results, [None])
@@ -873,7 +873,7 @@ class TestQueuePriority(unittest.TestCase):
             yield from self.sim.gwait(4)
             q.get_nowait()           # free one slot
 
-        q = Queue(capacity=1, policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        q = DSQueue(capacity=1, policy=DSKeyOrder(key=lambda x: x), sim=self.sim)
         self.sim.schedule(0, producer())
         self.sim.schedule(0, consumer())
         self.sim.run(20)
@@ -896,7 +896,7 @@ class TestQueuePriority(unittest.TestCase):
             q.put_nowait(1)
             q.put_nowait(42)
 
-        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        q = DSQueue(policy=DSKeyOrder(key=lambda x: x), sim=self.sim)
         self.sim.schedule(0, consumer())
         self.sim.schedule(0, producer())
         self.sim.run(20)
@@ -916,7 +916,7 @@ class TestQueuePriority(unittest.TestCase):
             q.put_nowait(2)
             q.put_nowait(8)
 
-        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        q = DSQueue(policy=DSKeyOrder(key=lambda x: x), sim=self.sim)
         self.sim.schedule(0, consumer())
         self.sim.schedule(0, producer())
         self.sim.run(20)
@@ -926,7 +926,7 @@ class TestQueuePriority(unittest.TestCase):
 
     def test18_interleaved_puts_maintain_priority(self):
         '''Priority ordering holds across interleaved put_nowait calls.'''
-        q = Queue(policy=DSKeyQueue(key=lambda x: x), sim=self.sim)
+        q = DSQueue(policy=DSKeyOrder(key=lambda x: x), sim=self.sim)
         q.put_nowait(7)
         q.put_nowait(2)
         self.assertEqual(q.get_nowait(), 2)
@@ -941,14 +941,14 @@ class TestQueueStatsProbe(unittest.TestCase):
         self.sim = DSSimulation()
 
     def test0_stats_probe_name(self):
-        q = Queue(capacity=1, name='q0', sim=self.sim)
+        q = DSQueue(capacity=1, name='q0', sim=self.sim)
         probe = q.add_stats_probe()
         self.assertEqual(probe.name, 'q0.stats_probe')
         probe2 = q.add_stats_probe(name='ops')
         self.assertEqual(probe2.name, 'q0.ops')
 
     def test1_stats_probe_counts(self):
-        q = Queue(capacity=1, sim=self.sim)
+        q = DSQueue(capacity=1, sim=self.sim)
         probe = q.add_stats_probe()
 
         def actor():
@@ -968,7 +968,7 @@ class TestQueueStatsProbe(unittest.TestCase):
         self.assertEqual(stats['current_len'], 0)
 
     def test2_stats_probe_time_weighted_length(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         probe = q.add_stats_probe()
 
         def actor():
@@ -990,7 +990,7 @@ class TestQueueStatsProbe(unittest.TestCase):
         self.assertEqual(stats['max_len'], 2)
 
     def test3_stats_probe_reset(self):
-        q = Queue(sim=self.sim)
+        q = DSQueue(sim=self.sim)
         probe = q.add_stats_probe()
         q.put_nowait('x')
         self.sim.run(5)

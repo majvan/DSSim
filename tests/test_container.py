@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Tests for the Container component.
+Tests for the DSContainer component.
 Covers put_nowait/get_nowait, blocking get/put, capacity, specific-object
 retrieval, all_or_nothing mode, and tx_nempty / tx_changed signal routing.
 '''
 import unittest
 from dssim import DSSimulation
-from dssim.pubsub.components.container import Container
+from dssim.pubsub.components.container import DSContainer
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +31,7 @@ class TestContainerNowait(unittest.TestCase):
         self.sim = DSSimulation()
 
     def _make(self, capacity=None):
-        return Container(capacity=capacity, sim=self.sim)
+        return DSContainer(capacity=capacity, sim=self.sim)
 
     # ---- init state --------------------------------------------------------
 
@@ -146,7 +146,7 @@ class TestContainerBlockingGet(unittest.TestCase):
         self.sim = DSSimulation()
 
     def _make(self, capacity=None):
-        return Container(capacity=capacity, sim=self.sim)
+        return DSContainer(capacity=capacity, sim=self.sim)
 
     # ---- gget any object ---------------------------------------------------
 
@@ -310,7 +310,7 @@ class TestContainerBlockingPut(unittest.TestCase):
         self.sim = DSSimulation()
 
     def _make(self, capacity=None):
-        return Container(capacity=capacity, sim=self.sim)
+        return DSContainer(capacity=capacity, sim=self.sim)
 
     def test1_gput_blocks_until_space_available(self):
         results = []
@@ -378,7 +378,7 @@ class TestContainerSignalRouting(unittest.TestCase):
         self.sim = DSSimulation()
 
     def _make(self, capacity=None):
-        return Container(capacity=capacity, sim=self.sim)
+        return DSContainer(capacity=capacity, sim=self.sim)
 
     def test1_any_getter_woken_by_put_nowait(self):
         '''put_nowait fires tx_nempty and wakes a waiting any-object getter.'''
@@ -497,12 +497,12 @@ class TestContainerSignalRouting(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# gwait / wait / check_and_gwait / check_and_wait on Container
+# gwait / wait / check_and_gwait / check_and_wait on DSContainer
 # ---------------------------------------------------------------------------
 
 class TestContainerWaitMethods(unittest.TestCase):
     '''
-    Verify that the four DSStatefulComponent wait-method overrides in Container
+    Verify that the four DSStatefulComponent wait-method overrides in DSContainer
     (gwait, wait, check_and_gwait, check_and_wait) correctly subscribe to
     tx_changed and wake on put/get operations.
     '''
@@ -511,7 +511,7 @@ class TestContainerWaitMethods(unittest.TestCase):
         self.sim = DSSimulation()
 
     def _make(self, capacity=None):
-        return Container(capacity=capacity, sim=self.sim)
+        return DSContainer(capacity=capacity, sim=self.sim)
 
     # ---- gwait -------------------------------------------------------------
 
@@ -627,7 +627,7 @@ class TestContainerWaitMethods(unittest.TestCase):
 
 class TestContainerSingleItemGet(unittest.TestCase):
     '''
-    Container.get_nowait() / .gget() / .get() return a single element (not
+    DSContainer.get_nowait() / .gget() / .get() return a single element (not
     wrapped in a list), in contrast to get_n_nowait / gget_n / get_n which
     always return a list.
     '''
@@ -636,7 +636,7 @@ class TestContainerSingleItemGet(unittest.TestCase):
         self.sim = DSSimulation()
 
     def _make(self, capacity=None):
-        return Container(capacity=capacity, sim=self.sim)
+        return DSContainer(capacity=capacity, sim=self.sim)
 
     # ---- get_nowait --------------------------------------------------------
 
@@ -657,7 +657,7 @@ class TestContainerSingleItemGet(unittest.TestCase):
         c = self._make()
         c.put_nowait('A', 'B', 'C')
         results = [c.get_nowait() for _ in range(3)]
-        # Container is an unordered set; just verify we got three distinct items
+        # DSContainer is an unordered set; just verify we got three distinct items
         self.assertEqual(sorted(results), ['A', 'B', 'C'])
         self.assertEqual(len(c), 0)
 

@@ -14,7 +14,7 @@
 '''
 The example is showing a code parity with example from salabim project
 '''
-from dssim import DSSimulation, DSAgent, State
+from dssim import DSSimulation, DSAgent
 import random
 
 
@@ -45,8 +45,8 @@ sim = DSSimulation()
 CustomerGenerator()
 for i in range(3):
     Clerk()
-waitingline = []  # we could use Queue as well, but it does not make a sense because we do not use it for signaling
-worktodo = State({'waiting on line': False}, name="worktodo")
+waitingline = []  # we could use DSQueue as well, but it does not make a sense because we do not use it for signaling
+worktodo = sim.state({'waiting on line': False}, name="worktodo")
 time, events = sim.run(50000)
 # waitingline.print_histograms()
 # worktodo.print_histograms()

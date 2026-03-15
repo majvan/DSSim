@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Delay component example (lite layer).
+DSDelay component example (lite layer).
 '''
 from dssim import DSSimulation, LiteLayer2
 

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Timer component example (pubsub layer).
+DSTimer component example (pubsub layer).
 '''
 from dssim import DSSimulation
 

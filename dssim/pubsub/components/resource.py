@@ -18,7 +18,7 @@ in the pool, just an abstract pool level information (e.g. amount of water in a 
 '''
 from typing import Any, Generator, TYPE_CHECKING, Optional
 from dssim.base import NumericType, TimeType, EventType, DSComponentSingleton
-from dssim.base_components import DSResource, DSPriorityResource, DSPriorityPreemption
+from dssim.base_components import _ResourceBookkeeper, DSBasePriorityResource, DSPriorityPreemption
 from dssim.pubsub.components.base import DSStatefulComponent
 from dssim.pubsub.components.resource_probes import ResourceProbeMixin
 from dssim.pubsub.pubsub import DSPub, NotifierPriority
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 class DSResourcePreempted(Exception):
     '''Raised when a resource holder is preempted by a higher-priority requester.'''
 
-    def __init__(self, resource: "PriorityResource", by: Any, owner: Any, priority: int, amount: NumericType) -> None:
+    def __init__(self, resource: "DSPriorityResource", by: Any, owner: Any, priority: int, amount: NumericType) -> None:
         super().__init__(f'{owner} was preempted on {resource} by {by} (priority={priority}, amount={amount}).')
         self.resource = resource
         self.by = by
@@ -41,19 +41,19 @@ class DSResourcePreempted(Exception):
         self.amount = amount
 
 
-class Resource(ResourceProbeMixin, DSStatefulComponent):
-    '''Resource models a pool of virtual resource amount.
+class DSResource(ResourceProbeMixin, DSStatefulComponent):
+    '''DSResource models a pool of virtual resource amount.
 
     * ``get`` consumes amount from the pool.
     * ``put`` adds amount to the pool.
 
-    Unlike LiteResource, wakeups are pubsub-driven via ``tx_nempty``/``tx_nfull``.
+    Unlike DSLiteResource, wakeups are pubsub-driven via ``tx_nempty``/``tx_nfull``.
     '''
 
     class _TakeCond(ICondition, CallableConditionMixin):
         '''Condition helper that tries immediate resource acquisition on check().'''
 
-        def __init__(self, resource: "Resource", amount: NumericType = 1, owner: Any = None, **policy_params: Any) -> None:
+        def __init__(self, resource: "DSResource", amount: NumericType = 1, owner: Any = None, **policy_params: Any) -> None:
             self.resource = resource
             self.amount = amount
             self.owner = resource.sim.pid if owner is None else owner
@@ -86,12 +86,12 @@ class Resource(ResourceProbeMixin, DSStatefulComponent):
         nfull_ep: Optional[DSPub] = None,
         **kwargs: Any,
     ) -> None:
-        ''' Init Resource component.
+        ''' Init DSResource component.
         Capacity is max. capacity the resource can handle.
         Amount is initial amount of the resources.
         '''
         super().__init__(*args, **kwargs)
-        self._resource = DSResource(amount=amount, capacity=capacity, owner=self)
+        self._resource = _ResourceBookkeeper(amount=amount, capacity=capacity, owner=self)
         self.tx_nempty = nempty_ep if nempty_ep is not None else self.sim.publisher(name=self.name + '.tx_nempty')
         self.tx_nfull = nfull_ep if nfull_ep is not None else self.sim.publisher(name=self.name + '.tx_nfull')
 
@@ -252,8 +252,8 @@ class Resource(ResourceProbeMixin, DSStatefulComponent):
         return retval
 
 
-class PriorityResource(Resource):
-    '''Resource variant with priority-ordered waiter wakeups.
+class DSPriorityResource(DSResource):
+    '''DSResource variant with priority-ordered waiter wakeups.
 
     Lower numeric priority value is served first. Same priority keeps notifier
     policy order. With ``preempt=True``, higher priority requesters may reclaim
@@ -274,7 +274,7 @@ class PriorityResource(Resource):
     ) -> None:
         sim = kwargs.get('sim', DSComponentSingleton.sim_singleton)
         if sim is None:
-            raise ValueError('PriorityResource requires a simulation instance (sim=...).')
+            raise ValueError('DSPriorityResource requires a simulation instance (sim=...).')
         if change_ep is None:
             change_ep = sim.publisher(notifier=NotifierPriority)
         if nempty_ep is None:
@@ -291,21 +291,21 @@ class PriorityResource(Resource):
             **kwargs,
         )
         self.preemptive = preemptive
-        self._priority = DSPriorityResource()
+        self._priority = DSBasePriorityResource()
         self._preemption = DSPriorityPreemption(self._priority)
         self.preempt_count = 0
         self.preempted_amount: NumericType = 0
-        # Resource-specific exception subtype allows clear nested catches:
+        # DSResource-specific exception subtype allows clear nested catches:
         # except r1.Preempted / except r0.Preempted.
         self.Preempted = type(f'Preempted_{id(self):x}', (DSResourcePreempted,), {'__module__': __name__})
 
     class _HoldContext:
-        def __init__(self, resource: "PriorityResource") -> None:
+        def __init__(self, resource: "DSPriorityResource") -> None:
             self.resource = resource
             self.owner = None
             self._held_before: NumericType = 0
 
-        def __enter__(self) -> "PriorityResource._HoldContext":
+        def __enter__(self) -> "DSPriorityResource._HoldContext":
             self.owner = self.resource.sim.pid
             self._held_before = self.resource._held_amount(self.owner)
             return self
@@ -412,7 +412,7 @@ class PriorityResource(Resource):
         if remaining <= 0:
             return accepted
 
-        # Finally allow explicit external top-up behavior of Resource.
+        # Finally allow explicit external top-up behavior of DSResource.
         accepted += super().put_n_nowait(remaining)
         return accepted
 
@@ -462,9 +462,9 @@ class PriorityResource(Resource):
         '''
         return self._HoldContext(self)
 
-class Mutex(Resource):
+class DSMutex(DSResource):
     class _OpenContext:
-        def __init__(self, mutex: "Mutex", timeout: TimeType, **policy_params: Any) -> None:
+        def __init__(self, mutex: "DSMutex", timeout: TimeType, **policy_params: Any) -> None:
             self.mutex = mutex
             self.timeout = timeout
             self.policy_params = policy_params
@@ -480,7 +480,7 @@ class Mutex(Resource):
             if self.event and self.mutex.last_owner == self.owner:
                 self.mutex.release()
 
-        def __enter__(self) -> "Mutex._OpenContext":
+        def __enter__(self) -> "DSMutex._OpenContext":
             # Sync context cannot await lock itself; caller may call await cm.lock().
             self.owner = self.mutex.sim.pid
             return self
@@ -534,48 +534,48 @@ class Mutex(Resource):
 
 # In the following, self is in fact of type DSAgent, but PyLance makes troubles with variable types
 class ResourceMixin:
-    async def get(self: Any, resource: Resource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+    async def get(self: Any, resource: DSResource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
         return await resource.get(timeout, **policy_params)
 
-    def gget(self: Any, resource: Resource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+    def gget(self: Any, resource: DSResource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
         return (yield from resource.gget(timeout, **policy_params))
 
-    async def get_n(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+    async def get_n(self: Any, resource: DSResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
         return await resource.get_n(timeout, amount, **policy_params)
 
-    def gget_n(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+    def gget_n(self: Any, resource: DSResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
         return (yield from resource.gget_n(timeout, amount, **policy_params))
 
-    async def put(self: Any, resource: Resource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+    async def put(self: Any, resource: DSResource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
         return await resource.put(timeout, **policy_params)
 
-    def gput(self: Any, resource: Resource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+    def gput(self: Any, resource: DSResource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
         return (yield from resource.gput(timeout, **policy_params))
 
-    async def put_n(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
+    async def put_n(self: Any, resource: DSResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
         return await resource.put_n(timeout, amount, **policy_params)
 
-    def gput_n(self: Any, resource: Resource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
+    def gput_n(self: Any, resource: DSResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
         return (yield from resource.gput_n(timeout, amount, **policy_params))
 
-    def put_nowait(self: Any, resource: Resource) -> NumericType:
+    def put_nowait(self: Any, resource: DSResource) -> NumericType:
         return resource.put_nowait()
 
-    def put_n_nowait(self: Any, resource: Resource, amount: NumericType = 1) -> NumericType:
+    def put_n_nowait(self: Any, resource: DSResource, amount: NumericType = 1) -> NumericType:
         return resource.put_n_nowait(amount)
 
 
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
 class SimResourceMixin:
-    def resource(self: Any, *args: Any, **kwargs: Any) -> Resource:
+    def resource(self: Any, *args: Any, **kwargs: Any) -> DSResource:
         sim: DSSimulation = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in resource() method should be set to the same simulation instance.')
-        return Resource(*args, **kwargs, sim=sim)
+        return DSResource(*args, **kwargs, sim=sim)
 
-    def priority_resource(self: Any, *args: Any, **kwargs: Any) -> PriorityResource:
+    def priority_resource(self: Any, *args: Any, **kwargs: Any) -> DSPriorityResource:
         sim: DSSimulation = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in priority_resource() method should be set to the same simulation instance.')
-        return PriorityResource(*args, **kwargs, sim=sim)
+        return DSPriorityResource(*args, **kwargs, sim=sim)

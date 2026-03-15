@@ -27,7 +27,7 @@ the youngest prince to become king.
 This is demo of the trigger/waitfor mechanism,
 just to allow one waiter to be honored.
 """
-from dssim import DSSimulation, Mutex, DSAgent
+from dssim import DSSimulation, DSMutex, DSAgent
 import random
 
 
@@ -59,7 +59,7 @@ class Prince(DSAgent):
 sim = DSSimulation()
 lastkingdied = sim.time
 kings = []
-kingdom = Mutex(name='kingdom')  # we do not need State for this, all we need is simple notification routing
+kingdom = DSMutex(name='kingdom')  # we do not need DSState for this, all we need is simple notification routing
 PrinceGenerator()
 
 sim.run(5000)

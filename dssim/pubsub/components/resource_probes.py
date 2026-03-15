@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Resource probes implemented via pubsub endpoint observation (PRE phase).
+DSResource probes implemented via pubsub endpoint observation (PRE phase).
 
-This module intentionally keeps resource probing logic out of Resource core methods.
+This module intentionally keeps resource probing logic out of DSResource core methods.
 '''
 from __future__ import annotations
 
@@ -24,12 +24,12 @@ from dssim.base import DSComponent
 from dssim.pubsub.pubsub import DSPub, DSSub
 
 if TYPE_CHECKING:
-    from dssim.pubsub.components.resource import Resource
+    from dssim.pubsub.components.resource import DSResource
     from dssim.simulation import DSSimulation
 
 
 class ResourceStatsProbe(DSSub):
-    '''Resource amount/flow probe using pubsub endpoint observation.
+    '''DSResource amount/flow probe using pubsub endpoint observation.
 
     Scope: tracks user-facing resource activity (put/get operation counts and
     amount over time) from resource endpoints.
@@ -42,7 +42,7 @@ class ResourceStatsProbe(DSSub):
     def __init__(self, enabled: bool = True, name: str = 'stats_probe', sim: Optional['DSSimulation'] = None) -> None:
         super().__init__(name=name, sim=sim)
         self.enabled = enabled
-        self._resource: Optional['Resource'] = None
+        self._resource: Optional['DSResource'] = None
         self._start_time: float = 0.0
         self._last_time: float = 0.0
         self._last_amount: float = 0.0
@@ -56,7 +56,7 @@ class ResourceStatsProbe(DSSub):
         self.max_amount: float = 0.0
         self.min_amount: float = 0.0
 
-    def attach(self, resource: 'Resource') -> None:
+    def attach(self, resource: 'DSResource') -> None:
         self._resource = resource
 
         phase = DSPub.Phase
@@ -177,9 +177,9 @@ class ResourceStatsProbe(DSSub):
 
 
 class ResourceProbeMixin:
-    '''Resource probe extension mixin.
+    '''DSResource probe extension mixin.
 
-    Resource core logic stays probe-agnostic; probes observe resource publishers.
+    DSResource core logic stays probe-agnostic; probes observe resource publishers.
     '''
 
     def add_probe(self, probe: Any, name: Optional[str] = None) -> Any:

@@ -24,7 +24,7 @@ The default values set in the code are as follows:
         From level n to level n: load_n_n = 100
         From level n to level 0: load_n_0 = 100
 """
-from dssim import DSSimulation, DSAgent, Queue
+from dssim import DSSimulation, DSAgent
 import random
 
 
@@ -84,7 +84,7 @@ class Car(DSAgent):
         self.capacity = capacity
         self.direction = still
         self.floor = floors[0]
-        self.visitors = Queue(name=self.name+".visitors in car")
+        self.visitors = sim.queue(name=self.name+".visitors in car")
         self.visitors_probe = self.visitors.add_stats_probe(name='users')
 
     def process(self):
@@ -159,7 +159,7 @@ class Car(DSAgent):
 class Floor:
     def __init__(self, n):
         self.n = n
-        self.visitors = Queue(name=f"visitors_{n}")
+        self.visitors = sim.queue(name=f"visitors_{n}")
         self.visitors_probe = self.visitors.add_stats_probe(name='users')
 
     def count_in_direction(self, dir):

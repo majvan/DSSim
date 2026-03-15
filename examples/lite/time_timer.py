@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Timer component example (lite layer).
+DSTimer component example (lite layer).
 '''
 from dssim import DSSimulation, LiteLayer2
 

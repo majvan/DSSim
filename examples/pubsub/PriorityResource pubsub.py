@@ -17,7 +17,7 @@ DSSim-only parity example for priority resource semantics.
 Demo 1: non-preemptive priority waiter ordering.
 Demo 2: preemptive acquisition with visible interruption events.
 '''
-from dssim import DSSimulation, PriorityResource, DSResourcePreempted
+from dssim import DSSimulation, DSResourcePreempted
 
 
 NON_PREEMPTIVE_JOBS = [
@@ -43,7 +43,7 @@ def tstamp(value):
 
 def run_dssim_non_preemptive():
     sim = DSSimulation()
-    res = PriorityResource(amount=1, capacity=1, preemptive=False, name='clerks', sim=sim)
+    res = sim.priority_resource(amount=1, capacity=1, preemptive=False, name='clerks')
     res_probe = res.add_stats_probe(name='usage')
     starts = []
 
@@ -77,7 +77,7 @@ def run_dssim_non_preemptive():
 
 def run_dssim_preemptive():
     sim = DSSimulation()
-    resource = PriorityResource(amount=1, capacity=1, preemptive=True, name='machine', sim=sim)
+    resource = sim.priority_resource(amount=1, capacity=1, preemptive=True, name='machine')
     resource_probe = resource.add_stats_probe(name='usage')
     log = []
 
@@ -119,7 +119,7 @@ def run_dssim_preemptive():
 
 
 if __name__ == '__main__':
-    print('Demo 1: PriorityResource (non-preemptive) — DSSim')
+    print('Demo 1: DSPriorityResource (non-preemptive) — DSSim')
     dssim_starts = run_dssim_non_preemptive()
     print('DSSim starts:', dssim_starts)
     assert dssim_starts == [('low', 0), ('high', 4), ('mid', 5)]

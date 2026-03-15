@@ -13,9 +13,9 @@
 # limitations under the License.
 '''
 Time-oriented pubsub components:
-  - Delay
-  - Limiter / IntegralLimiter
-  - Timer
+  - DSDelay
+  - DSLimiter / DSIntegralLimiter
+  - DSTimer
 '''
 from collections import deque
 from enum import Enum
@@ -27,8 +27,8 @@ if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
-class Delay(DSComponent):
-    '''Delay component that forwards each event after a fixed delay.'''
+class DSDelay(DSComponent):
+    '''DSDelay component that forwards each event after a fixed delay.'''
 
     def __init__(self, delay: float, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -45,8 +45,8 @@ class Delay(DSComponent):
         self.sim.schedule_event(self.delay, event, self.tx)
 
 
-class IntegralLimiter(DSComponent):
-    '''Limiter which passes events with max. limited throughput.
+class DSIntegralLimiter(DSComponent):
+    '''DSLimiter which passes events with max. limited throughput.
     The limiter informs with constant frequency how many events were sent since last report.
     '''
 
@@ -89,8 +89,8 @@ class IntegralLimiter(DSComponent):
                 self.sim.signal(self.buffer.popleft(), self.tx)
 
 
-class Limiter(DSComponent):
-    '''Limiter which passes events with max. limited throughput.
+class DSLimiter(DSComponent):
+    '''DSLimiter which passes events with max. limited throughput.
     The limiter informs with variable frequency (depending on throughput) about constant
     number of event passed.
     '''
@@ -154,7 +154,7 @@ class Limiter(DSComponent):
                 next_send_at = last_sent_at + self.report_period
 
 
-class Timer(DSComponent):
+class DSTimer(DSComponent):
     '''Periodic clock component with start/stop/pause/resume control.'''
 
     class Status(Enum):
@@ -166,7 +166,7 @@ class Timer(DSComponent):
         super().__init__(**kwargs)
         self.period = period
         self.counter: float = self._normalize_repeats(repeats)
-        self.status: Timer.Status = Timer.Status.STOPPED
+        self.status: DSTimer.Status = DSTimer.Status.STOPPED
         self._remaining = self.period
         self._tick_nr = 0
         self._restart_cycle = False
@@ -186,20 +186,20 @@ class Timer(DSComponent):
         self.counter -= 1
         self.tx.signal_kw(tick=self._tick_nr)
         if self.counter <= 0:
-            self.status = Timer.Status.STOPPED
+            self.status = DSTimer.Status.STOPPED
             self._remaining = self.period
         else:
             self._remaining = self.period
 
     async def process(self) -> EventType:
-        '''Timer state machine.'''
+        '''DSTimer state machine.'''
         while True:
-            if self.status is Timer.Status.STOPPED:
+            if self.status is DSTimer.Status.STOPPED:
                 await self.sim.wait()
                 self._remaining = self.period
                 continue
 
-            if self.status is Timer.Status.PAUSED:
+            if self.status is DSTimer.Status.PAUSED:
                 await self.sim.wait()
                 continue
 
@@ -214,39 +214,39 @@ class Timer(DSComponent):
                 self._emit_tick()
                 continue
 
-            if self.status is Timer.Status.STOPPED:
+            if self.status is DSTimer.Status.STOPPED:
                 self._remaining = self.period
             else:
                 elapsed = self.sim.time - wait_started_at
                 self._remaining = max(self._remaining - elapsed, 0)
 
-    def start(self, period: Optional[float] = None, repeats: Optional[int] = None) -> "Timer":
+    def start(self, period: Optional[float] = None, repeats: Optional[int] = None) -> "DSTimer":
         '''Start or restart timer ticking.'''
         if period is not None:
             self.period = period
         self.counter = self._normalize_repeats(repeats)
-        self.status = Timer.Status.RUNNING
+        self.status = DSTimer.Status.RUNNING
         self._restart_cycle = True
         self._wake_process()
         return self
 
-    def stop(self, event: Optional[EventType] = None) -> "Timer":
+    def stop(self, event: Optional[EventType] = None) -> "DSTimer":
         '''Stop timer ticking and reset remaining period.'''
-        self.status = Timer.Status.STOPPED
+        self.status = DSTimer.Status.STOPPED
         self._remaining = self.period
         self._restart_cycle = False
         self._wake_process()
         return self
 
-    def pause(self, event: Optional[EventType] = None) -> "Timer":
+    def pause(self, event: Optional[EventType] = None) -> "DSTimer":
         '''Pause timer ticking while preserving remaining period.'''
-        self.status = Timer.Status.PAUSED
+        self.status = DSTimer.Status.PAUSED
         self._wake_process()
         return self
 
-    def resume(self, event: Optional[EventType] = None) -> "Timer":
+    def resume(self, event: Optional[EventType] = None) -> "DSTimer":
         '''Resume ticking from paused position.'''
-        self.status = Timer.Status.RUNNING
+        self.status = DSTimer.Status.RUNNING
         self._wake_process()
         return self
 
@@ -254,26 +254,26 @@ class Timer(DSComponent):
 class SimTimeMixin:
     '''Factory mixin for pubsub timer/delay/limiter components.'''
 
-    def timer(self: Any, *args: Any, **kwargs: Any) -> Timer:
+    def timer(self: Any, *args: Any, **kwargs: Any) -> DSTimer:
         sim: 'DSSimulation' = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in timer() method should be set to the same simulation instance.')
-        return Timer(*args, **kwargs, sim=sim)
+        return DSTimer(*args, **kwargs, sim=sim)
 
-    def delay(self: Any, *args: Any, **kwargs: Any) -> Delay:
+    def delay(self: Any, *args: Any, **kwargs: Any) -> DSDelay:
         sim: 'DSSimulation' = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in delay() method should be set to the same simulation instance.')
-        return Delay(*args, **kwargs, sim=sim)
+        return DSDelay(*args, **kwargs, sim=sim)
 
-    def limiter(self: Any, *args: Any, **kwargs: Any) -> Limiter:
+    def limiter(self: Any, *args: Any, **kwargs: Any) -> DSLimiter:
         sim: 'DSSimulation' = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in limiter() method should be set to the same simulation instance.')
-        return Limiter(*args, **kwargs, sim=sim)
+        return DSLimiter(*args, **kwargs, sim=sim)
 
-    def integral_limiter(self: Any, *args: Any, **kwargs: Any) -> IntegralLimiter:
+    def integral_limiter(self: Any, *args: Any, **kwargs: Any) -> DSIntegralLimiter:
         sim: 'DSSimulation' = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in integral_limiter() method should be set to the same simulation instance.')
-        return IntegralLimiter(*args, **kwargs, sim=sim)
+        return DSIntegralLimiter(*args, **kwargs, sim=sim)

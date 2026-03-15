@@ -20,11 +20,21 @@ from dssim import DSPub, DSFilter
 from dssim.pubsub.agent import DSAgent as Component
 from dssim.pubsub.agent import PCGenerator as ComponentGenerator
 
-from dssim.pubsub.components.container import Container as Store
-from dssim.pubsub.components.queue import Queue
-from dssim.pubsub.components.resource import Resource
-from dssim.pubsub.components.state import State
+from dssim.pubsub.components.container import DSContainer as Store
+from dssim.pubsub.components.container import DSContainer
+from dssim.pubsub.components.queue import DSQueue
+from dssim.pubsub.components.resource import DSResource, DSPriorityResource
+from dssim.pubsub.components.state import DSState
 
 class Environment(DSSimulation):
     def now(self):
         return self.time
+
+
+# Lowercase constructor aliases keep salabim-like examples concise and
+# align with factory-style naming used across DSSim examples.
+queue = DSQueue
+container = DSContainer
+resource = DSResource
+priority_resource = DSPriorityResource
+state = DSState

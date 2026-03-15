@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Queue probes implemented via pubsub observers (PRE phase).
+DSQueue probes implemented via pubsub observers (PRE phase).
 
-This module intentionally keeps queue probing logic out of Queue core methods.
+This module intentionally keeps queue probing logic out of DSQueue core methods.
 '''
 from __future__ import annotations
 
@@ -24,12 +24,12 @@ from dssim.base import DSComponent
 from dssim.pubsub.pubsub import DSPub, DSSub
 
 if TYPE_CHECKING:
-    from dssim.pubsub.components.queue import Queue
+    from dssim.pubsub.components.queue import DSQueue
     from dssim.simulation import DSSimulation
 
 
 class QueueStatsProbe(DSSub):
-    '''Queue occupancy/flow probe using pubsub endpoint observation.
+    '''DSQueue occupancy/flow probe using pubsub endpoint observation.
 
     Scope: this probe tracks user-facing queue activity (puts/gets and
     occupancy over time) from queue endpoints.
@@ -43,7 +43,7 @@ class QueueStatsProbe(DSSub):
     def __init__(self, enabled: bool = True, name: str = 'stats_probe', sim: Optional['DSSimulation'] = None) -> None:
         super().__init__(name=name, sim=sim)
         self.enabled = enabled
-        self._queue: Optional['Queue'] = None
+        self._queue: Optional['DSQueue'] = None
         self._start_time: float = 0.0
         self._last_time: float = 0.0
         self._last_len: int = 0
@@ -53,7 +53,7 @@ class QueueStatsProbe(DSSub):
         self.get_count: int = 0
         self.max_len: int = 0
 
-    def attach(self, queue: 'Queue') -> None:
+    def attach(self, queue: 'DSQueue') -> None:
         self._queue = queue
 
         Phase = DSPub.Phase
@@ -150,9 +150,9 @@ class QueueStatsProbe(DSSub):
 
 
 class QueueProbeMixin:
-    '''Queue probe extension mixin.
+    '''DSQueue probe extension mixin.
 
-    Queue core logic stays probe-agnostic; probes observe queue publishers.
+    DSQueue core logic stays probe-agnostic; probes observe queue publishers.
     '''
 
     def add_probe(self, probe: Any, name: Optional[str] = None) -> Any:

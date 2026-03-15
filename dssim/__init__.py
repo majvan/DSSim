@@ -26,12 +26,12 @@ from dssim.pubsub.cond import DSFilter
 from dssim.pubsub.agent import DSAgent, DSProcessComponent, PCGenerator
 from dssim.simulation import DSSimulation
 
-from dssim.base_components import DSQueue, DSLifoQueue, DSKeyQueue, DSResource, DSPriorityResource, DSPriorityPreemption
+from dssim.base_components import DSBaseOrder, DSLifoOrder, DSKeyOrder, DSBasePriorityResource, DSPriorityPreemption
 from dssim.lite.process import DSLiteProcess
 from dssim.lite.agent import DSLiteAgent, PCLiteGenerator
-from dssim.pubsub.components.queue import Queue
-from dssim.lite.components.litetime import LiteDelay, LiteLimiter, LiteTimer
-from dssim.lite.components.literesource import LiteResource, LitePriorityResource
-from dssim.pubsub.components.resource import Resource, PriorityResource, DSResourcePreempted, Mutex
-from dssim.pubsub.components.state import State
-from dssim.pubsub.components.time import Delay, Limiter, Timer
+from dssim.pubsub.components.queue import DSQueue
+from dssim.lite.components.litetime import DSLiteDelay, DSLiteLimiter, DSLiteTimer
+from dssim.lite.components.literesource import DSLiteResource, DSLitePriorityResource
+from dssim.pubsub.components.resource import DSResource, DSPriorityResource, DSResourcePreempted, DSMutex
+from dssim.pubsub.components.state import DSState
+from dssim.pubsub.components.time import DSDelay, DSLimiter, DSTimer

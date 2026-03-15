@@ -15,10 +15,10 @@
 SimPy adaptation of examples/pubsub/visa_check.py.
 
 Behavioral parity notes:
-* Queue stores dict payloads: {'person': Person(...)}.
+* DSQueue stores dict payloads: {'person': Person(...)}.
 * Clerks process only when the head-of-queue person is eligible.
 * Each person has an independent reneging timeout process.
-* Queue changes wake waiting clerks via explicit notifier events.
+* DSQueue changes wake waiting clerks via explicit notifier events.
 
 Switch backend:
 - --backend simpy (default)

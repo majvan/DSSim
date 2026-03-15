@@ -46,7 +46,7 @@ sim = DSSimulation()
 CustomerGenerator()
 for i in range(3):
     Clerk(i)
-waitingline = []  # we could use Queue as well, but it does not make a sense because we do not use it for signaling
+waitingline = []  # we could use DSQueue as well, but it does not make a sense because we do not use it for signaling
 signaler = DSPub(name="worktodo")
 time, events = sim.run(50000)
 # waitingline.print_histograms()

@@ -96,7 +96,7 @@ def run_simpy_preemptive():
 
 
 if __name__ == '__main__':
-    print(f'Demo 1: PriorityResource (non-preemptive) — backend={BACKEND}')
+    print(f'Demo 1: DSPriorityResource (non-preemptive) — backend={BACKEND}')
     simpy_starts = run_simpy_non_preemptive()
     print('SimPy starts:', simpy_starts)
     assert simpy_starts == [('low', 0), ('high', 4), ('mid', 5)]

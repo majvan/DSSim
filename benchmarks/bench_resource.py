@@ -13,12 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Benchmark: DSSim Resource / PriorityResource / preemption delivery
+Benchmark: DSSim DSResource / DSPriorityResource / preemption delivery
 
 Scenarios
 ---------
-1. resource-uncontended : single process repeatedly acquires/releases Resource
-2. priority-dispatch    : K blocked waiters on PriorityResource, feeder wakes one item at a time
+1. resource-uncontended : single process repeatedly acquires/releases DSResource
+2. priority-dispatch    : K blocked waiters on DSPriorityResource, feeder wakes one item at a time
 3. preemption-delivery  : low-priority holder repeatedly preempted by high-priority requester;
                           measures preemption dispatch + exception delivery path
 
@@ -38,8 +38,8 @@ import argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from dssim import DSSimulation, LiteLayer2
-from dssim import Resource, PriorityResource, LiteResource, LitePriorityResource
-from dssim import Queue, DSResourcePreempted
+from dssim import DSResource, DSPriorityResource, DSLiteResource, DSLitePriorityResource
+from dssim import DSQueue, DSResourcePreempted
 
 simpy = None
 
@@ -71,11 +71,11 @@ def report(label, n, min_t, mean_t, stdev_t, total_t):
 
 
 # ---------------------------------------------------------------------------
-# Scenario 1: plain Resource
+# Scenario 1: plain DSResource
 # ---------------------------------------------------------------------------
 def dssim_resource_uncontended(n):
     sim = DSSimulation()
-    res = Resource(amount=1, capacity=1, sim=sim)
+    res = DSResource(amount=1, capacity=1, sim=sim)
     done = 0
 
     def worker():
@@ -94,7 +94,7 @@ def dssim_resource_uncontended(n):
 # LiteLayer2 variant of scenario 1
 def dssim_lite_resource_uncontended(n):
     sim = DSSimulation(layer2=LiteLayer2)
-    res = LiteResource(amount=1, capacity=1, sim=sim)
+    res = DSLiteResource(amount=1, capacity=1, sim=sim)
     done = 0
 
     def worker():
@@ -111,11 +111,11 @@ def dssim_lite_resource_uncontended(n):
 
 
 # ---------------------------------------------------------------------------
-# Scenario 2: PriorityResource waiter dispatch
+# Scenario 2: DSPriorityResource waiter dispatch
 # ---------------------------------------------------------------------------
 def dssim_priority_dispatch(n, k):
     sim = DSSimulation()
-    res = PriorityResource(amount=0, capacity=1, preemptive=False, sim=sim)
+    res = DSPriorityResource(amount=0, capacity=1, preemptive=False, sim=sim)
     per = n // k
     consumed = 0
 
@@ -141,7 +141,7 @@ def dssim_priority_dispatch(n, k):
 # LiteLayer2 variant of scenario 2
 def dssim_lite_priority_dispatch(n, k):
     sim = DSSimulation(layer2=LiteLayer2)
-    res = LitePriorityResource(amount=0, capacity=1, sim=sim)
+    res = DSLitePriorityResource(amount=0, capacity=1, sim=sim)
     per = n // k
     consumed = 0
 
@@ -169,8 +169,8 @@ def dssim_lite_priority_dispatch(n, k):
 # ---------------------------------------------------------------------------
 def dssim_preemption_delivery(n):
     sim = DSSimulation()
-    res = PriorityResource(amount=1, capacity=1, preemptive=True, sim=sim)
-    handoff = Queue(sim=sim)  # low holder notifies high preempter each cycle
+    res = DSPriorityResource(amount=1, capacity=1, preemptive=True, sim=sim)
+    handoff = DSQueue(sim=sim)  # low holder notifies high preempter each cycle
 
     preempted = 0
     high_got = 0
@@ -205,7 +205,7 @@ def dssim_preemption_delivery(n):
 
 def dssim_lite_preemption_delivery(n):
     sim = DSSimulation(layer2=LiteLayer2)
-    res = LitePriorityResource(amount=1, capacity=1, preemptive=True, sim=sim)
+    res = DSLitePriorityResource(amount=1, capacity=1, preemptive=True, sim=sim)
     handoff = sim.queue(capacity=1)
 
     preempted = 0
@@ -220,7 +220,7 @@ def dssim_lite_preemption_delivery(n):
                 handoff.put_nowait(1)
                 try:
                     yield from sim.gwait(float('inf'))
-                except LitePriorityResource.Preempted:
+                except DSLitePriorityResource.Preempted:
                     preempted += 1
 
     def high_preempter():
@@ -321,7 +321,7 @@ def simpy_preemption_delivery(n):
 # ---------------------------------------------------------------------------
 def _parse_args():
     parser = argparse.ArgumentParser(
-        description='Resource benchmark (DSSim by default, optional SimPy via --with-simpy).',
+        description='DSResource benchmark (DSSim by default, optional SimPy via --with-simpy).',
     )
     parser.add_argument('--with-simpy', action='store_true', help='Include SimPy rows.')
     return parser.parse_args()
@@ -343,18 +343,18 @@ if __name__ == '__main__':
     if args.with_simpy and not run_simpy:
         print('SimPy unavailable: skipping SimPy rows.\n')
 
-    print(f'=== Scenario 1: Resource uncontended (N={N_EVENTS:,}) ===')
-    report('DSSim Resource', N_EVENTS, *bench(dssim_resource_uncontended, N_EVENTS))
-    report('DSSim LiteResource', N_EVENTS, *bench(dssim_lite_resource_uncontended, N_EVENTS))
+    print(f'=== Scenario 1: DSResource uncontended (N={N_EVENTS:,}) ===')
+    report('DSSim DSResource', N_EVENTS, *bench(dssim_resource_uncontended, N_EVENTS))
+    report('DSSim DSLiteResource', N_EVENTS, *bench(dssim_lite_resource_uncontended, N_EVENTS))
     if run_simpy:
-        report('SimPy Resource', N_EVENTS, *bench(simpy_resource_uncontended, N_EVENTS))
+        report('SimPy DSResource', N_EVENTS, *bench(simpy_resource_uncontended, N_EVENTS))
 
     print(f'\n=== Scenario 2: Priority dispatch (N={N_EVENTS:,}, K={N_WAITERS}) ===')
     n2 = (N_EVENTS // N_WAITERS) * N_WAITERS  # keep divisible
-    report('DSSim PriorityResource', n2, *bench(dssim_priority_dispatch, n2, N_WAITERS))
-    report('DSSim LitePriorityResource', n2, *bench(dssim_lite_priority_dispatch, n2, N_WAITERS))
+    report('DSSim DSPriorityResource', n2, *bench(dssim_priority_dispatch, n2, N_WAITERS))
+    report('DSSim DSLitePriorityResource', n2, *bench(dssim_lite_priority_dispatch, n2, N_WAITERS))
     if run_simpy:
-        report('SimPy PriorityResource', n2, *bench(simpy_priority_dispatch, n2, N_WAITERS))
+        report('SimPy DSPriorityResource', n2, *bench(simpy_priority_dispatch, n2, N_WAITERS))
 
     print(f'\n=== Scenario 3: Preemption delivery (N={N_EVENTS:,}) ===')
     report('DSSim Preemption', N_EVENTS, *bench(dssim_preemption_delivery, N_EVENTS))

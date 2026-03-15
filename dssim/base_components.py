@@ -21,10 +21,10 @@ from typing import Any, Iterator, Callable, Dict, List, Optional
 from dssim.base import NumericType
 
 
-class DSQueue:
+class DSBaseOrder:
     '''A performant ordered collection for simulation use.
 
-    DSQueue provides O(1) head/tail access and O(1) append/popleft operations
+    DSBaseOrder provides O(1) head/tail access and O(1) append/popleft operations
     using a deque internally.  It is a plain data structure (no simulation
     awareness) designed to be composed into higher-level simulation components.
     '''
@@ -47,7 +47,7 @@ class DSQueue:
         return item in self._data
 
     def __repr__(self) -> str:
-        return f'DSQueue({list(self._data)})'
+        return f'DSBaseOrder({list(self._data)})'
 
     def __getitem__(self, index: int) -> Any:
         return self._data[index]
@@ -124,8 +124,8 @@ class DSQueue:
         self._data.clear()
 
 
-class DSLifoQueue(DSQueue):
-    '''LIFO (stack) variant of DSQueue. Items are dequeued in reverse insertion order.'''
+class DSLifoOrder(DSBaseOrder):
+    '''LIFO (stack) variant of DSBaseOrder. Items are dequeued in reverse insertion order.'''
 
     def dequeue(self) -> Any:
         '''Remove and return item from tail (LIFO pop). O(1).'''
@@ -136,8 +136,8 @@ class DSLifoQueue(DSQueue):
         return self.tail
 
 
-class DSKeyQueue(DSQueue):
-    '''DSQueue variant that dequeues items in ascending order of a key function.
+class DSKeyOrder(DSBaseOrder):
+    '''DSBaseOrder variant that dequeues items in ascending order of a key function.
 
     The item with the smallest key value is always dequeued first
     (min-priority semantics).  Use ``key=lambda item: -item.priority`` to get
@@ -207,7 +207,7 @@ class DSKeyQueue(DSQueue):
         return any(entry[2] is item or entry[2] == item for entry in self._data)
 
     def __repr__(self) -> str:
-        return f'DSKeyQueue({[e[2] for e in sorted(self._data)]})'
+        return f'DSKeyOrder({[e[2] for e in sorted(self._data)]})'
 
     def __getitem__(self, index: int) -> Any:
         '''Return item at *index* in ascending key order. O(n log n).'''
@@ -220,7 +220,7 @@ class DSKeyQueue(DSQueue):
         heapq.heappush(self._data, (self._key(value), self._counter, value))
         self._counter += 1
 
-    # ---- raw-deque delegates (keep DSQueue callers working) ----------------
+    # ---- raw-deque delegates (keep DSBaseOrder callers working) ----------------
 
     def append(self, item: Any) -> Any:
         '''Delegate to enqueue (heap insert). O(log n).'''
@@ -245,7 +245,7 @@ class DSKeyQueue(DSQueue):
                 self._data.pop()
                 heapq.heapify(self._data)
                 return
-        raise ValueError(f'{item!r} not in DSKeyQueue')
+        raise ValueError(f'{item!r} not in DSKeyOrder')
 
     def remove_if(self, cond: Callable) -> bool:
         '''Remove all items satisfying *cond*. O(n) filter + O(n) heapify.'''
@@ -269,7 +269,7 @@ class DSKeyQueue(DSQueue):
         self._counter = 0
 
 
-class DSResource:
+class _ResourceBookkeeper:
     '''Plain amount/capacity container for resource components.'''
 
     def __init__(
@@ -300,7 +300,7 @@ class DSResource:
         return amount
 
 
-class DSPriorityResource:
+class DSBasePriorityResource:
     '''Priority holder bookkeeping shared by priority resource components.'''
 
     def __init__(self) -> None:
@@ -377,7 +377,7 @@ class DSPriorityResource:
 class DSPriorityPreemption:
     '''Shared preemption dispatch algorithm for priority resources.'''
 
-    def __init__(self, priority_state: DSPriorityResource) -> None:
+    def __init__(self, priority_state: DSBasePriorityResource) -> None:
         self.priority = priority_state
 
     def reclaim_from_victims(

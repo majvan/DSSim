@@ -12,17 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Tests for LiteQueue — a minimal queue for LiteLayer2 simulations.
+Tests for DSLiteQueue — a minimal queue for LiteLayer2 simulations.
 '''
 import unittest
 from dssim.simulation import DSSimulation, LiteLayer2
-from dssim.lite.components.litequeue import LiteQueue
+from dssim.lite.components.litequeue import DSLiteQueue
 
 
 def _make(capacity=float('inf')):
-    '''Return a fresh (sim, LiteQueue) pair.'''
+    '''Return a fresh (sim, DSLiteQueue) pair.'''
     sim = DSSimulation(layer2=LiteLayer2)
-    q = LiteQueue(capacity=capacity, sim=sim)
+    q = DSLiteQueue(capacity=capacity, sim=sim)
     return sim, q
 
 
@@ -31,7 +31,7 @@ def _make(capacity=float('inf')):
 # ---------------------------------------------------------------------------
 
 class TestLiteQueueSequenceProtocol(unittest.TestCase):
-    '''LiteQueue exposes len / bool / iter / contains like a container.'''
+    '''DSLiteQueue exposes len / bool / iter / contains like a container.'''
 
     def setUp(self):
         _, self.q = _make()
@@ -40,7 +40,7 @@ class TestLiteQueueSequenceProtocol(unittest.TestCase):
         self.assertEqual(len(self.q), 0)
 
     def test2_bool_always_true(self):
-        '''LiteQueue is always truthy — even when its buffer is empty.
+        '''DSLiteQueue is always truthy — even when its buffer is empty.
 
         Python falls back to __len__ when __bool__ is absent, which would make
         an empty queue falsy and break signal's

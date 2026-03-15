@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-The file implements the Queue simulation component.
+The file implements the DSQueue simulation component.
 '''
 from typing import Any, List, Iterator, Optional, Generator, TYPE_CHECKING
 from dssim.base import NumericType, TimeType, EventType, SignalMixin
@@ -20,15 +20,15 @@ from dssim.pubsub.base import CondType, DSAbortException, AlwaysTrue
 from dssim.pubsub.components.base import DSStatefulComponent
 from dssim.pubsub.components.queue_probes import QueueProbeMixin
 from dssim.pubsub.pubsub import DSPub
-from dssim.base_components import DSQueue, DSLifoQueue, DSKeyQueue
+from dssim.base_components import DSBaseOrder, DSLifoOrder, DSKeyOrder
 
 
 if TYPE_CHECKING:
     from dssim.simulation import DSSimulation
 
 
-class Queue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
-    '''A queue component backed by three DSQueue instances:
+class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
+    '''A queue component backed by three DSBaseOrder instances:
 
     - buffer:  items currently in transit (policy controlled by *policy*)
     - putters: processes blocked waiting to put (full buffer)
@@ -37,17 +37,17 @@ class Queue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
     Exposes ``buffer``, ``putters`` and ``getters`` properties for
     observability / statistics.
 
-    The *policy* parameter accepts a DSQueue instance that acts as the buffer.
-    Pass ``None`` (default) for FIFO, ``DSLifoQueue()`` for LIFO, or any
-    ``DSKeyQueue(key=...)`` for priority ordering.
+    The *policy* parameter accepts a DSBaseOrder instance that acts as the buffer.
+    Pass ``None`` (default) for FIFO, ``DSLifoOrder()`` for LIFO, or any
+    ``DSKeyOrder(key=...)`` for priority ordering.
     '''
 
-    def __init__(self, capacity: NumericType = float('inf'), policy: DSQueue = None,
+    def __init__(self, capacity: NumericType = float('inf'), policy: DSBaseOrder = None,
                  nempty_ep: Optional[DSPub] = None, nfull_ep: Optional[DSPub] = None,
                  *args: Any, **policy_params: Any) -> None:
         super().__init__(*args, **policy_params)
         self.capacity = capacity
-        self._buffer = policy if policy is not None else DSQueue()
+        self._buffer = policy if policy is not None else DSBaseOrder()
         # Three targeted producers reduce spurious wakeups:
         #   getters with simple cond → subscribe to tx_nempty
         #   putters with simple cond → subscribe to tx_nfull
@@ -319,49 +319,49 @@ class Queue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
 
 # In the following, self is in fact of type DSAgent, but PyLance makes troubles with variable types
 class QueueMixin:
-    async def enter(self: Any, queue: Queue, timeout: TimeType = float('inf'), **policy_params: Any) -> EventType:
+    async def enter(self: Any, queue: DSQueue, timeout: TimeType = float('inf'), **policy_params: Any) -> EventType:
         try:
             retval = await queue.put(timeout, self, **policy_params)
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
 
-    def genter(self: Any, queue: Queue, timeout: TimeType = float('inf'), **policy_params) -> Generator[EventType, EventType, EventType]:
+    def genter(self: Any, queue: DSQueue, timeout: TimeType = float('inf'), **policy_params) -> Generator[EventType, EventType, EventType]:
         try:
             retval = yield from queue.gput(timeout, self, **policy_params)
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
 
-    def enter_nowait(self: Any, queue: Queue) -> Optional[EventType]:
+    def enter_nowait(self: Any, queue: DSQueue) -> Optional[EventType]:
         retval = queue.put_nowait(self)
         return retval
 
-    def leave(self: Any, queue: Queue) -> None:
+    def leave(self: Any, queue: DSQueue) -> None:
         queue.remove(self)
 
-    async def pop(self: Any, queue: Queue, timeout: TimeType = float('inf'), **policy_params: Any) -> Optional[EventType]:
+    async def pop(self: Any, queue: DSQueue, timeout: TimeType = float('inf'), **policy_params: Any) -> Optional[EventType]:
         try:
             retval = await queue.get(timeout, **policy_params)
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
 
-    def gpop(self: Any, queue: Queue, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
+    def gpop(self: Any, queue: DSQueue, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         try:
             retval = yield from queue.gget(timeout, **policy_params)
         except DSAbortException as exc:
             self.scheduled_process.abort()
         return retval
 
-    def pop_nowait(self: Any, queue: Queue) -> EventType:
+    def pop_nowait(self: Any, queue: DSQueue) -> EventType:
         return queue.get_nowait()
 
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
 class SimQueueMixin:
-    def queue(self: Any, *args: Any, **kwargs: Any) -> Queue:
+    def queue(self: Any, *args: Any, **kwargs: Any) -> DSQueue:
         sim: 'DSSimulation' = kwargs.pop('sim', self)
         if sim is not self:
             raise ValueError('The parameter sim in queue() method should be set to the same simulation instance.')
-        return Queue(*args, **kwargs, sim=sim)
+        return DSQueue(*args, **kwargs, sim=sim)

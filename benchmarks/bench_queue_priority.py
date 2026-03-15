@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Benchmark: Priority queue throughput — DSSim vs LiteQueue vs SimPy
+Benchmark: Priority queue throughput — DSSim vs DSLiteQueue vs SimPy
 
 Three scenarios stress different parts of the priority queue path:
 
 1. fill-drain    : N items inserted in worst-case priority order (largest key
                    first so every heappush must sift), then fully drained.
-                   DSSim and LiteQueue use put_nowait + get_nowait — no
+                   DSSim and DSLiteQueue use put_nowait + get_nowait — no
                    simulation loop at all.  SimPy has no nowait API; even a
                    simple bulk insert must go through the event machinery
                    (process + env.run()).
@@ -28,14 +28,14 @@ Three scenarios stress different parts of the priority queue path:
                    simulation loop.  The producer inserts N items back-to-back
                    (queue has unlimited capacity so puts never block); the
                    consumer drains them one-by-one.
-                   DSSim/LiteQueue are shown in two variants:
+                   DSSim/DSLiteQueue are shown in two variants:
                      put_nowait + gget  — producer bypasses simulation loop
                      gput       + gget  — producer uses the blocking-put API
                                           (gput still returns immediately since
                                           capacity is unlimited, but it still
                                           goes through check_and_gwait machinery)
 
-3. bounded       : Queue capacity = 1 forces strict put / get alternation.
+3. bounded       : DSQueue capacity = 1 forces strict put / get alternation.
                    Every gput / store.put blocks until the consumer takes
                    the current item, stressing the block/unblock path.
 
@@ -83,16 +83,16 @@ def report(label, n, min_t, mean_t, stdev_t, total_t):
 # ===========================================================================
 # DSSim
 # ===========================================================================
-from dssim import DSSimulation, Queue
-from dssim.base_components import DSKeyQueue
+from dssim import DSSimulation, DSQueue
+from dssim.base_components import DSKeyOrder
 
 
 def _make_queue(sim=None, capacity=float('inf')):
-    '''Return (sim, Queue) with DSKeyQueue keyed on item[0].'''
+    '''Return (sim, DSQueue) with DSKeyOrder keyed on item[0].'''
     if sim is None:
         sim = DSSimulation()
-    q = Queue(capacity=capacity,
-              policy=DSKeyQueue(key=lambda x: x[0]),
+    q = DSQueue(capacity=capacity,
+              policy=DSKeyOrder(key=lambda x: x[0]),
               sim=sim)
     return sim, q
 
@@ -192,17 +192,17 @@ def dssim_bounded(n):
 
 
 # ===========================================================================
-# DSSim LiteQueue (LiteLayer2)
+# DSSim DSLiteQueue (LiteLayer2)
 # ===========================================================================
 from dssim.simulation import LiteLayer2
-from dssim.lite.components.litequeue import LiteQueue
+from dssim.lite.components.litequeue import DSLiteQueue
 
 
 def _make_lite_queue(capacity=float('inf')):
-    '''Return (sim, LiteQueue) with DSKeyQueue keyed on item[0], using LiteLayer2.'''
+    '''Return (sim, DSLiteQueue) with DSKeyOrder keyed on item[0], using LiteLayer2.'''
     sim = DSSimulation(layer2=LiteLayer2)
-    q = LiteQueue(capacity=capacity,
-                  policy=DSKeyQueue(key=lambda x: x[0]),
+    q = DSLiteQueue(capacity=capacity,
+                  policy=DSKeyOrder(key=lambda x: x[0]),
                   sim=sim)
     return sim, q
 
@@ -529,9 +529,9 @@ if __name__ == '__main__':
 
     # ---- scenario 1 --------------------------------------------------------
     print(f'=== Scenario 1: fill-drain  (N={N_EVENTS:,}) ===')
-    print(f'  DSSim/LiteQueue/salabim use a nowait path; SimPy always goes through event machinery.')
-    report('DSSim  Queue',          N_EVENTS, *bench(dssim_fill_drain, N_EVENTS))
-    report('DSSim  LiteQueue',      N_EVENTS, *bench(lite_fill_drain, N_EVENTS))
+    print(f'  DSSim/DSLiteQueue/salabim use a nowait path; SimPy always goes through event machinery.')
+    report('DSSim  DSQueue',          N_EVENTS, *bench(dssim_fill_drain, N_EVENTS))
+    report('DSSim  DSLiteQueue',      N_EVENTS, *bench(lite_fill_drain, N_EVENTS))
     if run_simpy:
         report('SimPy  PriorityStore',  N_EVENTS, *bench(simpy_fill_drain, N_EVENTS))
     if run_salabim:
@@ -539,10 +539,10 @@ if __name__ == '__main__':
 
     # ---- scenario 2 --------------------------------------------------------
     print(f'\n=== Scenario 2: burst  (unlimited capacity, N={N_EVENTS:,}) ===')
-    report('DSSim  Queue     put_nowait + gget', N_EVENTS, *bench(dssim_burst_nowait_put, N_EVENTS))
-    report('DSSim  Queue     gput       + gget', N_EVENTS, *bench(dssim_burst_gput, N_EVENTS))
-    report('DSSim  LiteQueue put_nowait + gget', N_EVENTS, *bench(lite_burst_nowait_put, N_EVENTS))
-    report('DSSim  LiteQueue gput       + gget', N_EVENTS, *bench(lite_burst_gput, N_EVENTS))
+    report('DSSim  DSQueue     put_nowait + gget', N_EVENTS, *bench(dssim_burst_nowait_put, N_EVENTS))
+    report('DSSim  DSQueue     gput       + gget', N_EVENTS, *bench(dssim_burst_gput, N_EVENTS))
+    report('DSSim  DSLiteQueue put_nowait + gget', N_EVENTS, *bench(lite_burst_nowait_put, N_EVENTS))
+    report('DSSim  DSLiteQueue gput       + gget', N_EVENTS, *bench(lite_burst_gput, N_EVENTS))
     if run_simpy:
         report('SimPy  PriorityStore put    + get ', N_EVENTS, *bench(simpy_burst, N_EVENTS))
     if run_salabim:
@@ -550,8 +550,8 @@ if __name__ == '__main__':
 
     # ---- scenario 3 --------------------------------------------------------
     print(f'\n=== Scenario 3: bounded  (capacity=1, alternating put/get, N={N_EVENTS:,}) ===')
-    report('DSSim  Queue     gput + gget',        N_EVENTS, *bench(dssim_bounded, N_EVENTS))
-    report('DSSim  LiteQueue gput + gget',        N_EVENTS, *bench(lite_bounded, N_EVENTS))
+    report('DSSim  DSQueue     gput + gget',        N_EVENTS, *bench(dssim_bounded, N_EVENTS))
+    report('DSSim  DSLiteQueue gput + gget',        N_EVENTS, *bench(lite_bounded, N_EVENTS))
     if run_simpy:
         report('SimPy  PriorityStore put + get',      N_EVENTS, *bench(simpy_bounded, N_EVENTS))
     if run_salabim:

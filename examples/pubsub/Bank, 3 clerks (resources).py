@@ -35,7 +35,7 @@ class Customer(sim.Component):
 
 env = sim.Environment() 
 CustomerGenerator()
-clerks = sim.Resource(amount=3, name="clerks")
+clerks = sim.resource(amount=3, name="clerks")
 clerks_probe = clerks.add_stats_probe(name='usage')
 time, events = env.run(50000)
 clerks_stats = clerks_probe.get_statistics()

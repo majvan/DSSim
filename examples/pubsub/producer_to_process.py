@@ -11,12 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSSimulation, DSProcess, DSComponent, DSCallback, Timer, DSPub
+from dssim import DSSimulation, DSProcess, DSComponent, DSCallback, DSPub
 
 class MyComponent(DSComponent):
     def __init__(self, *args, **kwargs):
         super().__init__(self, *args, **kwargs)
-        prod = Timer(name=self.name+'.timer', period=1).start().tx
+        prod = self.sim.timer(name=self.name+'.timer', period=1).start().tx
 
         # The following shows 3 independent producer-to-process connections.
         # They run in parallel - feel free to comment out not interesting ones to see the behavior

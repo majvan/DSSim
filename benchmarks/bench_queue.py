@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Benchmark: DSSim Queue vs salabim Store
+Benchmark: DSSim DSQueue vs salabim Store
 
 Five scenarios
 --------------
@@ -74,9 +74,9 @@ def report(label, n, min_t, mean_t, stdev_t, total_t):
 
 
 # ===========================================================================
-# DSSim Queue  (PubSubLayer2)
+# DSSim DSQueue  (PubSubLayer2)
 # ===========================================================================
-from dssim import DSSimulation, Queue, DSSchedulable
+from dssim import DSSimulation, DSQueue, DSSchedulable
 
 
 def dssim_free_flow(n):
@@ -86,7 +86,7 @@ def dssim_free_flow(n):
     when the queue is empty and no more items will arrive.
     '''
     sim = DSSimulation()
-    q = Queue(sim=sim)
+    q = DSQueue(sim=sim)
     got = 0
 
     @DSSchedulable
@@ -112,7 +112,7 @@ def dssim_backpressure(n, capacity):
     consumer uses gget (blocks when empty).  Models tight alternation.
     '''
     sim = DSSimulation()
-    q = Queue(capacity=capacity, sim=sim)
+    q = DSQueue(capacity=capacity, sim=sim)
     got = 0
 
     @DSSchedulable
@@ -139,7 +139,7 @@ def dssim_many_workers(n, k):
     Tests scheduler overhead with O(k) concurrent coroutines.
     '''
     sim = DSSimulation()
-    q = Queue(sim=sim)
+    q = DSQueue(sim=sim)
     per = n // k
     got = 0
 
@@ -168,7 +168,7 @@ def dssim_blocked_getters(n, k):
     one getter wakes per item.  Stresses "notify one from K waiting getters".
     '''
     sim = DSSimulation()
-    q = Queue(sim=sim)
+    q = DSQueue(sim=sim)
     per = n // k
     got = 0
 
@@ -199,7 +199,7 @@ def dssim_cross_notify(n, k, capacity):
     With tx_item/tx_space separation each side only sees its own events: O(1).
     '''
     sim = DSSimulation()
-    q = Queue(capacity=capacity, sim=sim)
+    q = DSQueue(capacity=capacity, sim=sim)
     per = n // k
     got = 0
 
@@ -221,20 +221,20 @@ def dssim_cross_notify(n, k, capacity):
 
 
 # ===========================================================================
-# DSSim LiteQueue  (LiteLayer2)
+# DSSim DSLiteQueue  (LiteLayer2)
 # ===========================================================================
 from dssim.simulation import LiteLayer2
-from dssim.lite.components.litequeue import LiteQueue
+from dssim.lite.components.litequeue import DSLiteQueue
 
 
 def lite_free_flow(n):
     '''
-    Unbounded LiteQueue.  Items are pre-filled via put_nowait before the sim
-    starts (equivalent to the DSSim Queue producer which also uses put_nowait
+    Unbounded DSLiteQueue.  Items are pre-filled via put_nowait before the sim
+    starts (equivalent to the DSSim DSQueue producer which also uses put_nowait
     without blocking).  Consumer drains via gget inside the sim loop.
     '''
     sim = DSSimulation(layer2=LiteLayer2)
-    q = LiteQueue(sim=sim)
+    q = DSLiteQueue(sim=sim)
     got = 0
 
     for i in range(n):
@@ -253,11 +253,11 @@ def lite_free_flow(n):
 
 def lite_backpressure(n, capacity):
     '''
-    Bounded LiteQueue (capacity).  Producer uses gput (blocks when full);
+    Bounded DSLiteQueue (capacity).  Producer uses gput (blocks when full);
     consumer uses gget (blocks when empty).  Models tight put/get alternation.
     '''
     sim = DSSimulation(layer2=LiteLayer2)
-    q = LiteQueue(capacity=capacity, sim=sim)
+    q = DSLiteQueue(capacity=capacity, sim=sim)
     got = 0
 
     def producer():
@@ -278,12 +278,12 @@ def lite_backpressure(n, capacity):
 
 def lite_many_workers(n, k):
     '''
-    K producers + K consumers sharing one unbounded LiteQueue.  Producers use
+    K producers + K consumers sharing one unbounded DSLiteQueue.  Producers use
     put_nowait and yield once so consumers get a chance to run, matching the
-    SimPy and DSSim Queue approach.
+    SimPy and DSSim DSQueue approach.
     '''
     sim = DSSimulation(layer2=LiteLayer2)
-    q = LiteQueue(sim=sim)
+    q = DSLiteQueue(sim=sim)
     per = n // k
     got = 0
 
@@ -307,12 +307,12 @@ def lite_many_workers(n, k):
 
 def lite_blocked_getters(n, k):
     '''
-    K getters all block on an empty LiteQueue before the producer starts.
+    K getters all block on an empty DSLiteQueue before the producer starts.
     Producer puts N items one at a time with gwait(0) between each so
     exactly one getter wakes per item.  Stresses the _GET_READY cascade path.
     '''
     sim = DSSimulation(layer2=LiteLayer2)
-    q = LiteQueue(sim=sim)
+    q = DSLiteQueue(sim=sim)
     per = n // k
     got = 0
 
@@ -338,10 +338,10 @@ def lite_cross_notify(n, k, capacity):
     '''
     K consumers scheduled before K producers; capacity=1 keeps the queue
     almost always full or empty.  Stresses the put/get interleaving path in
-    LiteQueue's send() dispatcher.
+    DSLiteQueue's send() dispatcher.
     '''
     sim = DSSimulation(layer2=LiteLayer2)
-    q = LiteQueue(capacity=capacity, sim=sim)
+    q = DSLiteQueue(capacity=capacity, sim=sim)
     per = n // k
     got = 0
 
@@ -660,7 +660,7 @@ def sal_cross_notify(n, k, capacity):
 # ===========================================================================
 def _parse_args():
     parser = argparse.ArgumentParser(
-        description='Queue benchmark (DSSim by default, optional SimPy/salabim via flags).',
+        description='DSQueue benchmark (DSSim by default, optional SimPy/salabim via flags).',
     )
     parser.add_argument('--with-simpy', action='store_true', help='Include SimPy rows.')
     parser.add_argument('--with-salabim', action='store_true', help='Include salabim rows.')
@@ -695,8 +695,8 @@ if __name__ == '__main__':
 
     # ---- scenario 1 --------------------------------------------------------
     print(f'=== Scenario 1: free-flow  (unbounded, 1P + 1C, N={N_EVENTS:,}) ===')
-    report('DSSim  Queue',     N_EVENTS, *bench(dssim_free_flow,  N_EVENTS))
-    report('DSSim  LiteQueue', N_EVENTS, *bench(lite_free_flow,   N_EVENTS))
+    report('DSSim  DSQueue',     N_EVENTS, *bench(dssim_free_flow,  N_EVENTS))
+    report('DSSim  DSLiteQueue', N_EVENTS, *bench(lite_free_flow,   N_EVENTS))
     if run_simpy:
         report('SimPy  Store',     N_EVENTS, *bench(simpy_free_flow,  N_EVENTS))
     if run_salabim:
@@ -704,8 +704,8 @@ if __name__ == '__main__':
 
     # ---- scenario 2 --------------------------------------------------------
     print(f'\n=== Scenario 2: backpressure  (capacity={CAPACITY}, 1P + 1C, N={N_EVENTS:,}) ===')
-    report('DSSim  Queue',     N_EVENTS, *bench(dssim_backpressure, N_EVENTS, CAPACITY))
-    report('DSSim  LiteQueue', N_EVENTS, *bench(lite_backpressure,  N_EVENTS, CAPACITY))
+    report('DSSim  DSQueue',     N_EVENTS, *bench(dssim_backpressure, N_EVENTS, CAPACITY))
+    report('DSSim  DSLiteQueue', N_EVENTS, *bench(lite_backpressure,  N_EVENTS, CAPACITY))
     if run_simpy:
         report('SimPy  Store',     N_EVENTS, *bench(simpy_backpressure, N_EVENTS, CAPACITY))
     if run_salabim:
@@ -713,8 +713,8 @@ if __name__ == '__main__':
 
     # ---- scenario 3 --------------------------------------------------------
     print(f'\n=== Scenario 3: many-workers  ({N_WORKERS}P + {N_WORKERS}C, N={N_EVENTS:,}) ===')
-    report('DSSim  Queue',     N_EVENTS, *bench(dssim_many_workers, N_EVENTS, N_WORKERS))
-    report('DSSim  LiteQueue', N_EVENTS, *bench(lite_many_workers,  N_EVENTS, N_WORKERS))
+    report('DSSim  DSQueue',     N_EVENTS, *bench(dssim_many_workers, N_EVENTS, N_WORKERS))
+    report('DSSim  DSLiteQueue', N_EVENTS, *bench(lite_many_workers,  N_EVENTS, N_WORKERS))
     if run_simpy:
         report('SimPy  Store',     N_EVENTS, *bench(simpy_many_workers, N_EVENTS, N_WORKERS))
     if run_salabim:
@@ -722,8 +722,8 @@ if __name__ == '__main__':
 
     # ---- scenario 4 --------------------------------------------------------
     print(f'\n=== Scenario 4: blocked-getters  ({N_WORKERS} getters, 1P, N={N_EVENTS:,}) ===')
-    report('DSSim  Queue',     N_EVENTS, *bench(dssim_blocked_getters, N_EVENTS, N_WORKERS))
-    report('DSSim  LiteQueue', N_EVENTS, *bench(lite_blocked_getters,  N_EVENTS, N_WORKERS))
+    report('DSSim  DSQueue',     N_EVENTS, *bench(dssim_blocked_getters, N_EVENTS, N_WORKERS))
+    report('DSSim  DSLiteQueue', N_EVENTS, *bench(lite_blocked_getters,  N_EVENTS, N_WORKERS))
     if run_simpy:
         report('SimPy  Store',     N_EVENTS, *bench(simpy_blocked_getters, N_EVENTS, N_WORKERS))
     if run_salabim:
@@ -731,8 +731,8 @@ if __name__ == '__main__':
 
     # ---- scenario 5 --------------------------------------------------------
     print(f'\n=== Scenario 5: cross-notify  ({CROSS_WORKERS}P + {CROSS_WORKERS}C, capacity=1, N={N_EVENTS:,}) ===')
-    report('DSSim  Queue',     N_EVENTS, *bench(dssim_cross_notify, N_EVENTS, CROSS_WORKERS, 1))
-    report('DSSim  LiteQueue', N_EVENTS, *bench(lite_cross_notify,  N_EVENTS, CROSS_WORKERS, 1))
+    report('DSSim  DSQueue',     N_EVENTS, *bench(dssim_cross_notify, N_EVENTS, CROSS_WORKERS, 1))
+    report('DSSim  DSLiteQueue', N_EVENTS, *bench(lite_cross_notify,  N_EVENTS, CROSS_WORKERS, 1))
     if run_simpy:
         report('SimPy  Store',     N_EVENTS, *bench(simpy_cross_notify, N_EVENTS, CROSS_WORKERS, 1))
     if run_salabim:

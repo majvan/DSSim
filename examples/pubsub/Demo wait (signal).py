@@ -62,7 +62,7 @@ class Prince(DSAgent):
 sim = DSSimulation()
 lastkingdied = sim.time
 kings = []
-king_died = DSPub(name='king died')  # we do not need State for this, all we need is simple notification routing
+king_died = DSPub(name='king died')  # we do not need DSState for this, all we need is simple notification routing
 king = None
 PrinceGenerator()
 

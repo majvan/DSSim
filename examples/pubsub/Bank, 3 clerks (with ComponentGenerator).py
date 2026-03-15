@@ -35,7 +35,7 @@ class Clerk(sim.Component):
 env = sim.Environment()
 sim.ComponentGenerator(Customer, wait_method= lambda e: random.uniform(5, 15))
 clerks = [Clerk() for _ in range(3)]
-waitingline = sim.Queue(name="waitingline")
+waitingline = sim.queue(name="waitingline")
 waitingline_probe = waitingline.add_stats_probe(name='users')
 
 time, events = env.run(50000)

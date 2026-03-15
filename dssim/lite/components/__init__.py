@@ -1,13 +1,13 @@
-from dssim.lite.components.litequeue import LiteQueue, SimLiteQueueMixin
+from dssim.lite.components.litequeue import DSLiteQueue, SimLiteQueueMixin
 from dssim.lite.components.literesource import (
-    LitePriorityResource,
-    LiteResource,
+    DSLitePriorityResource,
+    DSLiteResource,
     SimLiteResourceMixin,
 )
 from dssim.lite.pubsub import DSLiteCallback, DSLitePub, DSLiteSub
 from dssim.lite.components.litetime import (
-    LiteDelay,
-    LiteLimiter,
-    LiteTimer,
+    DSLiteDelay,
+    DSLiteLimiter,
+    DSLiteTimer,
     SimLiteTimeMixin,
 )

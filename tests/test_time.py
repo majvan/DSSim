@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 '''
-Tests for pubsub time components (Delay, Limiter, IntegralLimiter, Timer).
+Tests for pubsub time components (DSDelay, DSLimiter, DSIntegralLimiter, DSTimer).
 '''
 import unittest
 
 from dssim import DSSimulation
-from dssim.pubsub.components.time import Delay, IntegralLimiter, Limiter, Timer
+from dssim.pubsub.components.time import DSDelay, DSIntegralLimiter, DSLimiter, DSTimer
 
 
 class TestSimTimeMixin(unittest.TestCase):
@@ -27,10 +27,10 @@ class TestSimTimeMixin(unittest.TestCase):
         limiter = sim.limiter(5)
         ilimiter = sim.integral_limiter(throughput=5)
         timer = sim.timer(period=1)
-        self.assertIsInstance(delay, Delay)
-        self.assertIsInstance(limiter, Limiter)
-        self.assertIsInstance(ilimiter, IntegralLimiter)
-        self.assertIsInstance(timer, Timer)
+        self.assertIsInstance(delay, DSDelay)
+        self.assertIsInstance(limiter, DSLimiter)
+        self.assertIsInstance(ilimiter, DSIntegralLimiter)
+        self.assertIsInstance(timer, DSTimer)
         self.assertIs(delay.sim, sim)
         self.assertIs(limiter.sim, sim)
         self.assertIs(ilimiter.sim, sim)
@@ -54,7 +54,7 @@ class TestSimTimeMixin(unittest.TestCase):
 class TestDelay(unittest.TestCase):
     def test1_forwards_with_delay(self):
         sim = DSSimulation()
-        delay = Delay(3, name='delay', sim=sim)
+        delay = DSDelay(3, name='delay', sim=sim)
         out = []
         sink = sim.callback(lambda e: out.append((sim.time, e)), name='sink')
         delay.tx.add_subscriber(sink)
@@ -66,7 +66,7 @@ class TestDelay(unittest.TestCase):
 class TestLimiter(unittest.TestCase):
     def test1_limits_rate(self):
         sim = DSSimulation()
-        limiter = Limiter(2, name='limiter', sim=sim)  # one event per 0.5 time units
+        limiter = DSLimiter(2, name='limiter', sim=sim)  # one event per 0.5 time units
         out = []
         sink = sim.callback(lambda e: out.append((sim.time, e)), name='sink')
         limiter.tx.add_subscriber(sink)
@@ -80,7 +80,7 @@ class TestLimiter(unittest.TestCase):
 class TestIntegralLimiter(unittest.TestCase):
     def test1_non_accumulated_forwards_individual_events(self):
         sim = DSSimulation()
-        limiter = IntegralLimiter(throughput=4, report_frequency=2, accumulated_report=False, name='il', sim=sim)
+        limiter = DSIntegralLimiter(throughput=4, report_frequency=2, accumulated_report=False, name='il', sim=sim)
         out = []
         sink = sim.callback(lambda e: out.append((sim.time, e)), name='sink')
         limiter.tx.add_subscriber(sink)
@@ -95,7 +95,7 @@ class TestIntegralLimiter(unittest.TestCase):
 
     def test2_accumulated_reports_counts(self):
         sim = DSSimulation()
-        limiter = IntegralLimiter(throughput=4, report_frequency=2, accumulated_report=True, name='il', sim=sim)
+        limiter = DSIntegralLimiter(throughput=4, report_frequency=2, accumulated_report=True, name='il', sim=sim)
         out = []
         sink = sim.callback(lambda e: out.append((sim.time, e)), name='sink')
         limiter.tx.add_subscriber(sink)
@@ -112,7 +112,7 @@ class TestIntegralLimiter(unittest.TestCase):
 class TestTimer(unittest.TestCase):
     def test1_periodic_ticks(self):
         sim = DSSimulation()
-        timer = Timer(period=1, repeats=3, name='timer', sim=sim)
+        timer = DSTimer(period=1, repeats=3, name='timer', sim=sim)
         out = []
         sink = sim.callback(lambda e: out.append((sim.time, e)), name='sink')
         timer.tx.add_subscriber(sink)
@@ -122,7 +122,7 @@ class TestTimer(unittest.TestCase):
 
     def test2_pause_resume_keeps_remaining_time(self):
         sim = DSSimulation()
-        timer = Timer(period=1, repeats=1, name='timer', sim=sim)
+        timer = DSTimer(period=1, repeats=1, name='timer', sim=sim)
         out = []
         sink = sim.callback(lambda e: out.append((sim.time, e)), name='sink')
         timer.tx.add_subscriber(sink)
