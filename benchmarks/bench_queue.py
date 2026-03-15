@@ -40,6 +40,7 @@ import sys
 import os
 import time
 import statistics
+import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -364,7 +365,7 @@ def lite_cross_notify(n, k, capacity):
 # ===========================================================================
 # SimPy
 # ===========================================================================
-import simpy as _simpy
+_simpy = None
 
 
 def simpy_free_flow(n):
@@ -499,8 +500,7 @@ def simpy_cross_notify(n, k, capacity):
 # ===========================================================================
 # salabim
 # ===========================================================================
-import salabim as _sal
-_sal.yieldless(False)
+_sal = None
 
 
 def _sal_item_class(env):
@@ -658,7 +658,37 @@ def sal_cross_notify(n, k, capacity):
 # ===========================================================================
 # main
 # ===========================================================================
+def _parse_args():
+    parser = argparse.ArgumentParser(
+        description='Queue benchmark (DSSim by default, optional SimPy/salabim via flags).',
+    )
+    parser.add_argument('--with-simpy', action='store_true', help='Include SimPy rows.')
+    parser.add_argument('--with-salabim', action='store_true', help='Include salabim rows.')
+    return parser.parse_args()
+
+
 if __name__ == '__main__':
+    args = _parse_args()
+    run_simpy = False
+    run_salabim = False
+
+    if args.with_simpy:
+        try:
+            import simpy as _simpy_mod
+            _simpy = _simpy_mod
+            run_simpy = True
+        except Exception as exc:
+            print(f'SimPy requested but unavailable: {exc}')
+
+    if args.with_salabim:
+        try:
+            import salabim as _sal_mod
+            _sal = _sal_mod
+            _sal.yieldless(False)
+            run_salabim = True
+        except Exception as exc:
+            print(f'salabim requested but unavailable: {exc}')
+
     print(f'Python {sys.version.split()[0]}')
     print(f'Parameters: N={N_EVENTS:,}  capacity={CAPACITY}'
           f'  workers={N_WORKERS}  repeats={REPEATS}\n')
@@ -667,35 +697,45 @@ if __name__ == '__main__':
     print(f'=== Scenario 1: free-flow  (unbounded, 1P + 1C, N={N_EVENTS:,}) ===')
     report('DSSim  Queue',     N_EVENTS, *bench(dssim_free_flow,  N_EVENTS))
     report('DSSim  LiteQueue', N_EVENTS, *bench(lite_free_flow,   N_EVENTS))
-    report('SimPy  Store',     N_EVENTS, *bench(simpy_free_flow,  N_EVENTS))
-    report('salabim Store',    N_EVENTS, *bench(sal_free_flow,    N_EVENTS))
+    if run_simpy:
+        report('SimPy  Store',     N_EVENTS, *bench(simpy_free_flow,  N_EVENTS))
+    if run_salabim:
+        report('salabim Store',    N_EVENTS, *bench(sal_free_flow,    N_EVENTS))
 
     # ---- scenario 2 --------------------------------------------------------
     print(f'\n=== Scenario 2: backpressure  (capacity={CAPACITY}, 1P + 1C, N={N_EVENTS:,}) ===')
     report('DSSim  Queue',     N_EVENTS, *bench(dssim_backpressure, N_EVENTS, CAPACITY))
     report('DSSim  LiteQueue', N_EVENTS, *bench(lite_backpressure,  N_EVENTS, CAPACITY))
-    report('SimPy  Store',     N_EVENTS, *bench(simpy_backpressure, N_EVENTS, CAPACITY))
-    report('salabim Store',    N_EVENTS, *bench(sal_backpressure,   N_EVENTS, CAPACITY))
+    if run_simpy:
+        report('SimPy  Store',     N_EVENTS, *bench(simpy_backpressure, N_EVENTS, CAPACITY))
+    if run_salabim:
+        report('salabim Store',    N_EVENTS, *bench(sal_backpressure,   N_EVENTS, CAPACITY))
 
     # ---- scenario 3 --------------------------------------------------------
     print(f'\n=== Scenario 3: many-workers  ({N_WORKERS}P + {N_WORKERS}C, N={N_EVENTS:,}) ===')
     report('DSSim  Queue',     N_EVENTS, *bench(dssim_many_workers, N_EVENTS, N_WORKERS))
     report('DSSim  LiteQueue', N_EVENTS, *bench(lite_many_workers,  N_EVENTS, N_WORKERS))
-    report('SimPy  Store',     N_EVENTS, *bench(simpy_many_workers, N_EVENTS, N_WORKERS))
-    report('salabim Store',    N_EVENTS, *bench(sal_many_workers,   N_EVENTS, N_WORKERS))
+    if run_simpy:
+        report('SimPy  Store',     N_EVENTS, *bench(simpy_many_workers, N_EVENTS, N_WORKERS))
+    if run_salabim:
+        report('salabim Store',    N_EVENTS, *bench(sal_many_workers,   N_EVENTS, N_WORKERS))
 
     # ---- scenario 4 --------------------------------------------------------
     print(f'\n=== Scenario 4: blocked-getters  ({N_WORKERS} getters, 1P, N={N_EVENTS:,}) ===')
     report('DSSim  Queue',     N_EVENTS, *bench(dssim_blocked_getters, N_EVENTS, N_WORKERS))
     report('DSSim  LiteQueue', N_EVENTS, *bench(lite_blocked_getters,  N_EVENTS, N_WORKERS))
-    report('SimPy  Store',     N_EVENTS, *bench(simpy_blocked_getters, N_EVENTS, N_WORKERS))
-    report('salabim Store',    N_EVENTS, *bench(sal_blocked_getters,   N_EVENTS, N_WORKERS))
+    if run_simpy:
+        report('SimPy  Store',     N_EVENTS, *bench(simpy_blocked_getters, N_EVENTS, N_WORKERS))
+    if run_salabim:
+        report('salabim Store',    N_EVENTS, *bench(sal_blocked_getters,   N_EVENTS, N_WORKERS))
 
     # ---- scenario 5 --------------------------------------------------------
     print(f'\n=== Scenario 5: cross-notify  ({CROSS_WORKERS}P + {CROSS_WORKERS}C, capacity=1, N={N_EVENTS:,}) ===')
     report('DSSim  Queue',     N_EVENTS, *bench(dssim_cross_notify, N_EVENTS, CROSS_WORKERS, 1))
     report('DSSim  LiteQueue', N_EVENTS, *bench(lite_cross_notify,  N_EVENTS, CROSS_WORKERS, 1))
-    report('SimPy  Store',     N_EVENTS, *bench(simpy_cross_notify, N_EVENTS, CROSS_WORKERS, 1))
-    report('salabim Store',    N_EVENTS, *bench(sal_cross_notify,   N_EVENTS, CROSS_WORKERS, 1))
+    if run_simpy:
+        report('SimPy  Store',     N_EVENTS, *bench(simpy_cross_notify, N_EVENTS, CROSS_WORKERS, 1))
+    if run_salabim:
+        report('salabim Store',    N_EVENTS, *bench(sal_cross_notify,   N_EVENTS, CROSS_WORKERS, 1))
 
     print()

@@ -50,13 +50,7 @@ import sys
 import os
 import time
 import statistics
-
-try:
-    import simpy
-    _HAS_SIMPY = True
-except Exception:
-    simpy = None
-    _HAS_SIMPY = False
+import argparse
 
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -68,6 +62,9 @@ N_EVENTS = 100_000  # logical events per scenario run
 REPEATS  = 20       # independent timed runs; we report mean + min
 BUCKET_PROC_COUNT = 10   # K (number of target processes) for scenario 6
 BUCKET_COUNT = 100       # L (number of time buckets) for scenario 6
+
+_simpy = None
+_salabim = None
 
 
 # ---------------------------------------------------------------------------
@@ -584,9 +581,6 @@ def dssim_pubsub_bucketed_burst(n, k, l):
 # ===========================================================================
 # SimPy
 # ===========================================================================
-import simpy as _simpy
-
-
 def simpy_timed_callbacks(n):
     '''
     N SimPy timeout events at strictly increasing times dispatched via callbacks.
@@ -755,10 +749,6 @@ def simpy_bucketed_burst(n, k, l):
 # ===========================================================================
 # salabim 23
 # ===========================================================================
-import salabim as _salabim
-_salabim.yieldless(False)
-
-
 def salabim_timed_callbacks(n):
     '''
     Timer component holds 1 time unit, activates Sink, repeats N times.
@@ -955,7 +945,37 @@ def salabim_bucketed_burst(n, k, l):
 # ===========================================================================
 # main
 # ===========================================================================
+def _parse_args():
+    parser = argparse.ArgumentParser(
+        description='Simulator benchmark (DSSim by default, optional SimPy/salabim via flags).',
+    )
+    parser.add_argument('--with-simpy', action='store_true', help='Include SimPy rows.')
+    parser.add_argument('--with-salabim', action='store_true', help='Include salabim rows.')
+    return parser.parse_args()
+
+
 if __name__ == '__main__':
+    args = _parse_args()
+    run_simpy = False
+    run_salabim = False
+
+    if args.with_simpy:
+        try:
+            import simpy as _simpy_mod
+            _simpy = _simpy_mod
+            run_simpy = True
+        except Exception as exc:
+            print(f'SimPy requested but unavailable: {exc}')
+
+    if args.with_salabim:
+        try:
+            import salabim as _salabim_mod
+            _salabim = _salabim_mod
+            _salabim.yieldless(False)
+            run_salabim = True
+        except Exception as exc:
+            print(f'salabim requested but unavailable: {exc}')
+
     print(f'Python {sys.version.split()[0]}')
     print(f'Parameters: N={N_EVENTS:,}  repeats={REPEATS}  K={BUCKET_PROC_COUNT}  L={BUCKET_COUNT}\n')
 
@@ -966,52 +986,59 @@ if __name__ == '__main__':
     report('DSSim raw        ', N_EVENTS, *bench(dssim_raw_timed_callbacks,    N_EVENTS))
     report('DSSim LiteLayer2 ', N_EVENTS, *bench(dssim_lite_timed_callbacks,   N_EVENTS))
     report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_timed_callbacks, N_EVENTS))
-    if _HAS_SIMPY:
+    if run_simpy:
         report('SimPy            ', N_EVENTS, *bench(simpy_timed_callbacks,         N_EVENTS))
-    report('salabim          ', N_EVENTS, *bench(salabim_timed_callbacks,       N_EVENTS))
+    if run_salabim:
+        report('salabim          ', N_EVENTS, *bench(salabim_timed_callbacks,       N_EVENTS))
 
     # ---- scenario 2 --------------------------------------------------------
     print(f'\n=== Scenario 2: now-burst  (1 burst → N zero-time events, N={N_EVENTS:,}) ===')
     report('DSSim raw        ', N_EVENTS, *bench(dssim_raw_now_burst,    N_EVENTS))
     report('DSSim LiteLayer2 ', N_EVENTS, *bench(dssim_lite_now_burst,   N_EVENTS))
     report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_now_burst, N_EVENTS))
-    if _HAS_SIMPY:
+    if run_simpy:
         report('SimPy            ', N_EVENTS, *bench(simpy_now_burst,         N_EVENTS))
-    report('salabim          ', N_EVENTS, *bench(salabim_now_burst,       N_EVENTS))
+    if run_salabim:
+        report('salabim          ', N_EVENTS, *bench(salabim_now_burst,       N_EVENTS))
 
     # ---- scenario 3 --------------------------------------------------------
     print(f'\n=== Scenario 3: now-chain  (self-rescheduling, N={N_EVENTS:,}) ===')
     report('DSSim raw        ', N_EVENTS, *bench(dssim_raw_now_chain,    N_EVENTS))
     report('DSSim LiteLayer2 ', N_EVENTS, *bench(dssim_lite_now_chain,   N_EVENTS))
     report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_now_chain, N_EVENTS))
-    if _HAS_SIMPY:
+    if run_simpy:
         report('SimPy            ', N_EVENTS, *bench(simpy_now_chain,         N_EVENTS))
-    report('salabim          ', N_EVENTS, *bench(salabim_now_chain,       N_EVENTS))
+    if run_salabim:
+        report('salabim          ', N_EVENTS, *bench(salabim_now_chain,       N_EVENTS))
 
     # ---- scenario 4 --------------------------------------------------------
     print(f'\n=== Scenario 4: generator-wakeup  (1 waiter + 1 producer, N={N_EVENTS:,}) ===')
     report('DSSim raw        ', N_EVENTS, *bench(dssim_raw_generator_wakeup,    N_EVENTS))
     report('DSSim LiteLayer2 ', N_EVENTS, *bench(dssim_lite_generator_wakeup,   N_EVENTS))
     report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_generator_wakeup, N_EVENTS))
-    if _HAS_SIMPY:
+    if run_simpy:
         report('SimPy            ', N_EVENTS, *bench(simpy_process_wakeup,           N_EVENTS))
-    report('salabim          ', N_EVENTS, *bench(salabim_generator_wakeup,       N_EVENTS))
+    if run_salabim:
+        report('salabim          ', N_EVENTS, *bench(salabim_generator_wakeup,       N_EVENTS))
 
     # ---- scenario 5 --------------------------------------------------------
     print(f'\n=== Scenario 5: cross-signal  (2 waiting peers ping-pong, N={N_EVENTS:,}) ===')
     report('DSSim raw        ', N_EVENTS, *bench(dssim_raw_cross_signal,    N_EVENTS))
     report('DSSim LiteLayer2 ', N_EVENTS, *bench(dssim_lite_cross_signal,   N_EVENTS))
     report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_cross_signal, N_EVENTS))
-    report('SimPy            ', N_EVENTS, *bench(simpy_cross_signal,         N_EVENTS))
-    report('salabim          ', N_EVENTS, *bench(salabim_cross_signal,       N_EVENTS))
+    if run_simpy:
+        report('SimPy            ', N_EVENTS, *bench(simpy_cross_signal,         N_EVENTS))
+    if run_salabim:
+        report('salabim          ', N_EVENTS, *bench(salabim_cross_signal,       N_EVENTS))
 
     # ---- scenario 6 --------------------------------------------------------
     print(f'\n=== Scenario 6: bucketed-burst  (K={BUCKET_PROC_COUNT}, L={BUCKET_COUNT}, N={N_EVENTS:,}) ===')
     report('DSSim raw        ', N_EVENTS, *bench(dssim_raw_bucketed_burst,    N_EVENTS, BUCKET_PROC_COUNT, BUCKET_COUNT))
     report('DSSim LiteLayer2 ', N_EVENTS, *bench(dssim_lite_bucketed_burst,   N_EVENTS, BUCKET_PROC_COUNT, BUCKET_COUNT))
     report('DSSim PubSub     ', N_EVENTS, *bench(dssim_pubsub_bucketed_burst, N_EVENTS, BUCKET_PROC_COUNT, BUCKET_COUNT))
-    if _HAS_SIMPY:
+    if run_simpy:
         report('SimPy            ', N_EVENTS, *bench(simpy_bucketed_burst,        N_EVENTS, BUCKET_PROC_COUNT, BUCKET_COUNT))
-    report('salabim          ', N_EVENTS, *bench(salabim_bucketed_burst,      N_EVENTS, BUCKET_PROC_COUNT, BUCKET_COUNT))
+    if run_salabim:
+        report('salabim          ', N_EVENTS, *bench(salabim_bucketed_burst,      N_EVENTS, BUCKET_PROC_COUNT, BUCKET_COUNT))
 
     print()

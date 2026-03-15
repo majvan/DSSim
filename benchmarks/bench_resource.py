@@ -33,6 +33,7 @@ import sys
 import os
 import time
 import statistics
+import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -40,12 +41,7 @@ from dssim import DSSimulation, LiteLayer2
 from dssim import Resource, PriorityResource, LiteResource, LitePriorityResource
 from dssim import Queue, DSResourcePreempted
 
-try:
-    import simpy
-    _HAS_SIMPY = True
-except Exception:
-    simpy = None
-    _HAS_SIMPY = False
+simpy = None
 
 
 # ---------------------------------------------------------------------------
@@ -323,29 +319,47 @@ def simpy_preemption_delivery(n):
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
+def _parse_args():
+    parser = argparse.ArgumentParser(
+        description='Resource benchmark (DSSim by default, optional SimPy via --with-simpy).',
+    )
+    parser.add_argument('--with-simpy', action='store_true', help='Include SimPy rows.')
+    return parser.parse_args()
+
+
 if __name__ == '__main__':
+    args = _parse_args()
+    run_simpy = False
+    if args.with_simpy:
+        try:
+            import simpy as simpy_mod
+            simpy = simpy_mod
+            run_simpy = True
+        except Exception as exc:
+            print(f'SimPy requested but unavailable: {exc}')
+
     print(f'Python {sys.version.split()[0]}')
     print(f'Parameters: N={N_EVENTS:,}  waiters={N_WAITERS}  repeats={REPEATS}\n')
-    if not _HAS_SIMPY:
+    if args.with_simpy and not run_simpy:
         print('SimPy unavailable: skipping SimPy rows.\n')
 
     print(f'=== Scenario 1: Resource uncontended (N={N_EVENTS:,}) ===')
     report('DSSim Resource', N_EVENTS, *bench(dssim_resource_uncontended, N_EVENTS))
     report('DSSim LiteResource', N_EVENTS, *bench(dssim_lite_resource_uncontended, N_EVENTS))
-    if _HAS_SIMPY:
+    if run_simpy:
         report('SimPy Resource', N_EVENTS, *bench(simpy_resource_uncontended, N_EVENTS))
 
     print(f'\n=== Scenario 2: Priority dispatch (N={N_EVENTS:,}, K={N_WAITERS}) ===')
     n2 = (N_EVENTS // N_WAITERS) * N_WAITERS  # keep divisible
     report('DSSim PriorityResource', n2, *bench(dssim_priority_dispatch, n2, N_WAITERS))
     report('DSSim LitePriorityResource', n2, *bench(dssim_lite_priority_dispatch, n2, N_WAITERS))
-    if _HAS_SIMPY:
+    if run_simpy:
         report('SimPy PriorityResource', n2, *bench(simpy_priority_dispatch, n2, N_WAITERS))
 
     print(f'\n=== Scenario 3: Preemption delivery (N={N_EVENTS:,}) ===')
     report('DSSim Preemption', N_EVENTS, *bench(dssim_preemption_delivery, N_EVENTS))
     report('DSSim LitePreemption', N_EVENTS, *bench(dssim_lite_preemption_delivery, N_EVENTS))
-    if _HAS_SIMPY:
+    if run_simpy:
         report('SimPy PreemptiveResource', N_EVENTS, *bench(simpy_preemption_delivery, N_EVENTS))
 
     print()

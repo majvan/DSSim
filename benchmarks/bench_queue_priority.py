@@ -50,6 +50,7 @@ import sys
 import os
 import time
 import statistics
+import argparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -303,7 +304,7 @@ def lite_bounded(n):
 # ===========================================================================
 # SimPy
 # ===========================================================================
-import simpy as _simpy
+_simpy = None
 
 
 # --- Scenario 1 : fill-drain (SimPy must use processes) --------------------
@@ -389,18 +390,19 @@ def simpy_bounded(n):
 # ===========================================================================
 # salabim 23
 # ===========================================================================
-import salabim as _salabim
-_salabim.yieldless(False)
+_salabim = None
 
 
 # Salabim requires items stored in a Store to be sim.Component subclasses.
 # Creating one Component per priority item is part of salabim's design; it
 # adds allocation overhead not present in DSSim or SimPy.
 
-class _SalabimItem(_salabim.Component):
-    '''Lightweight data-carrying component used as a Store item.'''
-    def setup(self, val):
-        self.val = val
+def _salabim_item_class():
+    class _SalabimItem(_salabim.Component):
+        '''Lightweight data-carrying component used as a Store item.'''
+        def setup(self, val):
+            self.val = val
+    return _SalabimItem
 
 
 # --- Scenario 1 : fill-drain -----------------------------------------------
@@ -414,10 +416,11 @@ def salabim_fill_drain(n):
     '''
     env = _salabim.Environment(trace=False)
     store = _salabim.Store(env=env)
+    SalabimItem = _salabim_item_class()
     drained = 0
 
     for i in range(n):
-        item = _SalabimItem(val=i, env=env)
+        item = SalabimItem(val=i, env=env)
         item.enter_sorted(store, priority=(n - i))   # worst-case order
 
     while store:
@@ -436,12 +439,13 @@ def salabim_burst(n):
     '''
     env = _salabim.Environment(trace=False)
     store = _salabim.Store(env=env)
+    SalabimItem = _salabim_item_class()
     received = [0]
 
     class Producer(_salabim.Component):
         def process(self):
             for i in range(n):
-                item = _SalabimItem(val=i, env=env)
+                item = SalabimItem(val=i, env=env)
                 yield self.to_store(store, item, priority=(n - i))
 
     class Consumer(_salabim.Component):
@@ -465,12 +469,13 @@ def salabim_bounded(n):
     '''
     env = _salabim.Environment(trace=False)
     store = _salabim.Store(capacity=1, env=env)
+    SalabimItem = _salabim_item_class()
     received = [0]
 
     class Producer(_salabim.Component):
         def process(self):
             for i in range(n):
-                item = _SalabimItem(val=i, env=env)
+                item = SalabimItem(val=i, env=env)
                 yield self.to_store(store, item, priority=i)
 
     class Consumer(_salabim.Component):
@@ -488,7 +493,37 @@ def salabim_bounded(n):
 # ===========================================================================
 # main
 # ===========================================================================
+def _parse_args():
+    parser = argparse.ArgumentParser(
+        description='Priority-queue benchmark (DSSim by default, optional SimPy/salabim via flags).',
+    )
+    parser.add_argument('--with-simpy', action='store_true', help='Include SimPy rows.')
+    parser.add_argument('--with-salabim', action='store_true', help='Include salabim rows.')
+    return parser.parse_args()
+
+
 if __name__ == '__main__':
+    args = _parse_args()
+    run_simpy = False
+    run_salabim = False
+
+    if args.with_simpy:
+        try:
+            import simpy as _simpy_mod
+            _simpy = _simpy_mod
+            run_simpy = True
+        except Exception as exc:
+            print(f'SimPy requested but unavailable: {exc}')
+
+    if args.with_salabim:
+        try:
+            import salabim as _salabim_mod
+            _salabim = _salabim_mod
+            _salabim.yieldless(False)
+            run_salabim = True
+        except Exception as exc:
+            print(f'salabim requested but unavailable: {exc}')
+
     print(f'Python {sys.version.split()[0]}')
     print(f'Parameters: N={N_EVENTS:,}  repeats={REPEATS}\n')
 
@@ -497,8 +532,10 @@ if __name__ == '__main__':
     print(f'  DSSim/LiteQueue/salabim use a nowait path; SimPy always goes through event machinery.')
     report('DSSim  Queue',          N_EVENTS, *bench(dssim_fill_drain, N_EVENTS))
     report('DSSim  LiteQueue',      N_EVENTS, *bench(lite_fill_drain, N_EVENTS))
-    report('SimPy  PriorityStore',  N_EVENTS, *bench(simpy_fill_drain, N_EVENTS))
-    report('salabim Store',         N_EVENTS, *bench(salabim_fill_drain, N_EVENTS))
+    if run_simpy:
+        report('SimPy  PriorityStore',  N_EVENTS, *bench(simpy_fill_drain, N_EVENTS))
+    if run_salabim:
+        report('salabim Store',         N_EVENTS, *bench(salabim_fill_drain, N_EVENTS))
 
     # ---- scenario 2 --------------------------------------------------------
     print(f'\n=== Scenario 2: burst  (unlimited capacity, N={N_EVENTS:,}) ===')
@@ -506,14 +543,18 @@ if __name__ == '__main__':
     report('DSSim  Queue     gput       + gget', N_EVENTS, *bench(dssim_burst_gput, N_EVENTS))
     report('DSSim  LiteQueue put_nowait + gget', N_EVENTS, *bench(lite_burst_nowait_put, N_EVENTS))
     report('DSSim  LiteQueue gput       + gget', N_EVENTS, *bench(lite_burst_gput, N_EVENTS))
-    report('SimPy  PriorityStore put    + get ', N_EVENTS, *bench(simpy_burst, N_EVENTS))
-    report('salabim Store to_store + from_store', N_EVENTS, *bench(salabim_burst, N_EVENTS))
+    if run_simpy:
+        report('SimPy  PriorityStore put    + get ', N_EVENTS, *bench(simpy_burst, N_EVENTS))
+    if run_salabim:
+        report('salabim Store to_store + from_store', N_EVENTS, *bench(salabim_burst, N_EVENTS))
 
     # ---- scenario 3 --------------------------------------------------------
     print(f'\n=== Scenario 3: bounded  (capacity=1, alternating put/get, N={N_EVENTS:,}) ===')
     report('DSSim  Queue     gput + gget',        N_EVENTS, *bench(dssim_bounded, N_EVENTS))
     report('DSSim  LiteQueue gput + gget',        N_EVENTS, *bench(lite_bounded, N_EVENTS))
-    report('SimPy  PriorityStore put + get',      N_EVENTS, *bench(simpy_bounded, N_EVENTS))
-    report('salabim Store to_store + from_store', N_EVENTS, *bench(salabim_bounded, N_EVENTS))
+    if run_simpy:
+        report('SimPy  PriorityStore put + get',      N_EVENTS, *bench(simpy_bounded, N_EVENTS))
+    if run_salabim:
+        report('salabim Store to_store + from_store', N_EVENTS, *bench(salabim_bounded, N_EVENTS))
 
     print()
