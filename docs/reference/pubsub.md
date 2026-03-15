@@ -14,7 +14,7 @@
 
 ::: dssim.pubsub.cond
 
-::: dssim.pubsub.processcomponent
+::: dssim.pubsub.agent
 
 ## Components
 
@@ -26,10 +26,6 @@
 
 ::: dssim.pubsub.components.state
 
-::: dssim.pubsub.components.timer
-
-::: dssim.pubsub.components.delay
-
-::: dssim.pubsub.components.limiter
+::: dssim.pubsub.components.time
 
 ::: dssim.pubsub.components.hw.uart
