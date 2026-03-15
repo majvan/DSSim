@@ -148,15 +148,8 @@ def _percentile(sorted_values: Sequence[int], ratio: float) -> int:
 
 
 class BenchCallback(DSCallback):
-    '''DSCallback variant that routes accepted events through sim.try_send().'''
-    def try_send(self, event):
-        signaled, event = self.meta.cond.check(event)
-        if not signaled:
-            return False
-        return self.sim.try_send(self, event)
-
-    def callback(self, event):
-        return self.sim.try_send(self, event)
+    '''Direct-send callback used by post-check pubsub benchmark scenarios.'''
+    pass
 
 
 class BenchObserver(DSSub):
