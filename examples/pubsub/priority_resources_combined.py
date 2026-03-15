@@ -13,7 +13,7 @@ For a nested ownership/preemption example, see priority_resources_nested.py.
 '''
 
 from dssim import DSSimulation, DSResourcePreempted
-from dssim.pubsub.process import TestObject
+from dssim.pubsub.base import TestObject
 
 
 def main() -> None:

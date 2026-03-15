@@ -20,7 +20,7 @@ import inspect
 import copy
 from enum import Enum
 from dssim.base import TimeType, EventType, EventRetType
-from dssim.pubsub.base import CondType, ICondition, CallableConditionMixin, SubscriberMetadata
+from dssim.pubsub.base import CondType, ICondition, CallableConditionMixin, SubscriberMetadata, TestObject
 from dssim.pubsub.future import DSFuture
 from dssim.pubsub.process import DSProcess
 
@@ -37,20 +37,34 @@ SignalList = List[SignalType]
 
 class _ConditionWaitMixin:
     def gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
-        retval = yield from self.sim.gwait(timeout=timeout, cond=self, val=val)
+        # Self-contained gated wait: subscribe to condition endpoints while blocked.
+        with self.sim.observe_pre(self):
+            retval = yield from self.sim.gwait(timeout=timeout, cond=self, val=val)
         return retval
 
     async def wait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> EventType:
-        return await self.sim.wait(timeout=timeout, cond=self, val=val)
+        # Self-contained gated wait: subscribe to condition endpoints while blocked.
+        with self.sim.observe_pre(self):
+            return await self.sim.wait(timeout=timeout, cond=self, val=val)
 
     def check_and_gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+        # Pre-check first (without endpoint registration). Register producers only
+        # when we actually need to block.
+        signaled, event = self.check(TestObject)
+        if signaled:
+            return event
         with self.sim.observe_pre(self):
-            retval = yield from self.sim.check_and_gwait(timeout=timeout, cond=self, val=val)
+            retval = yield from self.sim.gwait(timeout=timeout, cond=self, val=val)
         return retval
 
     async def check_and_wait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> EventType:
+        # Pre-check first (without endpoint registration). Register producers only
+        # when we actually need to block.
+        signaled, event = self.check(TestObject)
+        if signaled:
+            return event
         with self.sim.observe_pre(self):
-            return await self.sim.check_and_wait(timeout=timeout, cond=self, val=val)
+            return await self.sim.wait(timeout=timeout, cond=self, val=val)
 
 
 class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin):

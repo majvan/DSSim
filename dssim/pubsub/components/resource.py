@@ -161,8 +161,14 @@ class Resource(ResourceProbeMixin, DSStatefulComponent):
 
     def gput_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
         ''' Put amount units into the resource pool (generator version), waiting if at capacity. '''
+        if self.amount + amount <= self.capacity:
+            retval = self._resource.put_n_nowait(amount)
+            if retval > 0:
+                self._fire_nempty()
+                self._fire_changed()
+            return retval
         with self.sim.consume(self.tx_nfull, **policy_params):
-            obj = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
+            obj = yield from self.sim.gwait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
         if obj is None:
             retval: NumericType = 0
         else:
@@ -178,8 +184,14 @@ class Resource(ResourceProbeMixin, DSStatefulComponent):
 
     def gget_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
         ''' Get amount units from the resource pool (generator version), waiting if not available. '''
+        if self.amount >= amount:
+            retval = self._resource.get_n_nowait(amount)
+            if retval > 0:
+                self._fire_nfull()
+                self._fire_changed()
+            return retval
         with self.sim.consume(self.tx_nempty, **policy_params):
-            obj = yield from self.sim.check_and_gwait(timeout, cond=lambda e:self.amount >= amount)
+            obj = yield from self.sim.gwait(timeout, cond=lambda e:self.amount >= amount)
         if obj is None:
             retval: NumericType = 0
         else:
@@ -199,8 +211,14 @@ class Resource(ResourceProbeMixin, DSStatefulComponent):
 
     async def put_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
         ''' Put amount units into the resource pool, waiting if at capacity. '''
+        if self.amount + amount <= self.capacity:
+            retval = self._resource.put_n_nowait(amount)
+            if retval > 0:
+                self._fire_nempty()
+                self._fire_changed()
+            return retval
         with self.sim.consume(self.tx_nfull, **policy_params):
-            obj = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
+            obj = await self.sim.wait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
         if obj is None:
             retval: NumericType = 0
         else:
@@ -216,8 +234,14 @@ class Resource(ResourceProbeMixin, DSStatefulComponent):
 
     async def get_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
         ''' Get amount units from the resource pool, waiting if not available. '''
+        if self.amount >= amount:
+            retval = self._resource.get_n_nowait(amount)
+            if retval > 0:
+                self._fire_nfull()
+                self._fire_changed()
+            return retval
         with self.sim.consume(self.tx_nempty, **policy_params):
-            obj = await self.sim.check_and_wait(timeout, cond=lambda e:self.amount >= amount)
+            obj = await self.sim.wait(timeout, cond=lambda e:self.amount >= amount)
         if obj is None:
             retval: NumericType = 0
         else:

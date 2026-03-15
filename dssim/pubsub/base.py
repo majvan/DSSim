@@ -34,6 +34,10 @@ def AlwaysFalse(e: EventType) -> bool:
     return False
 
 
+# Artificial object used for explicit pre-check paths in check_and_wait/check_and_gwait.
+TestObject = object()
+
+
 class ICondition:
     ''' An interface for a condition checkable classes '''
     @abstractmethod

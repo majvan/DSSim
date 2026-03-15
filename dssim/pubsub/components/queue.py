@@ -90,8 +90,14 @@ class Queue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
 
     async def put(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> EventType:
         '''Put item(s) into buffer, waiting up to *timeout* if the buffer is full.'''
+        if len(self._buffer) + len(obj) <= self.capacity:
+            for item in obj:
+                self._buffer.enqueue(item)
+            self._fire_nempty()
+            self._fire_changed()
+            return True
         with self.sim.consume(self.tx_nfull, **policy_params):
-            retval = await self.sim.check_and_wait(
+            retval = await self.sim.wait(
                 timeout,
                 cond=lambda e: len(self._buffer) + len(obj) <= self.capacity,
             )
@@ -104,8 +110,14 @@ class Queue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
 
     def gput(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         '''Put item(s) into buffer (generator version), waiting up to *timeout* if full.'''
+        if len(self._buffer) + len(obj) <= self.capacity:
+            for item in obj:
+                self._buffer.enqueue(item)
+            self._fire_nempty()
+            self._fire_changed()
+            return True
         with self.sim.consume(self.tx_nfull, **policy_params):
-            retval = yield from self.sim.check_and_gwait(
+            retval = yield from self.sim.gwait(
                 timeout,
                 cond=lambda e: len(self._buffer) + len(obj) <= self.capacity,
             )
@@ -147,8 +159,13 @@ class Queue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
             check = lambda _: len(self._buffer) >= amount
         else:
             check = lambda _: len(self._buffer) >= amount and cond(self._buffer.peek())
+        if check(None):
+            retval = [self._buffer.dequeue() for _ in range(amount)]
+            self._fire_nfull()
+            self._fire_changed()
+            return retval
         with self.sim.consume(tx, **policy_params):
-            element = await self.sim.check_and_wait(timeout, cond=check)
+            element = await self.sim.wait(timeout, cond=check)
         if element is None:
             return None
         retval = [self._buffer.dequeue() for _ in range(amount)]
@@ -163,8 +180,13 @@ class Queue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
             check = self.LAMBDA1
         else:
             check = lambda _: len(self._buffer) >= 1 and cond(self._buffer.peek())
+        if check(None):
+            retval = self._buffer.dequeue()
+            self._fire_nfull()
+            self._fire_changed()
+            return retval
         with self.sim.consume(tx, **policy_params):
-            element = await self.sim.check_and_wait(timeout, cond=check)
+            element = await self.sim.wait(timeout, cond=check)
         if element is None:
             return None
         retval = self._buffer.dequeue()
@@ -179,8 +201,13 @@ class Queue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
             check = lambda _: len(self._buffer) >= amount
         else:
             check = lambda _: len(self._buffer) >= amount and cond(self._buffer.peek())
+        if check(None):
+            retval = [self._buffer.dequeue() for _ in range(amount)]
+            self._fire_nfull()
+            self._fire_changed()
+            return retval
         with self.sim.consume(tx, **policy_params):
-            element = yield from self.sim.check_and_gwait(timeout, cond=check)
+            element = yield from self.sim.gwait(timeout, cond=check)
         if element is None:
             return None
         retval = [self._buffer.dequeue() for _ in range(amount)]
@@ -195,8 +222,13 @@ class Queue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
             check = self.LAMBDA1
         else:
             check = lambda _: len(self._buffer) >= 1 and cond(self._buffer.peek())
+        if check(None):
+            retval = self._buffer.dequeue()
+            self._fire_nfull()
+            self._fire_changed()
+            return retval
         with self.sim.consume(tx, **policy_params):
-            element = yield from self.sim.check_and_gwait(timeout, cond=check)
+            element = yield from self.sim.gwait(timeout, cond=check)
         if element is None:
             return None
         retval = self._buffer.dequeue()
@@ -251,14 +283,18 @@ class Queue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
 
     def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         tx = self._get_tx_endpoint(cond)
+        if cond(None):
+            return None
         with self.sim.consume(tx, **policy_params):
-            retval = yield from self.sim.check_and_gwait(timeout, cond=cond)
+            retval = yield from self.sim.gwait(timeout, cond=cond)
         return retval
 
     async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, **policy_params: Any) -> EventType:
         tx = self._get_tx_endpoint(cond)
+        if cond(None):
+            return None
         with self.sim.consume(tx, **policy_params):
-            retval = await self.sim.check_and_wait(timeout, cond=cond)
+            retval = await self.sim.wait(timeout, cond=cond)
         return retval
 
     # ---- sequence protocol -------------------------------------------------

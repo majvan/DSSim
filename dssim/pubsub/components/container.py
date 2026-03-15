@@ -72,8 +72,15 @@ class Container(DSStatefulComponent, SignalMixin):
     async def put(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> EventType:
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         num_items = len(obj)
+        if self._available(num_items):
+            for item in obj:
+                self.container[item] = self.container.get(item, 0) + 1
+            self.size += num_items
+            self._fire_nempty()
+            self._fire_changed()
+            return True
         with self.sim.consume(self.tx_changed, **policy_params):
-            retval = await self.sim.check_and_wait(timeout, cond=lambda e: self._available(num_items))
+            retval = await self.sim.wait(timeout, cond=lambda e: self._available(num_items))
         if retval is not None:
             for item in obj:
                 self.container[item] = self.container.get(item, 0) + 1
@@ -85,8 +92,15 @@ class Container(DSStatefulComponent, SignalMixin):
     def gput(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         ''' Put an event into queue. The event can be consumed anytime in the future. '''
         num_items = len(obj)
+        if self._available(num_items):
+            for item in obj:
+                self.container[item] = self.container.get(item, 0) + 1
+            self.size += num_items
+            self._fire_nempty()
+            self._fire_changed()
+            return True
         with self.sim.consume(self.tx_changed, **policy_params):
-            retval = yield from self.sim.check_and_gwait(timeout, cond=lambda e: self._available(num_items))
+            retval = yield from self.sim.gwait(timeout, cond=lambda e: self._available(num_items))
         if retval is not None:
             for item in obj:
                 self.container[item] = self.container.get(item, 0) + 1
@@ -149,23 +163,34 @@ class Container(DSStatefulComponent, SignalMixin):
         if all_or_nothing:
             retval = None
             if len(obj) > 0:
-                with self.sim.consume(self.tx_changed, **policy_params):
-                    element = await self.sim.check_and_wait(timeout, cond=lambda e: all(el in self.container.keys() for el in obj))  # wait while first element does not match the cond
-                    if element is not None:
-                        retval = self.get_n_nowait(*obj)
+                if all(el in self.container.keys() for el in obj):
+                    retval = self.get_n_nowait(*obj)
+                else:
+                    with self.sim.consume(self.tx_changed, **policy_params):
+                        element = await self.sim.wait(timeout, cond=lambda e: all(el in self.container.keys() for el in obj))  # wait while first element does not match the cond
+                        if element is not None:
+                            retval = self.get_n_nowait(*obj)
             else:
-                with self.sim.consume(self.tx_nempty, **policy_params):
-                    # get any object first
-                    element = await self.sim.check_and_wait(timeout, cond=lambda e: self.size > 0)  # wait while first element does not match the cond
-                    if element is not None:
-                        retval = self.get_n_nowait()
+                if self.size > 0:
+                    retval = self.get_n_nowait()
+                else:
+                    with self.sim.consume(self.tx_nempty, **policy_params):
+                        # get any object first
+                        element = await self.sim.wait(timeout, cond=lambda e: self.size > 0)  # wait while first element does not match the cond
+                        if element is not None:
+                            retval = self.get_n_nowait()
         elif len(obj) > 0:
             retval = []
             deadline = float('inf') if timeout == float('inf') else self.sim.time + timeout
             while self.sim.time < deadline:
+                if any(el in self.container.keys() for el in obj):
+                    retval += self.get_n_nowait(*obj)
+                    if len(retval) == len(obj):
+                        break
+                    continue
                 remaining = float('inf') if deadline == float('inf') else self.sim.compute_time(deadline)
                 with self.sim.consume(self.tx_changed, **policy_params):
-                    element = await self.sim.check_and_wait(remaining, cond=lambda e: any(el in self.container.keys() for el in obj))
+                    element = await self.sim.wait(remaining, cond=lambda e: any(el in self.container.keys() for el in obj))
                 if element is None:
                     break
                 retval += self.get_n_nowait(*obj)
@@ -177,8 +202,14 @@ class Container(DSStatefulComponent, SignalMixin):
 
     async def get(self, timeout: TimeType = float('inf'), **policy_params: Any) -> Optional[List[EventType]]:
         ''' Simplified version of get_n => gets any first object '''
+        if self.LAMBDA1(None):
+            el = next(iter(self.container.keys()))
+            retval = self._pop_element(el)
+            self.size -= 1
+            self._fire_changed()
+            return retval
         with self.sim.consume(self.tx_nempty, **policy_params):
-            retval = await self.sim.check_and_wait(timeout, cond=self.LAMBDA1)
+            retval = await self.sim.wait(timeout, cond=self.LAMBDA1)
             if retval is not None:
                 el = next(iter(self.container.keys()))
                 retval = self._pop_element(el)
@@ -194,23 +225,34 @@ class Container(DSStatefulComponent, SignalMixin):
         if all_or_nothing:
             retval = None
             if len(obj) > 0:
-                with self.sim.consume(self.tx_changed, **policy_params):
-                    element = yield from self.sim.check_and_gwait(timeout, cond=lambda e: all(el in self.container.keys() for el in obj))  # wait while first element does not match the cond
-                    if element is not None:
-                        retval = self.get_n_nowait(*obj)
+                if all(el in self.container.keys() for el in obj):
+                    retval = self.get_n_nowait(*obj)
+                else:
+                    with self.sim.consume(self.tx_changed, **policy_params):
+                        element = yield from self.sim.gwait(timeout, cond=lambda e: all(el in self.container.keys() for el in obj))  # wait while first element does not match the cond
+                        if element is not None:
+                            retval = self.get_n_nowait(*obj)
             else:
-                with self.sim.consume(self.tx_nempty, **policy_params):
-                    # get any object first
-                    element = yield from self.sim.check_and_gwait(timeout, cond=lambda e: self.size > 0)  # wait while first element does not match the cond
-                    if element is not None:
-                        retval = self.get_n_nowait()
+                if self.size > 0:
+                    retval = self.get_n_nowait()
+                else:
+                    with self.sim.consume(self.tx_nempty, **policy_params):
+                        # get any object first
+                        element = yield from self.sim.gwait(timeout, cond=lambda e: self.size > 0)  # wait while first element does not match the cond
+                        if element is not None:
+                            retval = self.get_n_nowait()
         elif len(obj) > 0:
             retval = []
             deadline = float('inf') if timeout == float('inf') else self.sim.time + timeout
             while self.sim.time < deadline:
+                if any(el in self.container.keys() for el in obj):
+                    retval += self.get_n_nowait(*obj)
+                    if len(retval) == len(obj):
+                        break
+                    continue
                 remaining = float('inf') if deadline == float('inf') else self.sim.compute_time(deadline)
                 with self.sim.consume(self.tx_changed, **policy_params):
-                    element = yield from self.sim.check_and_gwait(remaining, cond=lambda e: any(el in self.container.keys() for el in obj))
+                    element = yield from self.sim.gwait(remaining, cond=lambda e: any(el in self.container.keys() for el in obj))
                 if element is None:
                     break
                 retval += self.get_n_nowait(*obj)
@@ -222,8 +264,14 @@ class Container(DSStatefulComponent, SignalMixin):
 
     def gget(self, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, Optional[EventType], Optional[EventType]]:
         ''' Simplified version of gget_n => gets any first object; return the object '''
+        if self.LAMBDA1(None):
+            el = next(iter(self.container.keys()))
+            retval = self._pop_element(el)
+            self.size -= 1
+            self._fire_changed()
+            return retval
         with self.sim.consume(self.tx_nempty, **policy_params):
-            retval = yield from self.sim.check_and_gwait(timeout, cond=self.LAMBDA1)
+            retval = yield from self.sim.gwait(timeout, cond=self.LAMBDA1)
             if retval is not None:
                 el = next(iter(self.container.keys()))
                 retval = self._pop_element(el)
@@ -250,14 +298,18 @@ class Container(DSStatefulComponent, SignalMixin):
 
     def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         tx = self._get_tx_endpoint(cond)
+        if cond(None):
+            return None
         with self.sim.consume(tx, **policy_params):
-            retval = yield from self.sim.check_and_gwait(timeout, cond=cond)
+            retval = yield from self.sim.gwait(timeout, cond=cond)
         return retval
 
     async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, **policy_params: Any) -> EventType:
         tx = self._get_tx_endpoint(cond)
+        if cond(None):
+            return None
         with self.sim.consume(tx, **policy_params):
-            retval = await self.sim.check_and_wait(timeout, cond=cond)
+            retval = await self.sim.wait(timeout, cond=cond)
         return retval
 
     def __len__(self) -> int:
