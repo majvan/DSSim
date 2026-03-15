@@ -16,13 +16,13 @@ flowchart TB
   end
   subgraph L3["Layer 3 — Components"]
     direction LR
-    Q["Queue"] ~~~ R["Resource"] ~~~ Co["Container"] ~~~ Ti["Timer"] ~~~ St["State"] ~~~ HW["HW models"]
+    Q["DSQueue"] ~~~ R["DSResource"] ~~~ Co["DSContainer"] ~~~ Ti["DSTimer"] ~~~ St["DSState"] ~~~ HW["HW models"]
   end
   subgraph L2["Layer 2 — Event Routing Profiles"]
     direction LR
     subgraph Lite["  LiteLayer2  "]
       direction LR
-      LP["LiteProcess"] ~~~ LQ["LiteQueue"] ~~~ LRes["LiteResource"] ~~~ LPB["DSLitePub · DSLiteSub"]
+      LP["LiteProcess"] ~~~ LQ["DSLiteQueue"] ~~~ LRes["DSLiteResource"] ~~~ LPB["DSLitePub · DSLiteSub"]
     end
     subgraph PubSub["  PubSubLayer2  "]
       direction LR
@@ -92,7 +92,7 @@ Switching from Lite to PubSub later is a one-line change at construction. The on
 
 ### Layer 3 — Components
 
-Built on Layer 2: `Queue`, `Resource`, `Container`, `Timer`, `State`, and hardware models. These components are implemented entirely in terms of Layer 2 primitives and work with either L2 profile.
+Built on Layer 2: `DSQueue`, `DSResource`, `DSContainer`, `DSTimer`, `DSState`, and hardware models. These components are implemented entirely in terms of Layer 2 primitives and work with either L2 profile.
 
 ### Layer 4 — Agents
 
@@ -112,6 +112,6 @@ Compatibility adapters for SimPy, salabim, and asyncio. Shims sit above the DSSi
 - **LiteLayer2** offers simple fan-out pub/sub (`DSLitePub`/`DSLiteSub`): all subscribers receive every event, no tiers or conditions.
 - **PubSubLayer2** offers routing-rich pub/sub (`DSPub`/`DSSub`): 4-phase tiers, condition filtering, filter circuits, processes, and futures.
 - The two L2 profiles are interchangeable with some limitations: switching is a one-argument change; tier-based routing and condition filtering have no Lite equivalent.
-- Layer 3 components (Queue, Resource, Timer, HW models) are built on top of Layer 2 and work with either profile.
+- Layer 3 components (DSQueue, DSResource, DSTimer, HW models) are built on top of Layer 2 and work with either profile.
 - Layer 4 (`DSAgent`) adds self-driving component behavior built on top of Layer 3 components.
 - Layer 5 shims (SimPy, salabim, asyncio) let migrated code coexist with native DSSim code in the same simulation.

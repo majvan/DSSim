@@ -6,17 +6,17 @@ DSSim ships three stateful simulation components that model the most common coor
 
 | Component | What it holds | Blocks when... |
 |---|---|---|
-| `Queue` | ordered items (objects) | full on put / empty on get |
-| `Container` | object counts (unordered) | full on put / empty on get |
-| `Resource` | numeric amount | exhausted on get / full on put |
+| `DSQueue` | ordered items (objects) | full on put / empty on get |
+| `DSContainer` | object counts (unordered) | full on put / empty on get |
+| `DSResource` | numeric amount | exhausted on get / full on put |
 
-All three live in `PubSubLayer2`. Lite equivalents (`LiteQueue`, `LiteResource`, `LiteContainer`) exist for lower-overhead scenarios — see [Section 4.7](#47-lite-equivalents).
+All three live in `PubSubLayer2`. Lite equivalents (`DSLiteQueue`, `DSLiteResource`, `LiteContainer`) exist for lower-overhead scenarios — see [Section 4.7](#47-lite-equivalents).
 
 ---
 
 ## 6.2 Queue
 
-`Queue` is a FIFO buffer with optional capacity. Producers put items; consumers get them.
+`DSQueue` is a FIFO buffer with optional capacity. Producers put items; consumers get them.
 
 ### 6.2.1 Creating a Queue
 
@@ -124,7 +124,7 @@ For priority ordering, pass `NotifierPriority` and specify a `priority` on each 
 
 ## 6.3 Container
 
-`Container` is like `Queue` but stores _counts_ of objects rather than individual items. It is unordered: you track how many of each object type are present, not in what sequence they arrived.
+`DSContainer` is like `DSQueue` but stores _counts_ of objects rather than individual items. It is unordered: you track how many of each object type are present, not in what sequence they arrived.
 
 ```python
 from dssim import DSSimulation
@@ -152,13 +152,13 @@ print(c.size)          # total item count
 print(c.container)     # dict: {obj: count, ...}
 ```
 
-Like `Queue`, blocking `put` / `get` accept a `timeout` and return `None` on expiry.
+Like `DSQueue`, blocking `put` / `get` accept a `timeout` and return `None` on expiry.
 
 ---
 
 ## 6.4 Resource
 
-`Resource` models a pool of abstract numeric quantity. You do not get specific _items_ out of a resource — you get an _amount_. This is suitable for modeling bandwidth, tokens, fuel, CPU time, or memory.
+`DSResource` models a pool of abstract numeric quantity. You do not get specific _items_ out of a resource — you get an _amount_. This is suitable for modeling bandwidth, tokens, fuel, CPU time, or memory.
 
 ```python
 from dssim import DSSimulation
@@ -189,7 +189,7 @@ Generator variants exist for all: `gput`, `gput_n`, `gget`, `gget_n`.
 
 ### 6.4.2 Publisher endpoints
 
-`Resource` exposes:
+`DSResource` exposes:
 
 | Endpoint | Fires when |
 |---|---|
@@ -199,7 +199,7 @@ Generator variants exist for all: `gput`, `gput_n`, `gget`, `gget_n`.
 
 ### 6.4.3 PriorityResource
 
-`PriorityResource` supports preemption: a higher-priority requester can take resources back from lower-priority holders.
+`DSPriorityResource` supports preemption: a higher-priority requester can take resources back from lower-priority holders.
 
 ```python
 from dssim.pubsub.components.resource import DSResourcePreempted
@@ -217,7 +217,7 @@ async def holder(priority):
 
 When a request at higher priority arrives and cannot be satisfied from the remaining free pool, lower-priority holders are preempted one by one (smallest priority first) until enough resource is freed.
 
-`Mutex` is a special case of `PriorityResource` with `capacity=1`:
+`DSMutex` is a special case of `DSPriorityResource` with `capacity=1`:
 
 ```python
 mu = sim.priority_resource(capacity=1)
@@ -261,13 +261,13 @@ Available helpers:
 
 ### Timer
 
-`Timer` is a periodic clock component. It fires `tx` events at a fixed period:
+`DSTimer` is a periodic clock component. It fires `tx` events at a fixed period:
 
 ```python
-from dssim.pubsub.components.time import Timer
+from dssim.pubsub.components.time import DSTimer
 
 sim = DSSimulation()
-t = Timer(period=1.0, repeats=10, sim=sim)
+t = DSTimer(period=1.0, repeats=10, sim=sim)
 cb = sim.callback(lambda e: print(f"tick: {e}"))
 t.tx.add_subscriber(cb, t.tx.Phase.CONSUME)
 
@@ -286,7 +286,7 @@ t.resume()                       # continue from paused position
 
 ### State
 
-`State` is a dict-like component that publishes changes via `tx_changed`:
+`DSState` is a dict-like component that publishes changes via `tx_changed`:
 
 ```python
 s = sim.state()
@@ -306,32 +306,32 @@ async def monitor():
 
 ## 6.7 Lite Equivalents
 
-For scenarios where pubsub overhead matters more than expressiveness, `LiteQueue` and `LiteResource` provide direct sentinel-based blocking without the pubsub machinery:
+For scenarios where pubsub overhead matters more than expressiveness, `DSLiteQueue` and `DSLiteResource` provide direct sentinel-based blocking without the pubsub machinery:
 
 ```python
-from dssim.lite.components.litequeue import LiteQueue
-from dssim.lite.components.literesource import LiteResource
+from dssim.lite.components.litequeue import DSLiteQueue
+from dssim.lite.components.literesource import DSLiteResource
 
-lq = LiteQueue(capacity=10, sim=sim)       # explicit Lite variant
-lr = LiteResource(amount=0, capacity=100, sim=sim)
+lq = DSLiteQueue(capacity=10, sim=sim)       # explicit Lite variant
+lr = DSLiteResource(amount=0, capacity=100, sim=sim)
 ```
 
-APIs are identical to `Queue` and `Resource` (`gput`, `gget`, `put_nowait`, etc.). The key differences:
+APIs are identical to `DSQueue` and `DSResource` (`gput`, `gget`, `put_nowait`, etc.). The key differences:
 
 - No `tx_nempty` / `tx_nfull` / `tx_changed` endpoints (no pubsub observers).
 - No condition parameter on `get` (all gets accept any head item).
 - Lower dispatch overhead in benchmarks (typically 2–5× faster in contended scenarios).
 
-Use `LiteQueue` when you do not need monitoring endpoints, conditional gets, or custom notifier policies.
+Use `DSLiteQueue` when you do not need monitoring endpoints, conditional gets, or custom notifier policies.
 
 ---
 
 ## 6.8 Key Takeaways
 
-- `Queue` holds ordered objects; `Container` holds counted objects; `Resource` holds numeric amount.
+- `DSQueue` holds ordered objects; `DSContainer` holds counted objects; `DSResource` holds numeric amount.
 - All blocking operations accept a `timeout` and return `None` on expiry.
-- `Queue` supports FIFO, LIFO, and priority ordering via the `policy` parameter.
+- `DSQueue` supports FIFO, LIFO, and priority ordering via the `policy` parameter.
 - Publisher endpoints (`tx_nempty`, `tx_nfull`, `tx_changed`) can be subscribed to for monitoring without interfering with blocking semantics.
 - `NotifierRoundRobin` on the `nempty_ep` distributes wake-ups fairly across multiple waiters.
 - `DSAgent` provides ergonomic wrappers for queue and resource operations inside agent processes.
-- Use `LiteQueue` / `LiteResource` when throughput matters more than event routing expressiveness.
+- Use `DSLiteQueue` / `DSLiteResource` when throughput matters more than event routing expressiveness.

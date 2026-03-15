@@ -65,12 +65,12 @@ Key mapped items:
 | `Process` | `DSProcess` with `interrupt()` |
 | `AnyOf(env, events)` | `DSCircuit` OR of `DSFuture` objects |
 | `AllOf(env, events)` | `DSCircuit` AND of `DSFuture` objects |
-| `Resource` | `dssim.pubsub.components.resource.Resource` |
-| `PriorityResource` | `PriorityResource` |
-| `PreemptiveResource` | `PriorityResource` with preemption |
-| `Store` | `Queue` |
-| `FilterStore` | `Queue` with conditional `get` |
-| `PriorityStore` | `Queue` with `DSKeyQueue` policy |
+| `Resource` | `dssim.pubsub.components.resource.DSResource` |
+| `PriorityResource` | `DSPriorityResource` |
+| `PreemptiveResource` | `DSPriorityResource` with preemption |
+| `Store` | `DSQueue` |
+| `FilterStore` | `DSQueue` with conditional `get` |
+| `PriorityStore` | `DSQueue` with `DSKeyQueue` policy |
 
 ### 9.2.3 Process interruption
 
@@ -130,10 +130,10 @@ Mapped names:
 | `Environment` | `DSSimulation` subclass with `now()` |
 | `Component` | `DSAgent` subclass (auto-schedules `process()`) |
 | `ComponentGenerator` | `PCGenerator` |
-| `Store` | `Container` |
-| `Queue` | `Queue` |
-| `Resource` | `Resource` |
-| `State` | `State` |
+| `Store` | `DSContainer` |
+| `Queue` | `DSQueue` |
+| `Resource` | `DSResource` |
+| `State` | `DSState` |
 
 The `hold(duration)` pattern inside `Component.process()` maps to `await self.sim.sleep(duration)` internally.
 
@@ -198,7 +198,7 @@ After the shim is working, the next step is replacing shim classes with DSSim na
 
 - `Environment` → `DSSimulation`
 - `Component` → `DSAgent`
-- `Store` → `Queue` or `Container`
+- `Store` → `DSQueue` or `DSContainer`
 - Generator-only process → generator or `async def` process
 - `yield env.timeout(n)` → `await sim.sleep(n)` (async) or `yield from sim.gsleep(n)` (generator)
 - `env.event()` → `sim.future()`

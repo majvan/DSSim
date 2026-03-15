@@ -44,7 +44,7 @@ Key observations:
 
 ## 11.3 Queue Throughput (`bench_queue`)
 
-| Scenario | DSSim Queue (ev/s) | DSSim LiteQueue (ev/s) |
+| Scenario | DSSim DSQueue (ev/s) | DSSim DSLiteQueue (ev/s) |
 |---|---:|---:|
 | Free-flow: unbounded, 1P+1C, N=10k | ~155,000 | — |
 | Backpressure: capacity=10, 1P+1C | ~55,000 | — |
@@ -53,34 +53,34 @@ Key observations:
 | Cross-notify: 100P+100C, capacity=1 | ~31,000 | ~213,000 |
 
 Key observations:
-- **LiteQueue is 4–7× faster than Queue** in the high-contention scenarios (blocked-getters, cross-notify) because it bypasses the pubsub routing machinery.
-- **Queue throughput drops** significantly with backpressure because every blocked put/get goes through a condition wait and subscriber wakeup cycle.
+- **`DSLiteQueue` is 4–7× faster than `DSQueue`** in the high-contention scenarios (blocked-getters, cross-notify) because it bypasses the pubsub routing machinery.
+- **`DSQueue` throughput drops** significantly with backpressure because every blocked put/get goes through a condition wait and subscriber wakeup cycle.
 - At 100P+100C with free capacity the overhead is lower because most operations do not block.
 
 ### Queue priority scenarios (`bench_queue_priority`)
 
-| Scenario | DSSim Queue (ev/s) | DSSim LiteQueue (ev/s) |
+| Scenario | DSSim DSQueue (ev/s) | DSSim DSLiteQueue (ev/s) |
 |---|---:|---:|
 | Fill-drain (N=100k) | ~310,000 | — |
 | Burst, put_nowait+gget | ~130,000 | ~385,000 |
 | Burst, gput+gget | ~76,000 | ~375,000 |
 | Bounded capacity=1, gput+gget | ~44,000 | ~220,000 |
 
-`LiteQueue` is 2.5–3× faster than `Queue` in burst scenarios. The gap narrows when items flow freely (fill-drain) because condition evaluation cost is amortized.
+`DSLiteQueue` is 2.5–3× faster than `DSQueue` in burst scenarios. The gap narrows when items flow freely (fill-drain) because condition evaluation cost is amortized.
 
 ---
 
 ## 11.4 Resource Throughput (`bench_resource`)
 
-| Scenario | DSSim Resource (ev/s) | DSSim LiteResource (ev/s) |
+| Scenario | DSSim DSResource (ev/s) | DSSim DSLiteResource (ev/s) |
 |---|---:|---:|
 | Uncontended get/put (N=20k) | ~160,000 | — |
 | Priority dispatch (K=100 priorities) | ~37,000 | ~93,000 |
 | Preemption delivery (N=20k) | ~17,000 | ~51,000 |
 
 Key observations:
-- **Preemption is expensive**: ~17,000 ev/s for `PriorityResource` because each preemption requires reclaiming from lower-priority holders and re-routing events.
-- `LitePriorityResource` is ~3× faster than `PriorityResource` in preemption scenarios.
+- **Preemption is expensive**: ~17,000 ev/s for `DSPriorityResource` because each preemption requires reclaiming from lower-priority holders and re-routing events.
+- `DSLitePriorityResource` is ~3× faster than `DSPriorityResource` in preemption scenarios.
 - For uncontended resources (no blocking), throughput is similar to uncontended queues.
 
 ---
@@ -160,7 +160,7 @@ Generators and coroutines have nearly identical throughput. The ~10% difference 
 ## 11.7 Guidelines for Performance-Sensitive Models
 
 1. **Use LiteLayer2** if your model does not need pubsub routing, condition filtering, or circuit composition.
-2. **Prefer `LiteQueue`/`LiteResource`** for high-contention components when monitoring via `tx_nempty`/`tx_changed` is not needed.
+2. **Prefer `DSLiteQueue`/`DSLiteResource`** for high-contention components when monitoring via `tx_nempty`/`tx_changed` is not needed.
 3. **Put the most-likely consumer first** in the subscriber list to minimize per-event iteration cost.
 4. **Use `NotifierRoundRobin` or `NotifierPriority` only when needed** — they carry overhead relative to `NotifierDict`.
 5. **Avoid O(S) fan-out** for large subscriber counts; restructure routing or use multiple publishers to keep S small.
@@ -171,7 +171,7 @@ Generators and coroutines have nearly identical throughput. The ~10% difference 
 ## 11.8 Key Takeaways
 
 - DSSim raw scheduling reaches ~350,000 ev/s; PubSubLayer2 adds ~50% overhead over raw.
-- `LiteQueue` and `LiteResource` are 3–7× faster than their pubsub counterparts in high-contention scenarios.
+- `DSLiteQueue` and `DSLiteResource` are 3–7× faster than their pubsub counterparts in high-contention scenarios.
 - PubSub consumer dispatch is O(S) in the number of consumers; hit-at-first-position is the optimal case.
 - Generator vs. coroutine choice does not affect throughput meaningfully.
 - When hit ratios are high and subscriber counts are small, PubSubLayer2 throughput approaches LiteLayer2.

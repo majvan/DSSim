@@ -343,7 +343,7 @@ sim.run(until=20)
 
 `DSAgent` auto-starts its own process at time 0. The `process()` method can be a coroutine (`async def`) or a generator function (`def ... yield`). Queue and resource helpers (`enter`, `pop`, `get`, `put`, etc.) are available as methods on the agent.
 
-See [Chapter 6](06-components.md) for details on `Queue`, `Container`, and `Resource`.
+See [Chapter 6](06-components.md) for details on `DSQueue`, `DSContainer`, and `DSResource`.
 
 ---
 

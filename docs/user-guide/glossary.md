@@ -72,7 +72,7 @@ Decorator that wraps a plain function or method as a generator-compatible callab
 
 ## DSStatefulComponent
 
-A `DSComponent` subclass that exposes a `tx_changed` publisher. Fires `tx_changed` events whenever the component's observable state changes. `Queue`, `Resource`, `Container`, and `State` are all `DSStatefulComponent` subclasses.
+A `DSComponent` subclass that exposes a `tx_changed` publisher. Fires `tx_changed` events whenever the component's observable state changes. `DSQueue`, `DSResource`, `DSContainer`, and `DSState` are all `DSStatefulComponent` subclasses.
 
 ## Event Object
 

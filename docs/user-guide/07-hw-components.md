@@ -157,17 +157,17 @@ DSSim includes two ready-made hardware models under `dssim.pubsub.components`.
 
 ### 7.5.1 Timer
 
-`Timer` is a periodic clock with start/stop/pause/resume control. See [Section 5.6](06-components.md#66-timer-and-state) for the full API.
+`DSTimer` is a periodic clock with start/stop/pause/resume control. See [Section 5.6](06-components.md#66-timer-and-state) for the full API.
 
 Typical use in a hardware model:
 
 ```python
-from dssim.pubsub.components.time import Timer
+from dssim.pubsub.components.time import DSTimer
 
 sim = DSSimulation()
 
 # A 10 MHz clock with limited cycle count
-clk = Timer(period=0.1e-6, repeats=1000, sim=sim)
+clk = DSTimer(period=0.1e-6, repeats=1000, sim=sim)
 edge = sim.callback(lambda e: ...)
 clk.tx.add_subscriber(edge, clk.tx.Phase.CONSUME)
 clk.start(clk.period, clk.counter)
@@ -236,5 +236,5 @@ sim.run(until=20)
 - `DSComponent` is the base for all named simulation objects; pass `name=` and `sim=` at construction.
 - Hardware-style models have input endpoints (callbacks/subscribers), optional internal processes, and output endpoints (publishers).
 - Use `DSStatefulComponent` when the component should broadcast state changes.
-- `Timer` and `UARTNoisyLine` are ready-made building blocks.
+- `DSTimer` and `UARTNoisyLine` are ready-made building blocks.
 - For custom components, wire up `sim.process(...)`, `sim.publisher(...)`, and `sim.kw_callback(...)` inside `__init__`.

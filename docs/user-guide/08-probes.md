@@ -4,7 +4,7 @@
 
 A _probe_ is a non-intrusive observer attached to a simulation component. Probes collect metrics over time without modifying the component's logic. They hook into the component's pubsub endpoints using `PRE` phase subscriptions, so they observe events before any consumer decision is made and cannot interfere with normal event flow.
 
-Probes are decoupled from component core logic: `Queue` and `Resource` do not know about probes internally. The `QueueProbeMixin` and `ResourceProbeMixin` provide the attachment API, and probes observe the components' publisher endpoints directly.
+Probes are decoupled from component core logic: `DSQueue` and `DSResource` do not know about probes internally. The `QueueProbeMixin` and `ResourceProbeMixin` provide the attachment API, and probes observe the components' publisher endpoints directly.
 
 ---
 
@@ -12,7 +12,7 @@ Probes are decoupled from component core logic: `Queue` and `Resource` do not kn
 
 ### 8.2.1 Built-in Statistics Probe
 
-`QueueStatsProbe` tracks occupancy and throughput for a `Queue`:
+`QueueStatsProbe` tracks occupancy and throughput for a `DSQueue`:
 
 ```python
 from dssim import DSSimulation
@@ -127,7 +127,7 @@ print(f"preempted amount: {s['preempted_amount']:.2f}")
 | `time_full_ratio` | float | Fraction of time amount ≥ capacity |
 | `put_count` | int | Successful put (add) operations |
 | `get_count` | int | Successful get (consume) operations |
-| `preempt_count` | int | Number of preemption events (PriorityResource only) |
+| `preempt_count` | int | Number of preemption events (DSPriorityResource only) |
 | `preempted_amount` | float | Total amount reclaimed by preemption |
 | `current_amount` | float | Amount at time of `stats()` call |
 
@@ -160,11 +160,11 @@ This approach gives access to the raw event stream at any endpoint. PRE observer
 
 ## 8.5 Time-Series Logging
 
-If you want a time series of queue length or resource amount sampled at regular intervals, drive it with a `Timer`:
+If you want a time series of queue length or resource amount sampled at regular intervals, drive it with a `DSTimer`:
 
 ```python
 from dssim import DSSimulation
-from dssim.pubsub.components.time import Timer
+from dssim.pubsub.components.time import DSTimer
 
 sim = DSSimulation()
 q = sim.queue(capacity=20)
@@ -173,7 +173,7 @@ series = []
 sampler = sim.callback(lambda e: series.append((sim.time, len(q))))
 
 # Sample every 1 time unit
-t = Timer(period=1.0, sim=sim)
+t = DSTimer(period=1.0, sim=sim)
 t.tx.add_subscriber(sampler, t.tx.Phase.CONSUME)
 t.start(t.period, float('inf'))
 
@@ -190,4 +190,4 @@ print(series[:5])
 - Built-in `QueueStatsProbe` and `ResourceStatsProbe` provide time-weighted occupancy, throughput, and (for priority resources) preemption statistics.
 - `probe.reset()` clears accumulated data; `probe.close()` stops collection.
 - Custom probes only need an `attach(component)` method; they can subscribe to any endpoint in `PRE` phase to remain non-intrusive.
-- For time-series sampling, pair a `Timer` with a callback that reads component state on each tick.
+- For time-series sampling, pair a `DSTimer` with a callback that reads component state on each tick.
