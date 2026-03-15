@@ -160,14 +160,6 @@ class SimScheduleMixin:
     SimProcessMixin (when present) overrides schedule() for generators and
     callables and falls back to super().schedule() which resolves here.
     '''
-    def try_send_object(self: "DSSimulation", subscriber: ISubscriber, event: EventType) -> EventType:
-        '''LiteLayer2 dispatch path: direct object send to subscriber.
-
-        Lite layer2 does not use pubsub condition stacks, so there is no
-        condition pre-check here; delivery goes straight through send_object().
-        '''
-        return self.send_object(subscriber, event)
-
     def schedule(self: "DSSimulation", time: TimeType, schedulable: ISubscriber) -> ISubscriber:
         ''' Schedules an ISubscriber directly onto the time queue. '''
         if inspect.iscoroutine(schedulable) or inspect.isgenerator(schedulable):
@@ -190,8 +182,7 @@ LiteLayer2 = (
     SimLiteResourceMixin,
 )
 
-# Default layer2 mixins — loaded when layer2 is not explicitly overridden.
-# These require the pubsub layer (SimPubsubMixin) to be present.
+# Default pubsub layer2 mixins.
 PubSubLayer2 = (
     SimPubsubMixin,
     SimFutureMixin,
@@ -345,19 +336,16 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
     def _gwait_for_event(self, timeout: TimeType, val: EventRetType = None) -> Generator[EventType, EventType, EventType]:
         # Re-compute abs/relative time to abs for the timeout
         time = float('inf') if timeout == float('inf') else self._compute_time(timeout)
+        waiting_process = self._parent_process
         # Schedule the timeout to the time queue. The condition is only for higher performance
         if time != float('inf'):
-            self.time_queue.add_element(time, (self._parent_process, None))
+            self.time_queue.add_element(time, (waiting_process, None))
         event: EventType = True
         try:
             # Pass value to the feeder and wait for next event
             event = yield val
-            # We received an event. In the lazy evaluation case, we would be now calling
-            # _check_cond and returning or raising an event only if the condition matches,
-            # otherwise we would be waiting in an infinite loop here.
-            # However we do an early evaluation of conditions- they are checked before
-            # calling send_object and we know that the conditions to return (or to raise an
-            # exception) are satisfied. See the code there for more info.
+            # In post-check routing, subscriber-side condition handling decides
+            # whether an event is accepted; accepted events are returned here.
 
             # Convert exception signal to a real exception
             if isinstance(event, Exception):
@@ -365,25 +353,22 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
         finally:
             if event is not None and time != float('inf'):
                 # If we terminated before timeout and the timeout event is on time queue- remove it
-                self.time_queue.delete_val((self._parent_process, None))
+                self.time_queue.delete_val((waiting_process, None))
         return event
 
     async def _wait_for_event(self, timeout: TimeType, val: EventRetType = None) -> EventType:
         # Re-compute abs/relative time to abs for the timeout
         time = float('inf') if timeout == float('inf') else self._compute_time(timeout)
+        waiting_process = self._parent_process
         # Schedule the timeout to the time queue. The condition is only for higher performance
         if time != float('inf'):
-            self.time_queue.add_element(time, (self._parent_process, None))
+            self.time_queue.add_element(time, (waiting_process, None))
         event: EventType = True
         try:
             # Pass value to the feeder and wait for next event
             event = await _Awaitable(val)
-            # We received an event. In the lazy evaluation case, we would be now calling
-            # _check_cond and returning or raising an event only if the condition matches,
-            # otherwise we would be waiting in an infinite loop here.
-            # However we do an early evaluation of conditions- they are checked before
-            # calling send_object and we know that the conditions to return (or to raise an
-            # exception) are satisfied. See the code there for more info.
+            # In post-check routing, subscriber-side condition handling decides
+            # whether an event is accepted; accepted events are returned here.
 
             # Convert exception signal to a real exception
             if isinstance(event, Exception):
@@ -391,7 +376,7 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
         finally:
             if event is not None and time != float('inf'):
                 # If we terminated before timeout and the timeout event is on time queue- remove it
-                self.time_queue.delete_val((self._parent_process, None))
+                self.time_queue.delete_val((waiting_process, None))
         return event
 
     def cleanup(self, subscriber: ISubscriber = None) -> None:
@@ -406,19 +391,6 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
         # Remove all the events for this subscriber
         self.now_queue = NowQueue(item for item in self.now_queue if item[0] is not subscriber)
         self.time_queue.delete_sub(subscriber)
-
-    def try_send_object(self, subscriber: ISubscriber, event: EventType) -> EventType:
-        '''Condition-aware dispatch used by run().
-
-        Unlike DSsubscriber.try_send(), this path keeps dispatch ownership in DSSimulation
-        and still supports plain ISubscriber implementations that only expose send().
-        '''
-        if hasattr(subscriber, 'get_cond'):
-            conds = subscriber.get_cond()
-            signaled, event = conds.check(event)
-            if not signaled:
-                return False
-        return self.send_object(subscriber, event)
 
     def run(self, up_to: TimeType = float('inf'), future: EventType = object()) -> Tuple[float, int]:
         ''' This is the simulation machine. In a loop it takes first event and process it.
@@ -443,7 +415,7 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
                 if event_obj == future:
                     return self.time, self.num_events
                 self.num_events += 1
-                self.try_send_object(subscriber, event_obj)
+                self.send_object(subscriber, event_obj)
         else:
             retval_time = self.time
             self._simtime = ftime

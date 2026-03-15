@@ -88,20 +88,20 @@ class TestCallback(unittest.TestCase):
     def test5_consumer_with_filter(self):
         my_consumer_fcn = Mock()
         c = DSCondCallback(my_consumer_fcn, cond=lambda e:e['data'] > 0, sim=DSSimulation())
-        c.try_send({'data': 1})
+        c.send({'data': 1})
         my_consumer_fcn.assert_called_once_with({'data': 1})
         my_consumer_fcn.reset_mock()
-        c.try_send({'data': 0})
+        c.send({'data': 0})
         my_consumer_fcn.assert_not_called()
         my_consumer_fcn.reset_mock()
 
     def test6_kw_consumer_with_filter(self):
         my_consumer_fcn = Mock()
         c = DSKWCondCallback(my_consumer_fcn, cond=lambda e:e['data'] > 0, sim=DSSimulation())
-        c.try_send({'data': 1})
+        c.send({'data': 1})
         my_consumer_fcn.assert_called_once_with(data=1)
         my_consumer_fcn.reset_mock()
-        c.try_send({'data': 0})
+        c.send({'data': 0})
         my_consumer_fcn.assert_not_called()
         my_consumer_fcn.reset_mock()
 
@@ -129,12 +129,12 @@ class TestConsumer(unittest.TestCase):
         consumer.meta = SomeObj2()
         consumer.meta.cond = MagicMock()
         consumer.meta.cond.check = Mock(return_value=(False, 'abc'))
-        consumer.try_send(None)
+        consumer.send(None)
         consumer.meta.cond.check.assert_called_once()
         sim.send_object.assert_not_called()
 
     def test2_try_send_dispatches_after_cond_passes(self):
-        ''' try_send must call send_object with the event returned by cond.check '''
+        ''' try_send in post-check mode delegates to send() after condition check. '''
         from unittest.mock import MagicMock
         call_order = []
         sim = DSSimulation()
@@ -149,10 +149,10 @@ class TestConsumer(unittest.TestCase):
         consumer.meta.cond = MagicMock()
         consumer.meta.cond.check = Mock(side_effect=called_check_condition)
         sim.send_object = Mock(side_effect=called_send_object)
-        consumer.try_send(None)
+        consumer.send(None)
         consumer.meta.cond.check.assert_called_once()
-        sim.send_object.assert_called_once()
-        self.assertEqual(call_order, [call('check_condition', None), call('send_object', consumer, 'abc')])
+        sim.send_object.assert_not_called()
+        self.assertEqual(call_order, [call('check_condition', None)])
 
 
 class TestSubscriber(unittest.TestCase):
@@ -189,8 +189,8 @@ class TestProducer(unittest.TestCase):
                 return route
             route = make_route()
             # Keep tests compatible with both routing styles:
-            # - pre-check path via consumer.try_send(...)
-            # - direct-send path via consumer.send(...)
+            # - consumer-level explicit dispatch via consumer.send(...)
+            # - pub routing via producer.send(...)
             consumer.try_send = route
             consumer.send = route
         return m

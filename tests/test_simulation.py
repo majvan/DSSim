@@ -122,7 +122,7 @@ class TestSim(unittest.TestCase):
         consumer.try_send.assert_not_called()
 
     def test7_run_still_checks_condition_before_send(self):
-        ''' run() must preserve condition gating semantics for consumers. '''
+        ''' run() in post-check mode directly calls consumer.send(). '''
         self.sim = DSSimulation()
         consumer = Mock()
         consumer.meta.cond.check = Mock(return_value=(False, 'ignored'))
@@ -132,8 +132,8 @@ class TestSim(unittest.TestCase):
         self.sim.schedule_event(1, 'hello', consumer)
         retval = self.sim.run()
         self.assertEqual(retval, (1, 1))
-        consumer.meta.cond.check.assert_called_once_with('hello')
-        consumer.send.assert_not_called()
+        consumer.meta.cond.check.assert_not_called()
+        consumer.send.assert_called_once_with('hello')
         consumer.try_send.assert_not_called()
 
 

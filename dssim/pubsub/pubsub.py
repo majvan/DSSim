@@ -101,14 +101,6 @@ class DSCondSub(DSComponent, ISubscriber):
     def reset_cond(self) -> None:
         self.meta.cond = StackedCond()
 
-    def try_send(self, event: EventType) -> EventType:
-        ''' Send an event to this subscriber if its condition is met. Returns False if not accepted. '''
-        conds = self.meta.cond
-        signaled, event = conds.check(event)
-        if not signaled:
-            return False
-        return self.sim.send_object(self, event)
-
     @TrackEvent
     @abstractmethod
     def send(self, event):
@@ -153,6 +145,10 @@ class DSCondCallback(DSCondSub):
 
     @TrackEvent
     def send(self, event: EventType):
+        conds = self.meta.cond
+        signaled, event = conds.check(event)
+        if not signaled:
+            return False
         retval = self.forward_method(event)
         return retval
 
@@ -162,6 +158,10 @@ class DSKWCondCallback(DSCondCallback):
 
     @TrackEvent
     def send(self, event: dict) -> EventType:
+        conds = self.meta.cond
+        signaled, event = conds.check(event)
+        if not signaled:
+            return False
         retval = self.forward_method(**event)
         return retval
 
@@ -378,7 +378,7 @@ class DSPub(DSSub, SignalMixin):
                     if subscriber.supports_direct_send:
                         subscriber.send(event)
                     else:
-                        subscriber.try_send(event)
+                        self.sim.send_object(subscriber, event)
 
         # Emit the signal to all consumers and stop with the first one
         # which accepted the signal
@@ -390,7 +390,7 @@ class DSPub(DSSub, SignalMixin):
                     if consumer.supports_direct_send:
                         retval = consumer.send(event)
                     else:
-                        retval = consumer.try_send(event)
+                        retval = self.sim.send_object(consumer, event)
                     if retval:
                         consumed = True
                         accepted_consumer = consumer
@@ -407,7 +407,7 @@ class DSPub(DSSub, SignalMixin):
                         if subscriber.supports_direct_send:
                             subscriber.send(hit_payload)
                         else:
-                            subscriber.try_send(hit_payload)
+                            self.sim.send_object(subscriber, hit_payload)
         else:
             # Emit the missed signal to all post-observers
             if post_miss_count > 0:
@@ -416,7 +416,7 @@ class DSPub(DSSub, SignalMixin):
                         if subscriber.supports_direct_send:
                             subscriber.send(event)
                         else:
-                            subscriber.try_send(event)
+                            self.sim.send_object(subscriber, event)
 
         # cleanup- remove items with zero references
         # We do not cleanup in remove_subscriber, because remove_subscriber could
@@ -465,20 +465,6 @@ class DSTransformation(DSPub):
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
 class SimPubsubMixin:
-    def try_send_object(self: Any, subscriber: ISubscriber, event: EventType) -> EventType:
-        '''PubSubLayer2 condition-aware dispatch used by DSSimulation.run().
-
-        Pubsub subscribers may carry stacked conditions. Events that do not
-        pass subscriber conditions must be filtered before delivery, therefore
-        this layer wires a custom pre-check try_send_object into DSSimulation.
-        '''
-        if hasattr(subscriber, 'get_cond'):
-            conds = subscriber.get_cond()
-            signaled, event = conds.check(event)
-            if not signaled:
-                return False
-        return self.send_object(subscriber, event)
-
     def publisher(self: Any, *args: Any, **kwargs: Any) -> DSPub:
         sim: DSSimulation = kwargs.pop('sim', self)
         if sim is not self:

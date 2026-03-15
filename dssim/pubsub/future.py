@@ -58,7 +58,7 @@ class DSFuture(DSCondSub, SignalMixin, IFuture):
             if self.supports_direct_send:
                 self.send(exc)
             else:
-                self.try_send(exc)
+                self.sim.send_object(self, exc)
         except StopIteration as e:
             self.finish(e)
         except Exception as e:

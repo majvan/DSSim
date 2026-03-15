@@ -131,10 +131,10 @@ class TestDSSchedulable(unittest.TestCase):
         process = DSProcess(self.__generator(), sim=sim)
         retval = process.send(None)
         self.assertEqual(retval, 'First return')
-        retval = process.send('anything0')
+        retval = process.send(None)
         self.assertEqual(retval, 'Second return')
         try:
-            retval = process.send('anything1')
+            retval = process.send(None)
         except StopIteration as e:
             retval2 = e.value
         self.assertEqual(retval2, 'Success')
@@ -143,7 +143,7 @@ class TestDSSchedulable(unittest.TestCase):
         process = DSProcess(self.__generator(), sim=sim)
         retval = process.send(None)
         self.assertEqual(retval, 'First return')
-        retval = process.send('anything0')
+        retval = process.send(None)
         self.assertEqual(retval, 'Second return')
         process.meta.cond.push(lambda e:True)  # accepting any event
         retval = sim.schedule_event(1, 'anything0', process)
@@ -205,11 +205,11 @@ class TestConditionChecking(unittest.TestCase):
         p = DSProcess(my_process(), sim=self.sim)
         p = self.sim.schedule(0, p)
         p.get_cond().push(lambda e:True)
-        retval = p.try_send(None)
+        retval = self.sim.send_object(p, None)
         self.assertTrue(retval == 1)
-        retval = p.try_send(None)
+        retval = self.sim.send_object(p, None)
         self.assertTrue(retval == 2)
-        retval = p.try_send(None)
+        retval = self.sim.send_object(p, None)
         self.assertTrue(retval == 3)
 
     def test2_wait_return(self):
@@ -246,11 +246,11 @@ class TestConditionChecking(unittest.TestCase):
         p = DSProcess(my_process(), sim=self.sim)
         p = self.sim.schedule(0, p)
         p.get_cond().push(lambda e:True)
-        retval = p.try_send(None)
+        retval = self.sim.send_object(p, None)
         self.assertTrue(retval == 1)
-        retval = p.try_send(None)
+        retval = self.sim.send_object(p, None)
         self.assertTrue(retval == 2)
-        retval = p.try_send(None)
+        retval = self.sim.send_object(p, None)
         self.assertTrue(retval == 3)
 
 

@@ -50,7 +50,7 @@ class MyComponent(DSComponent):
 			# target generator does not signal anything back
 			# However the always safe way to do this:
             # self.sim.signal(code, self.sm)
-            self.sim.try_send_object(self.sm, code)  # send directly event "code"
+            self.sim.send_object(self.sm, code)  # send directly event "code"
             self.stat['tries'] += 1
             # 2 ms to generate the code, send it and check the status of unlock
             yield from self.sim.gwait(0.002)
@@ -62,7 +62,7 @@ class MyComponent(DSComponent):
 			# target process does not signal anything back
 			# However the always safe way to do this:
             # self.sim.signal(1, self.sm)
-            self.sim.try_send_object(self.sm, (1, 1))  # send directly event "1"
+            self.sim.send_object(self.sm, (1, 1))  # send directly event "1"
             self.stat['tries'] += 1
             # 500 us to generate the code, send it and check the status of unlock
             yield from self.sim.gwait(0.0005)

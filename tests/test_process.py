@@ -83,7 +83,7 @@ class TestDSSchedulable(unittest.TestCase):
 
         process = DSProcess(self.__fcn(), sim=sim).schedule(0)
         process.get_cond().push(lambda e:True)
-        retval = process.try_send(None)
+        retval = sim.send_object(process, None)
         self.assertEqual(retval, 'Success')
         self.assertEqual(process.value, 'Success')
 
@@ -106,7 +106,7 @@ class TestDSSchedulable(unittest.TestCase):
         retval = process.send(None)
         self.assertEqual(retval, 'Second return')
         process.get_cond().push(lambda e:True)
-        retval = process.try_send(None)
+        retval = sim.send_object(process, None)
         self.assertEqual(retval, 'Success')
         self.assertEqual(process.value, 'Success')
 
@@ -162,14 +162,14 @@ class TestException(unittest.TestCase):
     def __first_cyclic(self, sim):
         process2 = yield 'Kick-on first'
         yield
-        process2.try_send('Signal from first process')
+        sim.send_object(process2, 'Signal from first process')
         yield 'After signalling first'
         return 'Done first'
 
     def __second_cyclic(self, sim):
         process1 = yield 'Kick-on second'
         yield
-        process1.try_send('Signal from second process')
+        sim.send_object(process1, 'Signal from second process')
         yield 'After signalling second'
         return 'Done second'
 
@@ -179,7 +179,7 @@ class TestException(unittest.TestCase):
         process.send(None)  # kick the process
         process.get_cond().push(lambda e:True)  # Accept all events
         try:
-            retval = process.try_send('My data')
+            retval = sim.send_object(process, 'My data')
             self.assertTrue(1 == 2)
         except ZeroDivisionError as exc:
             self.assertTrue('generator already executing' not in str(exc))
@@ -192,10 +192,10 @@ class TestException(unittest.TestCase):
         process2 = DSProcess(self.__second_cyclic(sim), name="Second cyclic", sim=sim).schedule(0)
         sim.send_object(process2, None)  # initialize via send_object so _started is set correctly
         process2.meta.cond.push(lambda e:True)  # accept any event
-        process1.try_send(process2)  # Inform processes about the other process
-        process2.try_send(process1)
+        sim.send_object(process1, process2)  # Inform processes about the other process
+        sim.send_object(process2, process1)
         try:
-            process1.try_send('My data')
+            sim.send_object(process1, 'My data')
             self.assertTrue(1 == 2)
         except ValueError as exc:
             self.assertTrue('generator already executing' in str(exc))
@@ -224,7 +224,7 @@ class TestConditionChecking(unittest.TestCase):
         waitable._starter.send(None)  # kick the process
         cond.push.assert_has_calls([call(None), call('condition'),])
         try:
-            retval = waitable.try_send('something')
+            retval = sim.send_object(waitable, 'something')
         except StopIteration as e:
             retval = e.value
         self.assertTrue(retval == 'return event')
@@ -286,7 +286,7 @@ class TestConditionChecking(unittest.TestCase):
         p.meta = SomeObj()
         p.meta.cond = MagicMock()
         p.meta.cond.check = Mock(return_value=(True, 'abc'))
-        retval = p.try_send('test')
+        retval = sim.send_object(p, 'test')
         p.meta.cond.check.assert_called_once()
         self.assertEqual(retval, True)
 

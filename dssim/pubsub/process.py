@@ -46,6 +46,21 @@ class DSProcess(DSFuture, SignalMixin):
     ''' Typical task used in the simulations.
     This class "extends" generator / coroutine for additional info.
     The best practise is to use DSProcess instead of generators.
+
+    Boot sequence (first activation):
+    1) schedule():
+       - creates _Starter
+       - pushes _StartProcess sentinel into condition stack
+       - binds process send-path to _send_scheduled_start
+       - schedules one event for _Starter
+    2) _Starter.send():
+       - triggers sim.send_object(process, _StartProcess)
+    3) _send_scheduled_start():
+       - transitions process state to started
+       - performs first generator kick: generator.send(None)
+       - rebinds send-path to _send_started
+    4) subsequent events:
+       - _send_started() performs condition check and then generator.send(event)
     '''
     class _Starter(DSSub):
         ''' One-shot bootstrap subscriber for DSProcess.
@@ -57,13 +72,21 @@ class DSProcess(DSFuture, SignalMixin):
             super().__init__(sim=process.sim, cond=AlwaysTrue)
 
         def send(self, event: EventType) -> EventRetType:
+            '''Execute one-shot bootstrap from scheduled _StartProcess event.
+
+            The event payload is ignored intentionally. Bootstrap always
+            primes the generator with None to satisfy Python generator rules.
+            '''
             p = self._process
             if p._started:
                 return None  # already initialized — no-op (idempotent guard)
-            p._started = True
-            p.get_cond().conds.remove(_StartProcess)  # remove by identity, order-independent
-            p.meta.cond.push(None)  # add timeout sentinel (None == timeout)
-            return p.sim.send_object(p, None)  # deliver first generator.send(None)
+            # Important: do NOT call p.generator.send(None) directly here.
+            # _Starter.send() runs with sim._parent_process == _Starter. If we
+            # prime the process generator directly and it calls sim.gwait(), the
+            # timeout/event waiter would be registered for _Starter (wrong pid)
+            # instead of for DSProcess. Routing through sim.send_object(p, _StartProcess)
+            # switches pid context to the process and then restores it safely.
+            return p.sim.send_object(p, _StartProcess)
 
     def __init__(self, generator: Union[Generator, Coroutine], *args: Any, **kwargs: Any) -> None:
         ''' Initializes DSProcess. The input has to be a generator function. '''
@@ -72,6 +95,7 @@ class DSProcess(DSFuture, SignalMixin):
         self._started = False
         self._finished = False
         self._starter = None
+        self._send_impl = self._send_not_started
         # One-time validation that the generator / coroutine has not been started yet.
         # Uses inspect here intentionally — this path is cold (called once at construction).
         if inspect.iscoroutine(generator):
@@ -90,7 +114,56 @@ class DSProcess(DSFuture, SignalMixin):
 
     @TrackEvent
     def send(self, event: EventType) -> EventRetType:
-        ''' Pushes an event to the task and gets new state. '''
+        '''Pushes an event to the task and gets new state.
+
+        Post-check routing: DSProcess evaluates its stacked conditions in send().
+        '''
+        if self._finished:
+            return False
+        return self._send_impl(event)
+
+    def _mark_started(self, add_timeout_cond: bool) -> None:
+        '''Finalize transition from "scheduled" to "running" process state.
+
+        Removes startup sentinel, optionally adds timeout sentinel, and swaps
+        dispatch implementation to the steady-state path.
+        '''
+        self._started = True
+        conds = self.get_cond()
+        stack = getattr(conds, 'conds', None)
+        if stack is not None:
+            try:
+                if _StartProcess in stack:
+                    stack.remove(_StartProcess)
+            except TypeError:
+                # Test doubles may replace cond stack with a bare Mock.
+                pass
+        if add_timeout_cond:
+            conds.push(None)
+        self._send_impl = self._send_started
+
+    def _send_not_started(self, event: EventType) -> EventRetType:
+        '''Fallback startup path for direct manual send(None) before schedule().'''
+        if event is not None:
+            raise TypeError("can't send non-None value to a just-started generator")
+        self._mark_started(add_timeout_cond=True)
+        return self._send_started(None)
+
+    def _send_scheduled_start(self, event: EventType) -> EventRetType:
+        '''Bootstrap path used after schedule(); accepts _StartProcess/None only.'''
+        if event is not _StartProcess and event is not None:
+            raise TypeError("can't send non-None value to a just-started generator")
+        self._mark_started(add_timeout_cond=True)
+        self.value = self.generator.send(None)
+        return self.value
+
+    def _send_started(self, event: EventType) -> EventRetType:
+        '''Steady-state send path after bootstrap has completed.'''
+        conds = self.get_cond()
+        if conds.conds:
+            signaled, event = conds.check(event)
+            if not signaled:
+                return False
         self.value = self.generator.send(event)
         return self.value
 
@@ -203,6 +276,9 @@ class DSProcess(DSFuture, SignalMixin):
             # Guard: push _StartProcess sentinel onto the cond stack to reject
             # spurious events delivered to the process before it actually starts
             self.get_cond().push(_StartProcess)
+            # Bind scheduled bootstrap path; after first kick _mark_started()
+            # rebinds to the steady-state _send_started path.
+            self._send_impl = self._send_scheduled_start
             self.sim.schedule_event(time, _StartProcess, self._starter)
         return self
 

@@ -30,6 +30,7 @@ The scenarios below isolate routing behavior of Layer2-like paths:
 3) Consumer filter combinations:
    - miss path (none short-circuit): None + {value, callable, get_cond, only}
    - hit path (first short-circuit): None + {value, callable, get_cond, only}
+   - direct_call: callback decides directly from event payload (no extra cond stack)
 
 4) Different notifier policies:
    - 0-consumer baseline
@@ -75,6 +76,7 @@ from dssim import (
     DSSimulation,
     LiteLayer2,
     DSCallback,
+    DSCondCallback,
     DSSub,
     DSPub,
     NotifierDict,
@@ -228,16 +230,19 @@ def pubsub_post_miss_observers_one_consumer(n: int, n_post: int) -> None:
 # ---------------------------------------------------------------------------
 def _add_group2_consumer(pub: DSPub, sim: DSSimulation, mode: str, cb: Callable[[Any], bool], exact_value: int) -> None:
     if mode == 'none_value':
-        consumer = BenchCallback(cb, cond=None, sim=sim)
+        consumer = DSCondCallback(cb, cond=None, sim=sim)
         consumer.get_cond().push(exact_value)
     elif mode == 'none_callable':
-        consumer = BenchCallback(cb, cond=None, sim=sim)
+        consumer = DSCondCallback(cb, cond=None, sim=sim)
         consumer.get_cond().push(lambda e, x=exact_value: e == x)
     elif mode == 'none_get_cond':
-        consumer = BenchCallback(cb, cond=None, sim=sim)
+        consumer = DSCondCallback(cb, cond=None, sim=sim)
         consumer.get_cond().push(sim.filter(lambda e, x=exact_value: e == x))
     elif mode == 'none_only':
-        consumer = BenchCallback(cb, cond=None, sim=sim)
+        consumer = DSCondCallback(cb, cond=None, sim=sim)
+    elif mode == 'direct_call':
+        # Plain callback path: decision is done in callback body.
+        consumer = BenchCallback(cb, sim=sim)
     else:
         raise ValueError(f'Unknown Group2 mode: {mode}')
     pub.add_subscriber(consumer, phase=DSPub.Phase.CONSUME)
@@ -256,9 +261,14 @@ def _group2_miss(n: int, mode: str, n_consumers: int, exact_value: int = 7777) -
 
     count = max(1, n_consumers)
 
-    def _reject(_event, c=seen):
-        _inc(c)
-        return False
+    if mode == 'direct_call':
+        def _reject(event, c=seen, x=exact_value):
+            _inc(c)
+            return event == (x + 1)  # always false for event==x
+    else:
+        def _reject(_event, c=seen):
+            _inc(c)
+            return False
 
     for _ in range(count):
         _add_group2_consumer(pub, sim, mode, _reject, exact_value)
@@ -277,13 +287,22 @@ def _group2_hit(n: int, mode: str, n_consumers: int, exact_value: int = 7777) ->
 
     count = max(1, n_consumers)
 
-    def _accept(_event, c=first_seen):
-        _inc(c)
-        return True
+    if mode == 'direct_call':
+        def _accept(event, c=first_seen, x=exact_value):
+            _inc(c)
+            return event == x
 
-    def _reject(_event, c=other_seen):
-        _inc(c)
-        return False
+        def _reject(event, c=other_seen, x=exact_value):
+            _inc(c)
+            return event == (x + 1)  # always false for event==x
+    else:
+        def _accept(_event, c=first_seen):
+            _inc(c)
+            return True
+
+        def _reject(_event, c=other_seen):
+            _inc(c)
+            return False
 
     _add_group2_consumer(pub, sim, mode, _accept, exact_value)
     for _ in range(count - 1):
@@ -326,6 +345,14 @@ def pubsub_consumer_none_plus_get_cond_filter_hit(n: int, n_consumers: int) -> N
 
 def pubsub_consumer_none_only_hit(n: int, n_consumers: int) -> None:
     _group2_hit(n, 'none_only', n_consumers)
+
+
+def pubsub_consumer_direct_call_miss(n: int, n_consumers: int) -> None:
+    _group2_miss(n, 'direct_call', n_consumers)
+
+
+def pubsub_consumer_direct_call_hit(n: int, n_consumers: int) -> None:
+    _group2_hit(n, 'direct_call', n_consumers)
 
 
 # ---------------------------------------------------------------------------
@@ -633,10 +660,12 @@ if __name__ == '__main__':
     report('Miss: None + callable', N_EVENTS, *bench(pubsub_consumer_none_plus_callable_miss, N_EVENTS, S))
     report('Miss: None + get_cond() filter', N_EVENTS, *bench(pubsub_consumer_none_plus_get_cond_filter_miss, N_EVENTS, S))
     report('Miss: None only', N_EVENTS, *bench(pubsub_consumer_none_only_miss, N_EVENTS, S))
+    report('Miss: direct_call', N_EVENTS, *bench(pubsub_consumer_direct_call_miss, N_EVENTS, S))
     report('Hit: None + exact value', N_EVENTS, *bench(pubsub_consumer_none_plus_value_hit, N_EVENTS, S))
     report('Hit: None + callable', N_EVENTS, *bench(pubsub_consumer_none_plus_callable_hit, N_EVENTS, S))
     report('Hit: None + get_cond() filter', N_EVENTS, *bench(pubsub_consumer_none_plus_get_cond_filter_hit, N_EVENTS, S))
     report('Hit: None only', N_EVENTS, *bench(pubsub_consumer_none_only_hit, N_EVENTS, S))
+    report('Hit: direct_call', N_EVENTS, *bench(pubsub_consumer_direct_call_hit, N_EVENTS, S))
 
     print('\n=== Group 6: Notifier Policies ===')
     report('NotifierDict pass-through', N_EVENTS, *bench(pubsub_notifier_zero_consumers, N_EVENTS, NotifierDict))

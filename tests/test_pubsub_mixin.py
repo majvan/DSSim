@@ -53,7 +53,7 @@ class TestSimPubsubMixin(unittest.TestCase):
         fn = Mock(return_value=True)
         cb = sim.callback(fn, cond=lambda e: e == {'x': 1})
         self.assertIsInstance(cb, DSCondCallback)
-        cb.try_send({'x': 1})
+        cb.send({'x': 1})
         fn.assert_called_once_with({'x': 1})
 
     def test5_callback_factory_rejects_foreign_sim(self):
@@ -81,7 +81,7 @@ class TestSimPubsubMixin(unittest.TestCase):
         fn = Mock(return_value=True)
         cb = sim.kw_callback(fn, cond=lambda e: e.get('ok', False))
         self.assertIsInstance(cb, DSKWCondCallback)
-        cb.try_send({'ok': True, 'a': 1, 'b': 2})
+        cb.send({'ok': True, 'a': 1, 'b': 2})
         fn.assert_called_once_with(ok=True, a=1, b=2)
 
     def test8_kw_callback_factory_rejects_foreign_sim(self):
