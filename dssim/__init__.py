@@ -30,9 +30,8 @@ from dssim.base_components import DSQueue, DSLifoQueue, DSKeyQueue, DSResource, 
 from dssim.lite.process import DSLiteProcess
 from dssim.lite.agent import DSLiteAgent, PCLiteGenerator
 from dssim.pubsub.components.queue import Queue
+from dssim.lite.components.litetime import LiteDelay, LiteLimiter, LiteTimer
 from dssim.lite.components.literesource import LiteResource, LitePriorityResource
 from dssim.pubsub.components.resource import Resource, PriorityResource, DSResourcePreempted, Mutex
 from dssim.pubsub.components.state import State
-from dssim.pubsub.components.timer import Timer
-from dssim.pubsub.components.delay import Delay
-from dssim.pubsub.components.limiter import Limiter
+from dssim.pubsub.components.time import Delay, Limiter, Timer

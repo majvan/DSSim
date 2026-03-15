@@ -27,9 +27,11 @@ from dssim.pubsub.components.container import SimContainerMixin
 from dssim.pubsub.components.queue import SimQueueMixin
 from dssim.lite.components.litequeue import SimLiteQueueMixin
 from dssim.lite.components.literesource import SimLiteResourceMixin
+from dssim.lite.components.litetime import SimLiteTimeMixin
 from dssim.lite.process import SimLiteProcessMixin
 from dssim.pubsub.components.resource import SimResourceMixin
 from dssim.pubsub.components.state import SimStateMixin
+from dssim.pubsub.components.time import SimTimeMixin
 from dssim.pubsub.cond import SimFilterMixin
 
 
@@ -180,6 +182,7 @@ LiteLayer2 = (
     SimScheduleMixin,
     SimLiteQueueMixin,
     SimLiteResourceMixin,
+    SimLiteTimeMixin,
 )
 
 # Default pubsub layer2 mixins.
@@ -192,6 +195,7 @@ PubSubLayer2 = (
     SimQueueMixin,
     SimResourceMixin,
     SimStateMixin,
+    SimTimeMixin,
 )
 
 # Cache of dynamically created subclasses keyed by (base_class, layer2_tuple).
