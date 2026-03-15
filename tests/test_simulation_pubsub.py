@@ -128,7 +128,7 @@ class TestProducerConsumerIntegration(unittest.TestCase):
         self.assertEqual(received, [(1, 'ev1'), (2, 'ev2'), (3, 'ev3')])
 
     def test2_schedule_event_to_dscallback_respects_time_limit(self):
-        ''' sim.run(up_to) stops before delivering events after the limit. '''
+        ''' sim.run(until) stops before delivering events after the limit. '''
         sim = DSSimulation()
         received = []
 

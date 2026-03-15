@@ -391,11 +391,11 @@ class DSSimulation(DSComponentSingleton):  # basic schedule() for plain ISubscri
         self.now_queue = NowQueue(item for item in self.now_queue if item[0] is not subscriber)
         self.time_queue.delete_sub(subscriber)
 
-    def run(self, up_to: TimeType = float('inf'), future: EventType = object()) -> Tuple[float, int]:
+    def run(self, until: TimeType = float('inf'), future: EventType = object()) -> Tuple[float, int]:
         ''' This is the simulation machine. In a loop it takes first event and process it.
         The loop ends when the queue is empty or when the simulation time is over.
         '''
-        ftime = up_to if up_to == float('inf') else self.time + self.compute_time(up_to)
+        ftime = until if until == float('inf') else self.time + self.compute_time(until)
         if self.now_queue:
             self.time_queue.insertleft(self.time, self.now_queue)
         while self.time_queue:

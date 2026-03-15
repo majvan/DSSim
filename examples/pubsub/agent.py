@@ -54,7 +54,7 @@ if __name__ == '__main__':
     PCGenerator(Customer, lambda last: 7, name='CustomerGenerator')
     stat = {'balked': 0, 'reneged': 0}
     clerks = [Clerk() for i in range(3)]
-    sim.run(up_to=1500)
+    sim.run(until=1500)
     print("number reneged", stat['reneged'])
     print("number balked", stat['balked'])
     waiting_line_stats = waiting_line_probe.get_statistics()

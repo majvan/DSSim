@@ -122,7 +122,7 @@ class TestLiteQueueNowait(unittest.TestCase):
 
         sim.schedule(0, producer())
         # Kick the sim once so producer registers as a putter.
-        sim.run(up_to=0)
+        sim.run(until=0)
         # Now drain via nowait — should schedule _PUT_READY for the putter.
         q.get_nowait()
         sim.run()

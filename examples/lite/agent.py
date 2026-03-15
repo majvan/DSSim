@@ -58,7 +58,7 @@ if __name__ == '__main__':
     stat = {'balked': 0, 'timed_out': 0}
     clerks = [Clerk(sim=sim) for _ in range(3)]
 
-    sim.run(up_to=1500)
+    sim.run(until=1500)
     print("number timed_out", stat['timed_out'])
     print("number balked", stat['balked'])
     assert len(clerks[0].processed_customers) > 0

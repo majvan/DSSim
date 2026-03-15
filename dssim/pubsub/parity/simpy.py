@@ -298,7 +298,7 @@ class Environment(DSSimulation):
             return super().run()
         if isinstance(until, Event):
             return super().run(future=until)
-        return super().run(up_to=until)
+        return super().run(until=until)
 
 
 @dataclass
