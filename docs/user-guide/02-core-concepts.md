@@ -6,39 +6,52 @@ DSSim is organized in six layers. Each layer builds on the one below it and can 
 
 ```mermaid
 flowchart TB
-  subgraph L5["Layer 5 — Shim Layers"]
+  subgraph L0["Layer 0 — Time Queue"]
     direction LR
-    SH["SimPy · salabim · asyncio compatibility shims"]
-  end
-  subgraph L4["Layer 4 — Agents"]
-    direction LR
-    AG["DSAgent — self-driving components with queue / resource helpers"]
-  end
-  subgraph L3["Layer 3 — Components"]
-    direction LR
-    Q["DSQueue"] ~~~ R["DSResource"] ~~~ Co["DSContainer"] ~~~ Ti["DSTimer"] ~~~ St["DSState"] ~~~ HW["HW models"]
-  end
-  subgraph L2["Layer 2 — Event Routing Profiles"]
-    direction LR
-    subgraph Lite["  LiteLayer2  "]
-      direction LR
-      LP["LiteProcess"] ~~~ LQ["DSLiteQueue"] ~~~ LRes["DSLiteResource"] ~~~ LPB["DSLitePub · DSLiteSub"]
-    end
-    subgraph PubSub["  PubSubLayer2  "]
-      direction LR
-      PB["DSPub · DSSub (routing-rich)"] ~~~ DP["DSProcess · DSFuture"] ~~~ Fi["Tiers · Filters · Circuits"]
-    end
+    TQ1["TQBinTree (default) — heap + buckets · bound-heavy workloads"] ~~~ TQ2["TQBisect — sorted deque · clean forward-event stream"]
   end
   subgraph L1["Layer 1 — Simulation Engine"]
     direction LR
     E["DSSimulation — event dispatch · process context · time advancement"]
   end
-  subgraph L0["Layer 0 — Time Queue"]
+
+  subgraph L2L["Layer 2 — LiteLayer2"]
     direction LR
-    TQ1["TQBinTree (default) — heap + buckets · bound-heavy workloads"] ~~~ TQ2["TQBisect — sorted deque · clean forward-event stream"]
+    LP["DSLiteProcess"] ~~~ LPB["DSLitePub · DSLiteSub"]
+  end
+  subgraph L2P["Layer 2 — PubSubLayer2"]
+    direction LR
+    PB["DSPub · DSSub (routing-rich)"] ~~~ DP["DSProcess · DSFuture"] ~~~ Fi["Filters · Circuits"]
   end
 
-  L0 --> L1 --> L2 --> L3 --> L4 --> L5
+  subgraph L3L["Layer 3 — Lite Components"]
+    direction LR
+    LQ["DSLiteQueue"] ~~~ LRes["DSLiteResource"] ~~~ LTi["DSLiteTimer · DSLiteDelay"]
+  end
+  subgraph L3P["Layer 3 — PubSub Components"]
+    direction LR
+    Q["DSQueue"] ~~~ R["DSResource"] ~~~ Co["DSContainer"] ~~~ Ti["DSTimer"] ~~~ St["DSState"] ~~~ HW["HW models"]
+  end
+
+  subgraph L4L["Layer 4 — Lite Agent"]
+    direction LR
+    LA["DSLiteAgent"]
+  end
+  subgraph L4P["Layer 4 — PubSub Agent"]
+    direction LR
+    AG["DSAgent — self-driving components with queue / resource helpers"]
+  end
+
+  subgraph L5["Layer 5 — Shim Layers  (PubSub only)"]
+    direction LR
+    SH["SimPy · salabim · asyncio compatibility shims"]
+  end
+
+  L0 --> L1
+  L1 --> L2L
+  L1 --> L2P
+  L2L --> L3L --> L4L
+  L2P --> L3P --> L4P --> L5
 ```
 
 ### Layer 0 — Time Queue
@@ -121,15 +134,21 @@ sim = DSSimulation(timequeue=TQBisect)   # try the alternative; revert if no imp
 
 ### Layer 3 — Components
 
-Built on Layer 2: component availability depends on the selected profile. `DSQueue`/`DSResource` are available in both profiles (via `DS*` in PubSub and `DSLite*` in Lite). `DSContainer`, `DSState`, and the hardware models are PubSub-focused.
+Each Layer 2 profile has its own Layer 3:
+
+- **Lite** — `DSLiteQueue`, `DSLiteResource`, `DSLiteTimer`, `DSLiteDelay`. Minimal component set, no pubsub overhead.
+- **PubSub** — `DSQueue`, `DSResource`, `DSContainer`, `DSTimer`, `DSState`, hardware models. Full condition and endpoint support.
 
 ### Layer 4 — Agents
 
-`DSAgent` is built on Layer 3 and adds a self-driving process with ergonomic helpers for queue and resource operations. It is the recommended building block for components that own their own behavior loop.
+Each Layer 2 profile has its own Layer 4 agent:
 
-### Layer 5 — Shim Layers
+- **Lite** — `DSLiteAgent`: lightweight self-driving component with queue and resource helpers, no condition machinery.
+- **PubSub** — `DSAgent`: full self-driving component with queue, resource, and condition helpers.
 
-Compatibility adapters for SimPy, salabim, and asyncio. Shims sit above the DSSim runtime and translate the foreign framework's API into DSSim calls. Migrated code and native DSSim code share the same event loop without modification. See [Chapter 9](09-shims.md).
+### Layer 5 — Shim Layers (PubSub only)
+
+Compatibility adapters for SimPy, salabim, and asyncio. Shims sit above the PubSub stack and translate the foreign framework's API into DSSim calls. Migrated code and native DSSim code share the same event loop without modification. See [Chapter 9](09-shims.md).
 
 ---
 
@@ -141,6 +160,6 @@ Compatibility adapters for SimPy, salabim, and asyncio. Shims sit above the DSSi
 - **LiteLayer2** offers simple fan-out pub/sub (`DSLitePub`/`DSLiteSub`): all subscribers receive every event, no tiers or conditions.
 - **PubSubLayer2** offers routing-rich pub/sub (`DSPub`/`DSSub`): 4-phase tiers, condition filtering, filter circuits, processes, and futures.
 - The two L2 profiles are interchangeable with some limitations: switching is a one-argument change; tier-based routing and condition filtering have no Lite equivalent.
-- Layer 3 components are profile-dependent: queue/resource are available in both profiles (with Lite/PubSub variants), while container/state/HW models are PubSub-focused.
-- Layer 4 (`DSAgent`) adds self-driving component behavior built on top of Layer 3 components.
-- Layer 5 shims (SimPy, salabim, asyncio) let migrated code coexist with native DSSim code in the same simulation.
+- Layer 3 is profile-specific: Lite has `DSLiteQueue`/`DSLiteResource`/timers; PubSub adds `DSContainer`, `DSState`, hardware models, and full condition support.
+- Layer 4 is also profile-specific: `DSLiteAgent` for Lite, `DSAgent` for PubSub.
+- Layer 5 shims (SimPy, salabim, asyncio) are PubSub-only — they rely on condition filtering and routing machinery not present in Lite.
