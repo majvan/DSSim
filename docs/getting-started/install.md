@@ -32,16 +32,6 @@ sim = DSSimulation()
 print("DSSim ready, t =", sim.time)   # DSSim ready, t = 0
 ```
 
-## Documentation Tooling (optional)
-
-To build or serve the documentation locally:
-
-```bash
-pip install -r docs/requirements-docs.txt
-mkdocs serve        # live-reload at http://127.0.0.1:8000
-mkdocs build        # static output in site/
-```
-
 ## Run the Examples
 
 ```bash
