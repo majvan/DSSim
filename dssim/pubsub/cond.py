@@ -23,6 +23,7 @@ from dssim.base import TimeType, EventType, EventRetType
 from dssim.pubsub.base import CondType, ICondition, CallableConditionMixin, SubscriberMetadata, TestObject
 from dssim.pubsub.future import DSFuture
 from dssim.pubsub.process import DSProcess
+from dssim.pubsub.pubsub import TrackEvent
 
 
 if TYPE_CHECKING:
@@ -121,6 +122,38 @@ class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin
         self.meta.cond.push(lambda e:True)
         return self.meta
 
+    @TrackEvent
+    def send(self, event: EventType) -> bool:
+        # DSFilter.send must use condition semantics (not DSFuture.finish semantics).
+        if event is TestObject:
+            return self.check(event)[0]
+        was_signaled = self.signaled
+        signaled, _ = self.check(event)
+        # Wake waiters that observe this filter via _finish_tx.
+        # Use the original payload so REEVALUATE conditions keep correct state.
+        if signaled and (self.reevaluate or not was_signaled):
+            # PULSED filters must deliver the real event so waiters receive the value.
+            # REEVALUATE (non-pulse) fires TestObject so circuit.check(TestObject) re-reads
+            # each filter's cached signaled state without cross-contaminating other filters.
+            wakeup = event if self.pulse else TestObject
+            self._finish_tx.signal(wakeup)
+        return signaled
+
+    def gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+        # Keep DSFilter wait semantics value-centric even when already signaled.
+        if self.signaled:
+            return self.cond_value()
+        with self.sim.observe_pre(self):
+            retval = yield from self.sim.gwait(timeout=timeout, cond=self, val=val)
+        return retval
+
+    async def wait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> EventType:
+        # Keep DSFilter wait semantics value-centric even when already signaled.
+        if self.signaled:
+            return self.cond_value()
+        with self.sim.observe_pre(self):
+            return await self.sim.wait(timeout=timeout, cond=self, val=val)
+
     def __or__(self, other: "DSFilter") -> "DSCircuit":
         return DSCircuit.build(self, other, any)
 
@@ -143,14 +176,12 @@ class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin
 
     def finished(self) -> bool:
         return self.signaled
-    
-    def check(self, event: EventType) -> Tuple[bool, EventType]:
-        if self.signaled and not self.reevaluate:
-            return True, self.cond_value()
+
+    def _check_event(self, event: EventType, allow_forward: bool) -> Tuple[bool, EventType]:
         signaled, value = False, None
         if isinstance(self.cond, DSFuture):
             # now we should get this signaled only after return
-            if self.forward_events:
+            if self.forward_events and allow_forward:
                 # Process bootstrap must always be generator.send(None).
                 # If the process is not started yet, discard the triggering
                 # payload and use None to prime it.
@@ -183,6 +214,18 @@ class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin
             return True, self.cond_value()
         return False, None
 
+    def check(self, event: EventType) -> Tuple[bool, EventType]:
+        if self.signaled and not self.reevaluate:
+            return True, self.cond_value()
+        # Probe mode used by check_and_wait/check_and_gwait.
+        # Keep already-signaled state untouched, otherwise evaluate without
+        # forwarding payload into nested futures/processes.
+        if event is TestObject:
+            if self.signaled:
+                return True, self.cond_value()
+            return self._check_event(event, allow_forward=False)
+        return self._check_event(event, allow_forward=True)
+
     def get_eps(self) -> Set["DSPub"]:
         retval = {self._finish_tx,}
         get_eps = getattr(self.cond, 'get_eps', None)
@@ -198,9 +241,9 @@ class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin
         if not self.pulse:
             self.signaled = True
         if async_future:
-            # Following forces re-evaluation by injecting new event.
-            # We have to re-evaluate only when finish() was called asynchronously.
-            self._finish_tx.signal(self)
+            # Async finish should wake waiters in probe mode so circuits evaluate
+            # cached signaled states and do not accidentally reset sibling filters.
+            self._finish_tx.signal(TestObject)
 
     def cond_value(self) -> EventType:
         return self.value

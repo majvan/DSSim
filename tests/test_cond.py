@@ -18,6 +18,7 @@ import unittest
 from contextlib import contextmanager
 from unittest.mock import Mock, MagicMock, call
 from dssim import DSSimulation, DSProcess, DSFuture
+from dssim.pubsub.base import TestObject
 from dssim.pubsub.cond import DSFilter as _f, DSCircuit
 from dssim.pubsub.process import _StartProcess
 
@@ -582,6 +583,148 @@ class TestDSFilter(unittest.TestCase):
         self.assertTrue(fa.finished() == False)
         self.assertTrue(fa.value == 'a')
 
+    def test13b_send_reevaluate_toggles_state(self):
+        sim = DSSimulation()
+        fa = _f(lambda e: e == 'UP', sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        tx = sim.publisher(name='tx')
+        tx.add_subscriber(fa, tx.Phase.PRE)
+
+        sim.signal('UP', tx)
+        sim.run(1)
+        self.assertTrue(fa.signaled)
+        self.assertEqual(fa.value, 'UP')
+
+        sim.signal('DOWN', tx)
+        sim.run(2)
+        self.assertFalse(fa.signaled)
+        self.assertEqual(fa.value, 'UP')
+
+    def test13c_send_wakes_waiters_via_finish_tx(self):
+        sim = DSSimulation()
+        fa = _f(lambda e: e == 'UP', sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        out = []
+
+        async def waiter():
+            t0 = sim.time
+            got = await fa.wait(10)
+            out.append((sim.time - t0, got, fa.signaled))
+
+        async def sender():
+            await sim.wait(3)
+            fa.send('UP')
+
+        sim.schedule(0, waiter())
+        sim.schedule(0, sender())
+        sim.run(20)
+        self.assertEqual(out, [(3, 'UP', True)])
+
+    def test13d_check_testobject_is_non_destructive_for_reevaluate(self):
+        sim = DSSimulation()
+        fa = _f(lambda e: e == 'UP', sigtype=_f.SignalType.REEVALUATE, sim=sim)
+
+        # Unsignaled: probe stays unsignaled for non-matching predicate.
+        signaled, value = fa.check(TestObject)
+        self.assertFalse(signaled)
+        self.assertIsNone(value)
+        self.assertFalse(fa.signaled)
+
+        # Signaled: probe preserves current state/value and does not reset it.
+        fa.check('UP')
+        self.assertTrue(fa.signaled)
+        signaled, value = fa.check(TestObject)
+        self.assertTrue(signaled)
+        self.assertEqual(value, 'UP')
+        self.assertTrue(fa.signaled)
+
+    def test13e_check_testobject_does_not_forward_into_process(self):
+        def gen():
+            event = yield 'First'
+            return event
+
+        sim = DSSimulation()
+        p = DSProcess(gen(), sim=sim)
+        fa = _f(p, forward_events=True, sim=sim)
+
+        # Probe event must not be forwarded to nested process/future.
+        signaled, value = fa.check(TestObject)
+        self.assertFalse(signaled)
+        self.assertIsNone(value)
+        self.assertFalse(p.started())
+        self.assertFalse(p.finished())
+
+        # A normal event still uses forwarding path and boots the process.
+        signaled, value = fa.check('boot')
+        self.assertFalse(signaled)
+        self.assertIsNone(value)
+        self.assertTrue(p.started())
+        self.assertFalse(p.finished())
+
+    def test13f_send_testobject_does_not_wake_waiters(self):
+        sim = DSSimulation()
+        fa = _f(lambda e: e == 'UP', sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        out = []
+
+        async def waiter():
+            t0 = sim.time
+            got = await fa.wait(2)
+            out.append((sim.time - t0, got, fa.signaled))
+
+        async def sender():
+            await sim.wait(1)
+            fa.send(TestObject)
+
+        sim.schedule(0, waiter())
+        sim.schedule(0, sender())
+        sim.run(10)
+        self.assertEqual(out, [(2, None, False)])
+
+    def test13g_circuit_wait_survives_async_filter_finish_event(self):
+        sim = DSSimulation()
+        f_link = _f(lambda e: e == 'UP', sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        f_credits = _f(lambda e: e == 'CREDITS', sim=sim)
+        circuit = DSCircuit(all, [f_link, f_credits], sim=sim)
+        out = []
+
+        async def waiter():
+            t0 = sim.time
+            got = await circuit.wait(5)
+            out.append((sim.time - t0, got, f_link.signaled, f_credits.signaled))
+
+        async def feeder():
+            await sim.wait(1)
+            f_link.send('UP')
+            await sim.wait(1)
+            # Triggers asynchronous DSFilter._finish(...) path.
+            f_credits.finish('ok')
+
+        sim.schedule(0, waiter())
+        sim.schedule(0, feeder())
+        sim.run(20)
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0][0], 2)
+        self.assertEqual(out[0][1], {f_link: 'UP', f_credits: 'ok'})
+        self.assertTrue(out[0][2])
+        self.assertTrue(out[0][3])
+
+    def test13h_pulsed_send_wakes_waiters_immediately(self):
+        sim = DSSimulation()
+        fa = _f(lambda e: e == 'UP', sigtype=_f.SignalType.PULSED, sim=sim)
+        out = []
+
+        async def waiter():
+            t0 = sim.time
+            got = await fa.wait(5)
+            out.append((sim.time - t0, got, fa.signaled))
+
+        async def sender():
+            await sim.wait(1)
+            fa.send('UP')
+
+        sim.schedule(0, waiter())
+        sim.schedule(0, sender())
+        sim.run(20)
+        self.assertEqual(out, [(1, 'UP', False)])
+
     def test14_feeding_lambda_reevaluate(self):
         sim = DSSimulation()
         fa = _f(lambda e: 'A' in e, sigtype=_f.SignalType.REEVALUATE, sim=sim)
@@ -894,10 +1037,72 @@ class TestDSFilter(unittest.TestCase):
 
 
     def test25_cond_gwait(self):
-        pass
+        sim = DSSimulation()
+        flt = _f('ready', sim=sim)
+        flt.check('ready')
+        out = []
+
+        def waiter():
+            t0 = sim.time
+            got = yield from flt.gwait(5)
+            out.append((sim.time - t0, got))
+
+        sim.schedule(0, waiter())
+        sim.run(10)
+        self.assertEqual(out, [(0, 'ready')])
 
     def test26_cond_wait(self):
-        pass
+        sim = DSSimulation()
+        flt = _f('ready', sim=sim)
+        flt.check('ready')
+        out = []
+
+        async def waiter():
+            t0 = sim.time
+            got = await flt.wait(5)
+            out.append((sim.time - t0, got))
+
+        sim.schedule(0, waiter())
+        sim.run(10)
+        self.assertEqual(out, [(0, 'ready')])
+
+    def test27_precheck_probe_evaluates_unsignaled_callable(self):
+        sim = DSSimulation()
+        flt = _f(lambda _e: True, sim=sim)
+        signaled, value = flt.check(TestObject)
+        self.assertTrue(signaled)
+        self.assertIs(value, TestObject)
+        self.assertTrue(flt.signaled)
+
+    def test28_cond_check_and_gwait_fastpath_when_signaled(self):
+        sim = DSSimulation()
+        flt = _f('ready', sim=sim)
+        flt.check('ready')
+        out = []
+
+        def waiter():
+            t0 = sim.time
+            got = yield from flt.check_and_gwait(5)
+            out.append((sim.time - t0, got))
+
+        sim.schedule(0, waiter())
+        sim.run(10)
+        self.assertEqual(out, [(0, 'ready')])
+
+    def test29_cond_check_and_wait_fastpath_when_signaled(self):
+        sim = DSSimulation()
+        flt = _f('ready', sim=sim)
+        flt.check('ready')
+        out = []
+
+        async def waiter():
+            t0 = sim.time
+            got = await flt.check_and_wait(5)
+            out.append((sim.time - t0, got))
+
+        sim.schedule(0, waiter())
+        sim.run(10)
+        self.assertEqual(out, [(0, 'ready')])
 
 
     '''
@@ -1058,3 +1263,57 @@ class TestDSCircuit(unittest.TestCase):
         self.assertTrue(c.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx})
         self.assertEqual(str(c), "(DSFilter(c) & -(DSFilter(a) & DSFilter(b)))")
         self.assertTrue((len(c.setters), len(c.resetters)) == (1, 1))
+
+    def test3_precheck_probe_recomputes_reevaluate_circuit(self):
+        sim = DSSimulation()
+        f_link = _f(lambda e: e == 'UP', sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        f_credits = _f(lambda e: isinstance(e, int) and e > 0, sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        c = f_link & f_credits
+        # Prime both setters from real events while the circuit itself remains unchecked.
+        f_link('UP')
+        f_credits(1)
+        self.assertFalse(c.signaled)
+
+        signaled, value = c.check(TestObject)
+        self.assertTrue(signaled)
+        self.assertEqual(value, {f_link: 'UP', f_credits: 1})
+        self.assertTrue(c.signaled)
+
+    def test4_check_and_wait_must_not_shortcut_stale_signaled_circuit(self):
+        sim = DSSimulation()
+        f_a = _f(lambda e: isinstance(e, dict) and bool(e['a']), sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        f_b = _f(lambda e: isinstance(e, dict) and bool(e['b']), sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        c = f_a & f_b
+
+        # Make the circuit true once.
+        signaled, _ = c.check({'a': True, 'b': True})
+        self.assertTrue(signaled)
+        self.assertTrue(c.signaled)
+
+        # Mutate one setter out-of-band so c.signaled becomes stale True.
+        signaled_b, _ = f_b.check({'a': True, 'b': False})
+        self.assertFalse(signaled_b)
+        self.assertTrue(c.signaled)
+
+        out = []
+
+        async def consumer():
+            t0 = sim.time
+            got = await c.check_and_wait(5)
+            out.append((sim.time - t0, got))
+
+        async def producer(target):
+            await sim.wait(3)
+            sim.signal({'a': True, 'b': True}, target)
+
+        consumer_proc = sim.schedule(0, consumer())
+        sim.schedule(0, producer(consumer_proc))
+        sim.run(10)
+
+        self.assertEqual(len(out), 1)
+        delta, got = out[0]
+        # If DSCircuit.check_and_wait did "if self.signaled: return ...",
+        # this would be 0 (incorrect immediate return from stale state).
+        self.assertEqual(delta, 3)
+        self.assertEqual(set(got.keys()), {f_a, f_b})
+        self.assertTrue(all(v['a'] and v['b'] for v in got.values()))
