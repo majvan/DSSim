@@ -59,10 +59,9 @@ class Packet:
     born:     float = 0.0       # sim time when enqueued (μs)
     started:  float = 0.0       # sim time when dequeued / tx started (μs)
 
-
-def tx_time(pkt):
-    """Transmission time in μs for a 1 Gbps link."""
-    return pkt.size / LINK_BYTES_PER_US
+    def tx_time(self):
+        """Transmission time in μs for a 1 Gbps link."""
+        return self.size / LINK_BYTES_PER_US
 
 
 # ── OutputPort ────────────────────────────────────────────────────────────────
@@ -93,7 +92,7 @@ class OutputPort(DSComponent):
         while True:
             pkt = await self.queue.get(timeout=float('inf'))
             pkt.started = self.sim.time          # record start-of-service
-            await self.sim.sleep(tx_time(pkt))
+            await self.sim.sleep(pkt.tx_time())
             self.tx.signal(pkt)
 
 
@@ -181,7 +180,7 @@ class CreditedSender(DSComponent):
             self._tx_credits.signal(self._credits)   # may drop to 0
 
             pkt.started = self.sim.time
-            await self.sim.sleep(tx_time(pkt))
+            await self.sim.sleep(pkt.tx_time())
             self.tx.signal(pkt)
 
 

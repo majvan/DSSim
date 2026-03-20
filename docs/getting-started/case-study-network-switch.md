@@ -41,7 +41,7 @@ Three questions drive the simulation:
 `Packet` is a plain dataclass. `tx_time` converts a packet's byte size to the number of microseconds required to clock it out of a 1 Gbps port.
 
 ```python
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 LINK_BYTES_PER_US = 125        # 1 Gbps
 
@@ -49,11 +49,12 @@ LINK_BYTES_PER_US = 125        # 1 Gbps
 class Packet:
     dst:      int
     size:     int               # bytes
-    priority: int = 4           # 0 = highest, 7 = lowest
+    priority: int   = 4         # 0 = highest, 7 = lowest
     born:     float = 0.0       # simulation time at enqueue (μs)
+    started:  float = 0.0       # simulation time at start-of-service (μs)
 
-def tx_time(pkt):
-    return pkt.size / LINK_BYTES_PER_US   # μs
+    def tx_time(self):
+        return self.size / LINK_BYTES_PER_US   # μs
 ```
 
 ---
@@ -84,7 +85,7 @@ from dssim import DSSimulation, DSComponent
 from dssim.base_components import DSKeyOrder
 
 class OutputPort(DSComponent):
-    """Serialises packets onto a link; records per-packet queuing latency."""
+    """Serialises packets onto a 1 Gbps link via a FIFO or priority queue."""
 
     def __init__(self, capacity=200, policy=None, **kwargs):
         super().__init__(**kwargs)
@@ -94,9 +95,8 @@ class OutputPort(DSComponent):
             queue_kwargs['policy'] = policy
         self.queue = self.sim.queue(**queue_kwargs)
 
-        self.tx        = self.sim.publisher(name=self.name + '.tx')
-        self.latencies = []
-        self.drops     = 0
+        self.tx    = self.sim.publisher(name=self.name + '.tx')
+        self.drops = 0
 
     def start(self):
         self.sim.process(self._transmit()).schedule(0)
@@ -109,8 +109,8 @@ class OutputPort(DSComponent):
     async def _transmit(self):
         while True:
             pkt = await self.queue.get(timeout=float('inf'))
-            self.latencies.append(self.sim.time - pkt.born)
-            await self.sim.sleep(tx_time(pkt))
+            pkt.started = self.sim.time          # record start-of-service
+            await self.sim.sleep(pkt.tx_time())
             self.tx.signal(pkt)
 ```
 
@@ -122,17 +122,17 @@ Send three packets to a FIFO port. The arrival order matters: Bulk (1 500 B, pri
 from dssim import DSSimulation, DSComponent
 from dssim.base_components import DSKeyOrder
 
-# (Packet, tx_time, OutputPort definitions from above)
+# (Packet, OutputPort definitions from above)
 
 def run_isolated(policy=None):
     sim  = DSSimulation()
     port = OutputPort(name='port', sim=sim, policy=policy)
     log  = []
 
-    port.tx.add_subscriber(sim.callback(
-        lambda p: log.append((sim.time, p.size, sim.time - p.born))
-    ))
-
+    port.tx.add_subscriber(
+        sim.callback(lambda p: log.append((sim.time, p.size, p.started - p.born))),
+        port.tx.Phase.PRE,
+    )
     port.start()
 
     def feeder():
@@ -145,8 +145,8 @@ def run_isolated(policy=None):
     sim.schedule(0, feeder())
     sim.run(until=50)
 
-    for t, size, lat in log:
-        print(f"t={t:6.2f} μs  size={size:4d} B  latency={lat:6.2f} μs")
+    for t, size, qwait in log:
+        print(f't={t:6.2f} μs  size={size:4d} B  queue_wait={qwait:6.2f} μs')
 ```
 
 With no policy argument (FIFO), packets are dequeued in arrival order. The VoIP packet waits behind both bulk frames even though it has the higher priority:
@@ -156,21 +156,21 @@ With no policy argument (FIFO), packets are dequeued in arrival order. The VoIP 
 - voip  (born=2): dequeued at t=24, latency=22 μs, exits at t=24.51 μs
 
 ```
-t= 12.00 μs  size=1500 B  latency=  0.00 μs
-t= 24.00 μs  size=1500 B  latency= 11.00 μs
-t= 24.51 μs  size=  64 B  latency= 22.00 μs
+t= 12.00 μs  size=1500 B  queue_wait=  0.00 μs
+t= 24.00 μs  size=1500 B  queue_wait= 11.00 μs
+t= 24.51 μs  size=  64 B  queue_wait= 22.00 μs
 ```
 
 Repeat with `policy=DSKeyOrder(key=lambda p: p.priority)` (lower value = higher priority). The VoIP packet jumps over bulk2 as soon as it is enqueued:
 
 - bulk1 exits at t=12 μs (it was alone when it arrived — no reordering possible)
-- voip dequeued at t=12 (priority=0 beats bulk2's priority=7), latency=10 μs, exits at t=12.51 μs
-- bulk2 dequeued at t=12.51, latency=11.51 μs, exits at t=24.51 μs
+- voip dequeued at t=12 (priority=0 beats bulk2's priority=7), queue_wait=10 μs, exits at t=12.51 μs
+- bulk2 dequeued at t=12.51, queue_wait=11.51 μs, exits at t=24.51 μs
 
 ```
-t= 12.00 μs  size=1500 B  latency=  0.00 μs
-t= 12.51 μs  size=  64 B  latency= 10.00 μs
-t= 24.51 μs  size=1500 B  latency= 11.51 μs
+t= 12.00 μs  size=1500 B  queue_wait=  0.00 μs
+t= 12.51 μs  size=  64 B  queue_wait= 10.00 μs
+t= 24.51 μs  size=1500 B  queue_wait= 11.51 μs
 ```
 
 `DSKeyOrder` is imported from `dssim.base_components`. Passing it as the `policy` argument is the only code change needed to switch from FIFO to priority scheduling.
@@ -240,20 +240,30 @@ flowchart LR
 ```
 
 ```python
-import random
 import statistics
 from dssim import DSSimulation, DSComponent
 from dssim.base_components import DSKeyOrder
 
-# (Packet, tx_time, OutputPort, PacketSource definitions from above)
+# (Packet, OutputPort, PacketSource definitions from above)
 
-def run_scenario(policy=None, duration=100_000):
-    sim  = DSSimulation()
-    port = OutputPort(name='port', sim=sim, policy=policy)
+def run_scenario1(policy=None, duration=100_000):
+    sim   = DSSimulation()
+    port  = OutputPort(name='port', sim=sim, policy=policy)
     probe = port.queue.add_stats_probe()
 
-    voip_cb = sim.callback(port.enqueue, name='voip_in')
-    bulk_cb = sim.callback(port.enqueue, name='bulk_in')
+    voip_cb = sim.callback(port.enqueue)
+    bulk_cb = sim.callback(port.enqueue)
+
+    voip_lat, bulk_lat = [], []
+
+    def on_exit(pkt):
+        qwait = pkt.started - pkt.born
+        if pkt.priority == 0:
+            voip_lat.append(qwait)
+        else:
+            bulk_lat.append(qwait)
+
+    port.tx.add_subscriber(sim.callback(on_exit), port.tx.Phase.PRE)
 
     voip_src = PacketSource(sim, voip_cb, interval=5,  size=64,   priority=0, label='voip')
     bulk_src = PacketSource(sim, bulk_cb, interval=15, size=1500, priority=7, label='bulk')
@@ -261,16 +271,10 @@ def run_scenario(policy=None, duration=100_000):
     port.start()
     voip_src.start()
     bulk_src.start()
-
     sim.run(until=duration)
-
-    voip_pkts = [l for l in port.latencies if ...]   # split by size (see note)
-    # In practice, attach a separate latency list per source
-    # by subscribing to port.tx and filtering on pkt.priority.
-    ...
 ```
 
-The simplest way to split per-class statistics is to subscribe a callback on `port.tx` and sort by `pkt.priority`.
+Per-class latency is split in the `on_exit` callback by `pkt.priority`; queue depth statistics come from `probe.stats()`.
 
 **FIFO results** — VoIP and Bulk share the queue equally; neither class receives preferential treatment:
 
@@ -410,7 +414,7 @@ class CreditedSender(DSComponent):
             self._tx_credits.signal(self._credits)
 
             pkt.started = self.sim.time
-            await self.sim.sleep(tx_time(pkt))
+            await self.sim.sleep(pkt.tx_time())
             self.tx.signal(pkt)
 ```
 
@@ -522,4 +526,4 @@ def run_credited(duration=10_000):
     probe.close()
     ```
 
-    `CreditedSender` uses only core DSSim primitives (`sim.wait`, `sim.observe_pre`, publishers, queues) and is compatible with any simulation layer.
+    `CreditedSender` uses only core DSSim primitives (`sim.check_and_wait`, publishers, queues) and is compatible with any simulation layer.
