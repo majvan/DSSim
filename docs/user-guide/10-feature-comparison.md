@@ -26,7 +26,7 @@ The table below compares DSSim's own API with SimPy and salabim on key dimension
 <td>Spurious wakeups</td>
 <td style="background-color:#c8e6c9">None (condition filtering)</td>
 <td style="background-color:#ffcdd2">Possible (no condition gate)</td>
-<td>N/A — processes wait on specific event objects</td>
+<td style="background-color:#ffcdd2">Possible — when waiting for external state (e.g. credits &amp; link-up), process must poll in a loop; events carry no predicate</td>
 <td style="background-color:#ffcdd2">Possible — process wakes on <code>activate()</code> and must re-check condition manually</td>
 </tr>
 <tr>
