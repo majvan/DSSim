@@ -471,6 +471,12 @@ class SimPubsubMixin:
             raise ValueError('The parameter sim in publisher() method should be set to the same simulation instance.')
         return DSPub(*args, **kwargs, sim=sim)
 
+    def transformation(self: Any, *args: Any, **kwargs: Any) -> DSTransformation:
+        sim: DSSimulation = kwargs.pop('sim', self)
+        if sim is not self:
+            raise ValueError('The parameter sim in transformation() method should be set to the same simulation instance.')
+        return DSTransformation(*args, **kwargs, sim=sim)
+
     def callback(self: Any, *args: Any, **kwargs: Any) -> "DSCallback | DSCondCallback":
         sim: DSSimulation = kwargs.pop('sim', self)
         if sim is not self:

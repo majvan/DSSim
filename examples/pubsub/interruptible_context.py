@@ -15,7 +15,7 @@
 An example showing the possibilities to interrupt context in dssim.
 '''
 from dssim import DSSimulation, DSComponent
-from dssim import DSPub, DSTransformation, DSProcess
+from dssim import DSPub, DSProcess
 
 class MyComponent(DSComponent):
     def __init__(self, *args, **kwargs):
@@ -32,7 +32,7 @@ class MyComponent(DSComponent):
         assert cond_stack == [None,]
         t = self.sim.time
         try:
-            ep = DSTransformation(self.ep, lambda e: ValueError(e))
+            ep = self.sim.transformation(self.ep, lambda e: ValueError(e))
             with self.sim.observe_pre(ep) as cm:
                 print(self.sim.time, 'Waiting...')
                 event = await self.sim.sleep(100)  # Ignore plain events; only exceptions interrupt.
@@ -150,7 +150,7 @@ class MyComponent(DSComponent):
         t = self.sim.time
         event = None
         assert len(cond_stack) == 1
-        with self.sim.observe_pre(DSTransformation(self.ep, lambda e: e + ' transformed')):
+        with self.sim.observe_pre(self.sim.transformation(self.ep, lambda e: e + ' transformed')):
             with self.sim.timeout(20) as cm0:
                 with self.sim.interruptible(cond='Bye transformed') as cm1:
                     print(self.sim.time, 'Waiting 100')
