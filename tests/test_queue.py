@@ -1174,5 +1174,243 @@ class TestQueueStatsProbe(unittest.TestCase):
         self.assertEqual(after_reset['put_count'], 0)
         self.assertEqual(after_reset['get_count'], 1)
 
+
+class TestQueueOpsProbe(unittest.TestCase):
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    def test0_ops_probe_name(self):
+        q = DSQueue(capacity=1, name='q0', sim=self.sim)
+        probe = q.add_ops_probe()
+        self.assertEqual(probe.name, 'q0.ops_probe')
+        probe2 = q.add_ops_probe(name='flow')
+        self.assertEqual(probe2.name, 'q0.flow')
+
+    def test1_ops_probe_nowait_counts(self):
+        q = DSQueue(capacity=1, sim=self.sim)
+        probe = q.add_ops_probe()
+
+        def actor(_event=None):
+            q.put_nowait('a')      # success
+            q.put_nowait('b')      # fail (full)
+            q.get_nowait()         # success
+            q.get_nowait()         # fail (empty)
+
+        self.sim.schedule(0, actor)
+        self.sim.run(1)
+
+        stats = probe.stats()
+        self.assertEqual(stats['put_attempt_count'], 2)
+        self.assertEqual(stats['put_success_count'], 1)
+        self.assertEqual(stats['put_fail_count'], 1)
+        self.assertEqual(stats['put_requested_items'], 2)
+        self.assertEqual(stats['put_moved_items'], 1)
+        self.assertEqual(stats['get_attempt_count'], 2)
+        self.assertEqual(stats['get_success_count'], 1)
+        self.assertEqual(stats['get_fail_count'], 1)
+        self.assertEqual(stats['get_requested_items'], 2)
+        self.assertEqual(stats['get_moved_items'], 1)
+        self.assertEqual(stats['put_blocked_count'], 0)
+        self.assertEqual(stats['get_blocked_count'], 0)
+        self.assertEqual(stats['put_timeout_count'], 0)
+        self.assertEqual(stats['get_timeout_count'], 0)
+        self.assertEqual(stats['max_put_batch'], 1)
+        self.assertEqual(stats['max_get_batch'], 1)
+        self.assertEqual(stats['current_len'], 0)
+
+    def test2_ops_probe_put_blocked_and_timeout(self):
+        q = DSQueue(capacity=1, sim=self.sim)
+        probe = q.add_ops_probe()
+        out = []
+
+        def producer():
+            q.put_nowait('seed')                # immediate success
+            ret = yield from q.gput(1, 'x')     # blocked, timeout
+            out.append(ret)
+            ret = yield from q.gput(10, 'y')    # blocked, later success
+            out.append(ret)
+
+        def consumer():
+            yield from self.sim.gwait(3)
+            q.get_nowait()  # free one slot for second gput
+
+        self.sim.schedule(0, producer())
+        self.sim.schedule(0, consumer())
+        self.sim.run(20)
+
+        self.assertEqual(out[0], None)
+        self.assertIsNotNone(out[1])
+        stats = probe.stats()
+        self.assertEqual(stats['put_attempt_count'], 3)
+        self.assertEqual(stats['put_success_count'], 2)
+        self.assertEqual(stats['put_fail_count'], 1)
+        self.assertEqual(stats['put_blocked_count'], 2)
+        self.assertEqual(stats['put_timeout_count'], 1)
+        self.assertEqual(stats['put_requested_items'], 3)
+        self.assertEqual(stats['put_moved_items'], 2)
+
+    def test3_ops_probe_get_blocked_and_timeout(self):
+        q = DSQueue(sim=self.sim)
+        probe = q.add_ops_probe()
+        out = []
+
+        def consumer():
+            ret = yield from q.gget(1)          # blocked, timeout
+            out.append(ret)
+            ret = yield from q.gget(10)         # blocked, later success
+            out.append(ret)
+
+        def producer():
+            yield from self.sim.gwait(3)
+            q.put_nowait('hello')
+
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+
+        self.assertEqual(out[0], None)
+        self.assertEqual(out[1], 'hello')
+        stats = probe.stats()
+        self.assertEqual(stats['get_attempt_count'], 2)
+        self.assertEqual(stats['get_success_count'], 1)
+        self.assertEqual(stats['get_fail_count'], 1)
+        self.assertEqual(stats['get_blocked_count'], 2)
+        self.assertEqual(stats['get_timeout_count'], 1)
+        self.assertEqual(stats['get_requested_items'], 2)
+        self.assertEqual(stats['get_moved_items'], 1)
+        self.assertEqual(stats['put_attempt_count'], 1)
+        self.assertEqual(stats['put_success_count'], 1)
+
+    def test4_ops_probe_pop_remove_setitem(self):
+        q = DSQueue(sim=self.sim)
+        probe = q.add_ops_probe()
+
+        def actor(_event=None):
+            q.put_nowait('a', 'b', 'c')         # put batch size 3
+            q.pop(1)                            # success
+            q.pop(10)                           # fail
+            q[0] = 'x'                          # setitem
+            q.remove(lambda e: e == 'x')        # success, removed one
+            q.remove('zzz')                     # fail
+
+        self.sim.schedule(0, actor)
+        self.sim.run(1)
+
+        stats = probe.stats()
+        self.assertEqual(stats['pop_attempt_count'], 2)
+        self.assertEqual(stats['pop_success_count'], 1)
+        self.assertEqual(stats['pop_fail_count'], 1)
+        self.assertEqual(stats['pop_moved_items'], 1)
+        self.assertEqual(stats['remove_attempt_count'], 2)
+        self.assertEqual(stats['remove_success_count'], 1)
+        self.assertEqual(stats['remove_fail_count'], 1)
+        self.assertEqual(stats['remove_moved_items'], 1)
+        self.assertEqual(stats['setitem_count'], 1)
+        self.assertEqual(stats['max_put_batch'], 3)
+
+
+class TestQueueLatencyProbe(unittest.TestCase):
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    def test0_latency_probe_name(self):
+        q = DSQueue(capacity=1, name='q0', sim=self.sim)
+        probe = q.add_latency_probe()
+        self.assertEqual(probe.name, 'q0.latency_probe')
+        probe2 = q.add_latency_probe(name='lat')
+        self.assertEqual(probe2.name, 'q0.lat')
+
+    def test1_stay_time_basic(self):
+        q = DSQueue(sim=self.sim)
+        probe = q.add_latency_probe()
+
+        def actor():
+            q.put_nowait('a')
+            yield from self.sim.gwait(3)
+            q.get_nowait()
+
+        self.sim.schedule(0, actor())
+        self.sim.run(10)
+
+        stats = probe.stats()
+        self.assertEqual(stats['stay_count'], 1)
+        self.assertAlmostEqual(stats['stay_time_avg'], 3.0, places=6)
+        self.assertAlmostEqual(stats['stay_time_min'], 3.0, places=6)
+        self.assertAlmostEqual(stats['stay_time_max'], 3.0, places=6)
+        self.assertEqual(stats['untracked_exit_count'], 0)
+
+    def test2_put_wait_time_blocked_and_timeout(self):
+        q = DSQueue(capacity=1, sim=self.sim)
+        probe = q.add_latency_probe()
+
+        def producer():
+            q.put_nowait('seed')
+            _ = yield from q.gput(2, 'x')   # timeout at t=2
+            _ = yield from q.gput(10, 'y')  # waits until t=4
+
+        def consumer():
+            yield from self.sim.gwait(4)
+            q.get_nowait()
+
+        self.sim.schedule(0, producer())
+        self.sim.schedule(0, consumer())
+        self.sim.run(20)
+
+        stats = probe.stats()
+        self.assertEqual(stats['put_wait_count'], 2)
+        self.assertEqual(stats['put_wait_timeout_count'], 1)
+        self.assertAlmostEqual(stats['put_wait_time_total'], 4.0, places=6)
+        self.assertAlmostEqual(stats['put_wait_time_avg'], 2.0, places=6)
+        self.assertAlmostEqual(stats['put_wait_time_min'], 2.0, places=6)
+        self.assertAlmostEqual(stats['put_wait_time_max'], 2.0, places=6)
+
+    def test3_get_wait_time_blocked_and_timeout(self):
+        q = DSQueue(sim=self.sim)
+        probe = q.add_latency_probe()
+        out = []
+
+        def consumer():
+            out.append((yield from q.gget(2)))    # timeout at t=2
+            out.append((yield from q.gget(10)))   # waits to t=5
+
+        def producer():
+            yield from self.sim.gwait(5)
+            q.put_nowait('hello')
+
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+
+        self.assertEqual(out[0], None)
+        self.assertEqual(out[1], 'hello')
+        stats = probe.stats()
+        self.assertEqual(stats['get_wait_count'], 2)
+        self.assertEqual(stats['get_wait_timeout_count'], 1)
+        self.assertAlmostEqual(stats['get_wait_time_total'], 5.0, places=6)
+        self.assertAlmostEqual(stats['get_wait_time_avg'], 2.5, places=6)
+        self.assertAlmostEqual(stats['get_wait_time_min'], 2.0, places=6)
+        self.assertAlmostEqual(stats['get_wait_time_max'], 3.0, places=6)
+
+    def test4_seeded_items_and_setitem_stay_time(self):
+        q = DSQueue(sim=self.sim)
+        q.put_nowait('pre')
+        probe = q.add_latency_probe()
+
+        def actor():
+            yield from self.sim.gwait(1)
+            q[0] = 'new'
+            yield from self.sim.gwait(2)
+            q.get_nowait()
+
+        self.sim.schedule(0, actor())
+        self.sim.run(10)
+
+        stats = probe.stats()
+        self.assertEqual(stats['seeded_item_count'], 1)
+        self.assertEqual(stats['stay_count'], 2)
+        # seeded item stayed 1, replacement stayed 2
+        self.assertAlmostEqual(stats['stay_time_total'], 3.0, places=6)
+        self.assertEqual(stats['untracked_exit_count'], 0)
+
 if __name__ == '__main__':
     unittest.main()

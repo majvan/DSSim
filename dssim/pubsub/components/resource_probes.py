@@ -176,6 +176,246 @@ class ResourceStatsProbe(DSSub):
         return self.stats()
 
 
+class ResourceFlowProbe(DSSub):
+    '''DSResource transfer probe focused on moved amounts and rates.
+
+    Observes only successful transfer endpoints:
+    - tx_nempty: successful put-side amount increase
+    - tx_nfull:  successful get-side amount decrease
+    '''
+
+    def __init__(self, enabled: bool = True, name: str = 'flow_probe', sim: Optional['DSSimulation'] = None) -> None:
+        super().__init__(name=name, sim=sim)
+        self.enabled = enabled
+        self._resource: Optional['DSResource'] = None
+        self._start_time: float = 0.0
+        self._last_time: float = 0.0
+        self._last_amount: float = 0.0
+        self.reset()
+
+    def attach(self, resource: 'DSResource') -> None:
+        self._resource = resource
+        phase = DSPub.Phase
+        for ep in (resource.tx_nempty, resource.tx_nfull):
+            ep.add_subscriber(self, phase.PRE)
+        self.reset()
+
+    def close(self) -> None:
+        resource = self._resource
+        if resource is None:
+            return
+        phase = DSPub.Phase
+        for ep in (resource.tx_nempty, resource.tx_nfull):
+            ep.remove_subscriber(self, phase.PRE)
+        self._resource = None
+
+    def reset(self) -> None:
+        if self._resource is None:
+            self._start_time = 0.0
+            self._last_time = 0.0
+            self._last_amount = 0.0
+        else:
+            now = float(self._resource.sim.time)
+            self._start_time = now
+            self._last_time = now
+            self._last_amount = float(self._resource.amount)
+
+        self.put_event_count = 0
+        self.get_event_count = 0
+        self.put_amount_total = 0.0
+        self.get_amount_total = 0.0
+        self.max_put_amount = 0.0
+        self.max_get_amount = 0.0
+        self.unexpected_nempty_count = 0
+        self.unexpected_nfull_count = 0
+
+    def send(self, event: Any) -> None:
+        if not self.enabled or self._resource is None:
+            return None
+
+        now = float(self._resource.sim.time)
+        self._last_time = now
+        current_amount = float(self._resource.amount)
+        delta = current_amount - self._last_amount
+
+        if event is self._resource.tx_nempty:
+            if delta > 0:
+                self.put_event_count += 1
+                self.put_amount_total += delta
+                if delta > self.max_put_amount:
+                    self.max_put_amount = delta
+            else:
+                self.unexpected_nempty_count += 1
+        elif event is self._resource.tx_nfull:
+            if delta < 0:
+                moved = -delta
+                self.get_event_count += 1
+                self.get_amount_total += moved
+                if moved > self.max_get_amount:
+                    self.max_get_amount = moved
+            else:
+                self.unexpected_nfull_count += 1
+
+        self._last_amount = current_amount
+        return None
+
+    def _avg(self, total: float, count: int) -> float:
+        return total / count if count > 0 else 0.0
+
+    def stats(self) -> Dict[str, Any]:
+        if self._resource is not None:
+            now = float(self._resource.sim.time)
+            end_time = now
+            duration = now - self._start_time
+        else:
+            end_time = self._last_time
+            duration = 0.0
+        if duration > 0:
+            put_rate = self.put_amount_total / duration
+            get_rate = self.get_amount_total / duration
+        else:
+            put_rate = 0.0
+            get_rate = 0.0
+        return {
+            'start_time': self._start_time,
+            'end_time': end_time,
+            'duration': duration,
+            'put_event_count': self.put_event_count,
+            'get_event_count': self.get_event_count,
+            'put_amount_total': self.put_amount_total,
+            'get_amount_total': self.get_amount_total,
+            'net_amount_total': self.put_amount_total - self.get_amount_total,
+            'avg_put_amount': self._avg(self.put_amount_total, self.put_event_count),
+            'avg_get_amount': self._avg(self.get_amount_total, self.get_event_count),
+            'max_put_amount': self.max_put_amount,
+            'max_get_amount': self.max_get_amount,
+            'put_rate': put_rate,
+            'get_rate': get_rate,
+            'unexpected_nempty_count': self.unexpected_nempty_count,
+            'unexpected_nfull_count': self.unexpected_nfull_count,
+            'current_amount': self._last_amount,
+        }
+
+    def get_statistics(self) -> Dict[str, Any]:
+        return self.stats()
+
+
+class ResourceLatencyProbe(DSSub):
+    '''DSResource latency probe for wait-time statistics.
+
+    Tracks blocked wait durations for put/get operations using tx_ops events.
+    '''
+
+    def __init__(self, enabled: bool = True, name: str = 'latency_probe', sim: Optional['DSSimulation'] = None) -> None:
+        super().__init__(name=name, sim=sim)
+        self.enabled = enabled
+        self._resource: Optional['DSResource'] = None
+        self._start_time: float = 0.0
+        self._last_time: float = 0.0
+        self.reset()
+
+    def attach(self, resource: 'DSResource') -> None:
+        self._resource = resource
+        phase = DSPub.Phase
+        resource.tx_ops.add_subscriber(self, phase.PRE)
+        self.reset()
+
+    def close(self) -> None:
+        resource = self._resource
+        if resource is None:
+            return
+        phase = DSPub.Phase
+        resource.tx_ops.remove_subscriber(self, phase.PRE)
+        self._resource = None
+
+    def _accumulate(self, prefix: str, value: float) -> None:
+        count_name = f'{prefix}_count'
+        total_name = f'{prefix}_time_total'
+        min_name = f'{prefix}_time_min'
+        max_name = f'{prefix}_time_max'
+        setattr(self, count_name, getattr(self, count_name) + 1)
+        setattr(self, total_name, getattr(self, total_name) + value)
+        if value < getattr(self, min_name):
+            setattr(self, min_name, value)
+        if value > getattr(self, max_name):
+            setattr(self, max_name, value)
+
+    def reset(self) -> None:
+        now = float(self._resource.sim.time) if self._resource is not None else 0.0
+        self._start_time = now
+        self._last_time = now
+
+        self.put_wait_count = 0
+        self.put_wait_timeout_count = 0
+        self.put_wait_time_total = 0.0
+        self.put_wait_time_min = float('inf')
+        self.put_wait_time_max = 0.0
+
+        self.get_wait_count = 0
+        self.get_wait_timeout_count = 0
+        self.get_wait_time_total = 0.0
+        self.get_wait_time_min = float('inf')
+        self.get_wait_time_max = 0.0
+
+    def send(self, event: Any) -> None:
+        if not self.enabled or self._resource is None:
+            return None
+        if not isinstance(event, dict) or event.get('kind') != 'resource_op':
+            return None
+
+        now = float(event.get('time', self._resource.sim.time))
+        self._last_time = now
+        op = event.get('op')
+        blocked = bool(event.get('blocked', False))
+        timeout = bool(event.get('timeout', False))
+        wait_time = float(event.get('wait_time', 0.0))
+
+        if op == 'put' and blocked:
+            self._accumulate('put_wait', wait_time)
+            if timeout:
+                self.put_wait_timeout_count += 1
+        elif op == 'get' and blocked:
+            self._accumulate('get_wait', wait_time)
+            if timeout:
+                self.get_wait_timeout_count += 1
+        return None
+
+    def _avg(self, total: float, count: int) -> float:
+        return total / count if count > 0 else 0.0
+
+    def _min_or_zero(self, value: float, count: int) -> float:
+        return value if count > 0 else 0.0
+
+    def stats(self) -> Dict[str, Any]:
+        if self._resource is not None:
+            now = float(self._resource.sim.time)
+            end_time = now
+            duration = now - self._start_time
+        else:
+            end_time = self._last_time
+            duration = 0.0
+        return {
+            'start_time': self._start_time,
+            'end_time': end_time,
+            'duration': duration,
+            'put_wait_count': self.put_wait_count,
+            'put_wait_timeout_count': self.put_wait_timeout_count,
+            'put_wait_time_total': self.put_wait_time_total,
+            'put_wait_time_avg': self._avg(self.put_wait_time_total, self.put_wait_count),
+            'put_wait_time_min': self._min_or_zero(self.put_wait_time_min, self.put_wait_count),
+            'put_wait_time_max': self.put_wait_time_max,
+            'get_wait_count': self.get_wait_count,
+            'get_wait_timeout_count': self.get_wait_timeout_count,
+            'get_wait_time_total': self.get_wait_time_total,
+            'get_wait_time_avg': self._avg(self.get_wait_time_total, self.get_wait_count),
+            'get_wait_time_min': self._min_or_zero(self.get_wait_time_min, self.get_wait_count),
+            'get_wait_time_max': self.get_wait_time_max,
+        }
+
+    def get_statistics(self) -> Dict[str, Any]:
+        return self.stats()
+
+
 class ResourceProbeMixin:
     '''DSResource probe extension mixin.
 
@@ -211,6 +451,22 @@ class ResourceProbeMixin:
 
     def add_stats_probe(self, enabled: bool = True, name: str = 'stats_probe') -> ResourceStatsProbe:
         probe = ResourceStatsProbe(
+            enabled=enabled,
+            name=f'{self.name}.{name}',
+            sim=self.sim,
+        )
+        return self.add_probe(probe)
+
+    def add_flow_probe(self, enabled: bool = True, name: str = 'flow_probe') -> ResourceFlowProbe:
+        probe = ResourceFlowProbe(
+            enabled=enabled,
+            name=f'{self.name}.{name}',
+            sim=self.sim,
+        )
+        return self.add_probe(probe)
+
+    def add_latency_probe(self, enabled: bool = True, name: str = 'latency_probe') -> ResourceLatencyProbe:
+        probe = ResourceLatencyProbe(
             enabled=enabled,
             name=f'{self.name}.{name}',
             sim=self.sim,

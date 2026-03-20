@@ -44,6 +44,7 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
 
     def __init__(self, capacity: NumericType = float('inf'), policy: DSBaseOrder = None,
                  nempty_ep: Optional[DSPub] = None, nfull_ep: Optional[DSPub] = None,
+                 ops_ep: Optional[DSPub] = None,
                  *args: Any, **policy_params: Any) -> None:
         super().__init__(*args, **policy_params)
         self.capacity = capacity
@@ -57,6 +58,9 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
         # self.tx_changed already defined by DSStatefulComponent (accepts change_ep=)
         self.tx_nempty = nempty_ep if nempty_ep is not None else self.sim.publisher(name=self.name + '.tx_nempty')
         self.tx_nfull  = nfull_ep  if nfull_ep  is not None else self.sim.publisher(name=self.name + '.tx_nfull')
+        # tx_ops emits operation-level events (attempt/success/failure), intended
+        # for dedicated operational probes.
+        self.tx_ops    = ops_ep    if ops_ep    is not None else self.sim.publisher(name=self.name + '.tx_ops')
         self.LAMBDA1 = lambda _: len(self._buffer) >= 1
 
     # ---- send (SignalMixin interface) ---------------------------------------
@@ -64,17 +68,30 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
     def send(self, event: EventType) -> bool:
         return self.put_nowait(event) is not None
 
-    def _fire_nempty(self) -> None:
-        if self.tx_nempty.has_subscribers():
-            self.sim.signal(self.tx_nempty, self.tx_nempty)
-
-    def _fire_nfull(self) -> None:
-        if self.tx_nfull.has_subscribers():
-            self.sim.signal(self.tx_nfull, self.tx_nfull)
-
-    def _fire_changed(self) -> None:
-        if self.tx_changed.has_subscribers():
-            self.sim.signal(self.tx_changed, self.tx_changed)
+    def _fire_ops(self, op: str, requested: int, moved: int,
+                  success: bool, blocked: bool = False, timeout: bool = False,
+                  wait_time: float = 0.0, api: str = '',
+                  items_in: Optional[list[EventType]] = None,
+                  items_out: Optional[list[EventType]] = None) -> None:
+        if self.tx_ops.has_subscribers():
+            self.sim.signal(
+                {
+                    'kind': 'queue_op',
+                    'op': op,
+                    'api': api or op,
+                    'requested': requested,
+                    'moved': moved,
+                    'success': success,
+                    'blocked': blocked,
+                    'timeout': timeout,
+                    'wait_time': wait_time,
+                    'time': float(self.sim.time),
+                    'items_in': tuple(items_in) if items_in else (),
+                    'items_out': tuple(items_out) if items_out else (),
+                    'queue_len': len(self._buffer),
+                },
+                self.tx_ops,
+            )
 
     class _GetCond(ICondition, CallableConditionMixin):
         '''Condition helper that tries immediate dequeue on check().'''
@@ -242,52 +259,90 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
 
     def put_nowait(self, *obj: EventType) -> Optional[tuple]:
         '''Put item(s) into buffer immediately. Returns the obj tuple on success, None if full.'''
+        requested = len(obj)
         if len(self._buffer) + len(obj) <= self.capacity:
             for item in obj:
                 self._buffer.enqueue(item)
-            self._fire_nempty()
-            self._fire_changed()
+            self.tx_nempty.has_subscribers() and self.sim.signal(self.tx_nempty, self.tx_nempty)
+            self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'put', requested=requested, moved=requested, success=True,
+                api='put_nowait', items_in=list(obj),
+            )
             return obj
+        self.tx_ops.has_subscribers() and self._fire_ops('put', requested=requested, moved=0, success=False, api='put_nowait')
         return None
 
     async def put(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> EventType:
         '''Put item(s) into buffer, waiting up to *timeout* if the buffer is full.'''
+        requested = len(obj)
+        t_start = float(self.sim.time)
         if len(self._buffer) + len(obj) <= self.capacity:
             for item in obj:
                 self._buffer.enqueue(item)
-            self._fire_nempty()
-            self._fire_changed()
+            self.tx_nempty.has_subscribers() and self.sim.signal(self.tx_nempty, self.tx_nempty)
+            self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'put', requested=requested, moved=requested, success=True, blocked=False,
+                wait_time=0.0, api='put', items_in=list(obj),
+            )
             return True
         with self.sim.consume(self.tx_nfull, **policy_params):
             retval = await self.sim.wait(
                 timeout,
                 cond=lambda e: len(self._buffer) + len(obj) <= self.capacity,
             )
+        waited = float(self.sim.time) - t_start
         if retval is not None:
             for item in obj:
                 self._buffer.enqueue(item)
-            self._fire_nempty()
-            self._fire_changed()
+            self.tx_nempty.has_subscribers() and self.sim.signal(self.tx_nempty, self.tx_nempty)
+            self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'put', requested=requested, moved=requested, success=True, blocked=True,
+                wait_time=waited, api='put', items_in=list(obj),
+            )
+        else:
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'put', requested=requested, moved=0, success=False, blocked=True, timeout=True,
+                wait_time=waited, api='put',
+            )
         return retval
 
     def gput(self, timeout: TimeType = float('inf'), *obj: EventType, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         '''Put item(s) into buffer (generator version), waiting up to *timeout* if full.'''
+        requested = len(obj)
+        t_start = float(self.sim.time)
         if len(self._buffer) + len(obj) <= self.capacity:
             for item in obj:
                 self._buffer.enqueue(item)
-            self._fire_nempty()
-            self._fire_changed()
+            self.tx_nempty.has_subscribers() and self.sim.signal(self.tx_nempty, self.tx_nempty)
+            self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'put', requested=requested, moved=requested, success=True, blocked=False,
+                wait_time=0.0, api='gput', items_in=list(obj),
+            )
             return True
         with self.sim.consume(self.tx_nfull, **policy_params):
             retval = yield from self.sim.gwait(
                 timeout,
                 cond=lambda e: len(self._buffer) + len(obj) <= self.capacity,
             )
+        waited = float(self.sim.time) - t_start
         if retval is not None:
             for item in obj:
                 self._buffer.enqueue(item)
-            self._fire_nempty()
-            self._fire_changed()
+            self.tx_nempty.has_subscribers() and self.sim.signal(self.tx_nempty, self.tx_nempty)
+            self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'put', requested=requested, moved=requested, success=True, blocked=True,
+                wait_time=waited, api='gput', items_in=list(obj),
+            )
+        else:
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'put', requested=requested, moved=0, success=False, blocked=True, timeout=True,
+                wait_time=waited, api='gput',
+            )
         return retval
 
     # ---- get side ----------------------------------------------------------
@@ -300,102 +355,168 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
         '''
         if len(self._buffer) >= amount and cond(self._buffer.peek()):
             retval = [self._buffer.dequeue() for _ in range(amount)]
-            self._fire_nfull()
-            self._fire_changed()
+            self.tx_nfull.has_subscribers() and self.sim.signal(self.tx_nfull, self.tx_nfull)
+            self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'get', requested=amount, moved=len(retval), success=True,
+                api='get_n_nowait', items_out=retval,
+            )
             return retval
+        self.tx_ops.has_subscribers() and self._fire_ops('get', requested=amount, moved=0, success=False, api='get_n_nowait')
         return None
 
     def get_nowait(self, cond: CondType = AlwaysTrue) -> Optional[List[EventType]]:
         '''A version of get_n_nowait which does not return a list, but rather one element.'''
         if len(self._buffer) >= 1 and cond(self._buffer.peek()):
             retval = self._buffer.dequeue()
-            self._fire_nfull()
-            self._fire_changed()
+            self.tx_nfull.has_subscribers() and self.sim.signal(self.tx_nfull, self.tx_nfull)
+            self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'get', requested=1, moved=1, success=True,
+                api='get_nowait', items_out=[retval],
+            )
             return retval
+        self.tx_ops.has_subscribers() and self._fire_ops('get', requested=1, moved=0, success=False, api='get_nowait')
         return None
 
     async def get_n(self, timeout: TimeType = float('inf'), amount: int =1, cond: CondType = AlwaysTrue, **policy_params: Any) -> Optional[List[EventType]]:
         '''Get item(s) from buffer, waiting up to *timeout* if not available.'''
         tx = self._get_tx_endpoint(cond)
+        t_start = float(self.sim.time)
         if cond is AlwaysTrue:
             check = lambda _: len(self._buffer) >= amount
         else:
             check = lambda _: len(self._buffer) >= amount and cond(self._buffer.peek())
         if check(None):
             retval = [self._buffer.dequeue() for _ in range(amount)]
-            self._fire_nfull()
-            self._fire_changed()
+            self.tx_nfull.has_subscribers() and self.sim.signal(self.tx_nfull, self.tx_nfull)
+            self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'get', requested=amount, moved=len(retval), success=True, blocked=False,
+                wait_time=0.0, api='get_n', items_out=retval,
+            )
             return retval
         with self.sim.consume(tx, **policy_params):
             element = await self.sim.wait(timeout, cond=check)
+        waited = float(self.sim.time) - t_start
         if element is None:
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'get', requested=amount, moved=0, success=False, blocked=True, timeout=True,
+                wait_time=waited, api='get_n',
+            )
             return None
         retval = [self._buffer.dequeue() for _ in range(amount)]
-        self._fire_nfull()
-        self._fire_changed()
+        self.tx_nfull.has_subscribers() and self.sim.signal(self.tx_nfull, self.tx_nfull)
+        self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+        self.tx_ops.has_subscribers() and self._fire_ops(
+            'get', requested=amount, moved=len(retval), success=True, blocked=True,
+            wait_time=waited, api='get_n', items_out=retval,
+        )
         return retval
 
     async def get(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, **policy_params: Any) -> Optional[List[EventType]]:
         '''A version of get_n which does not return a list, but rather one element.'''
         tx = self._get_tx_endpoint(cond)
+        t_start = float(self.sim.time)
         if cond is AlwaysTrue:
             check = self.LAMBDA1
         else:
             check = lambda _: len(self._buffer) >= 1 and cond(self._buffer.peek())
         if check(None):
             retval = self._buffer.dequeue()
-            self._fire_nfull()
-            self._fire_changed()
+            self.tx_nfull.has_subscribers() and self.sim.signal(self.tx_nfull, self.tx_nfull)
+            self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'get', requested=1, moved=1, success=True, blocked=False,
+                wait_time=0.0, api='get', items_out=[retval],
+            )
             return retval
         with self.sim.consume(tx, **policy_params):
             element = await self.sim.wait(timeout, cond=check)
+        waited = float(self.sim.time) - t_start
         if element is None:
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'get', requested=1, moved=0, success=False, blocked=True, timeout=True,
+                wait_time=waited, api='get',
+            )
             return None
         retval = self._buffer.dequeue()
-        self._fire_nfull()
-        self._fire_changed()
+        self.tx_nfull.has_subscribers() and self.sim.signal(self.tx_nfull, self.tx_nfull)
+        self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+        self.tx_ops.has_subscribers() and self._fire_ops(
+            'get', requested=1, moved=1, success=True, blocked=True,
+            wait_time=waited, api='get', items_out=[retval],
+        )
         return retval
 
     def gget_n(self, timeout: TimeType = float('inf'), amount: int = 1, cond: CondType = AlwaysTrue, **policy_params: Any) -> Generator[EventType, Optional[List[EventType]], Optional[List[EventType]]]:
         '''Get item(s) from buffer (generator version), waiting up to *timeout* if not available.'''
         tx = self._get_tx_endpoint(cond)
+        t_start = float(self.sim.time)
         if cond is AlwaysTrue:
             check = lambda _: len(self._buffer) >= amount
         else:
             check = lambda _: len(self._buffer) >= amount and cond(self._buffer.peek())
         if check(None):
             retval = [self._buffer.dequeue() for _ in range(amount)]
-            self._fire_nfull()
-            self._fire_changed()
+            self.tx_nfull.has_subscribers() and self.sim.signal(self.tx_nfull, self.tx_nfull)
+            self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'get', requested=amount, moved=len(retval), success=True, blocked=False,
+                wait_time=0.0, api='gget_n', items_out=retval,
+            )
             return retval
         with self.sim.consume(tx, **policy_params):
             element = yield from self.sim.gwait(timeout, cond=check)
+        waited = float(self.sim.time) - t_start
         if element is None:
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'get', requested=amount, moved=0, success=False, blocked=True, timeout=True,
+                wait_time=waited, api='gget_n',
+            )
             return None
         retval = [self._buffer.dequeue() for _ in range(amount)]
-        self._fire_nfull()
-        self._fire_changed()
+        self.tx_nfull.has_subscribers() and self.sim.signal(self.tx_nfull, self.tx_nfull)
+        self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+        self.tx_ops.has_subscribers() and self._fire_ops(
+            'get', requested=amount, moved=len(retval), success=True, blocked=True,
+            wait_time=waited, api='gget_n', items_out=retval,
+        )
         return retval
 
     def gget(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, **policy_params: Any) -> Generator[EventType, Optional[EventType], Optional[EventType]]:
         '''A version of gget_n which does not return a list, but rather one element.'''
         tx = self._get_tx_endpoint(cond)
+        t_start = float(self.sim.time)
         if cond is AlwaysTrue:
             check = self.LAMBDA1
         else:
             check = lambda _: len(self._buffer) >= 1 and cond(self._buffer.peek())
         if check(None):
             retval = self._buffer.dequeue()
-            self._fire_nfull()
-            self._fire_changed()
+            self.tx_nfull.has_subscribers() and self.sim.signal(self.tx_nfull, self.tx_nfull)
+            self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'get', requested=1, moved=1, success=True, blocked=False,
+                wait_time=0.0, api='gget', items_out=[retval],
+            )
             return retval
         with self.sim.consume(tx, **policy_params):
             element = yield from self.sim.gwait(timeout, cond=check)
+        waited = float(self.sim.time) - t_start
         if element is None:
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'get', requested=1, moved=0, success=False, blocked=True, timeout=True,
+                wait_time=waited, api='gget',
+            )
             return None
         retval = self._buffer.dequeue()
-        self._fire_nfull()
-        self._fire_changed()
+        self.tx_nfull.has_subscribers() and self.sim.signal(self.tx_nfull, self.tx_nfull)
+        self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+        self.tx_ops.has_subscribers() and self._fire_ops(
+            'get', requested=1, moved=1, success=True, blocked=True,
+            wait_time=waited, api='gget', items_out=[retval],
+        )
         return retval
 
     # ---- direct buffer manipulation ----------------------------------------
@@ -405,12 +526,15 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
         if len(self._buffer) > index:
             try:
                 retval = self._buffer.pop_at(index)
-                self._fire_nfull()
-                self._fire_changed()
+                self.tx_nfull.has_subscribers() and self.sim.signal(self.tx_nfull, self.tx_nfull)
+                self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+                self.tx_ops.has_subscribers() and self._fire_ops('pop', requested=1, moved=1, success=True, api='pop', items_out=[retval])
             except IndexError:
                 retval = default
+                self.tx_ops.has_subscribers() and self._fire_ops('pop', requested=1, moved=0, success=False, api='pop')
         else:
             retval = default
+            self.tx_ops.has_subscribers() and self._fire_ops('pop', requested=1, moved=0, success=False, api='pop')
         return retval
 
     def remove(self, cond: CondType) -> None:
@@ -418,13 +542,25 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
 
         *cond* may be a callable predicate or an exact item to match (== equality).
         '''
+        removed_items: list[EventType] = []
         if len(self._buffer) > 0:
-            changed = self._buffer.remove_if(
-                lambda e: (callable(cond) and cond(e)) or cond == e
-            )
-            if changed:
-                self._fire_nfull()
-                self._fire_changed()
+            if callable(cond):
+                removed_items = [e for e in self._buffer if cond(e)]
+            else:
+                removed_items = [e for e in self._buffer if cond == e]
+            if removed_items:
+                for item in removed_items:
+                    try:
+                        self._buffer.remove(item)
+                    except ValueError:
+                        pass
+                self.tx_nfull.has_subscribers() and self.sim.signal(self.tx_nfull, self.tx_nfull)
+                self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+        removed = len(removed_items)
+        self.tx_ops.has_subscribers() and self._fire_ops(
+            'remove', requested=1, moved=removed, success=(removed > 0),
+            api='remove', items_out=removed_items,
+        )
 
     def _get_tx_endpoint(self, cond):
         return self.tx_nempty if cond is AlwaysTrue else self.tx_changed
@@ -468,9 +604,14 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
         return self._buffer[index]
 
     def __setitem__(self, index: int, data: EventType) -> None:
+        old_item = self._buffer[index]
         self._buffer[index] = data
-        self._fire_nempty()
-        self._fire_changed()
+        self.tx_nempty.has_subscribers() and self.sim.signal(self.tx_nempty, self.tx_nempty)
+        self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+        self.tx_ops.has_subscribers() and self._fire_ops(
+            'setitem', requested=1, moved=1, success=True,
+            api='setitem', items_in=[data], items_out=[old_item],
+        )
 
     def __iter__(self) -> Iterator[EventType]:
         return iter(self._buffer)

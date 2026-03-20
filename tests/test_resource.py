@@ -1356,6 +1356,148 @@ class TestResourceStatsProbe(unittest.TestCase):
         self.assertEqual(stats['preempted_amount'], 1.0)
 
 
+class TestResourceFlowProbe(unittest.TestCase):
+
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    def test1_flow_probe_name(self):
+        r = DSResource(amount=0, capacity=5, name='r0', sim=self.sim)
+        probe = r.add_flow_probe()
+        self.assertEqual(probe.name, 'r0.flow_probe')
+        probe2 = r.add_flow_probe(name='flow')
+        self.assertEqual(probe2.name, 'r0.flow')
+
+    def test2_flow_probe_amounts_and_rates(self):
+        r = DSResource(amount=0, capacity=10, sim=self.sim)
+        probe = r.add_flow_probe()
+
+        def actor():
+            r.put_n_nowait(2)    # t=0, +2
+            yield from self.sim.gwait(1)
+            r.get_nowait()       # t=1, -1
+            yield from self.sim.gwait(2)
+            r.put_n_nowait(3)    # t=3, +3
+            yield from self.sim.gwait(1)
+            r.get_n_nowait(2)    # t=4, -2
+
+        self.sim.schedule(0, actor())
+        self.sim.run(5)
+
+        stats = probe.get_statistics()
+        self.assertEqual(stats['duration'], 5)
+        self.assertEqual(stats['put_event_count'], 2)
+        self.assertEqual(stats['get_event_count'], 2)
+        self.assertEqual(stats['put_amount_total'], 5.0)
+        self.assertEqual(stats['get_amount_total'], 3.0)
+        self.assertEqual(stats['net_amount_total'], 2.0)
+        self.assertEqual(stats['avg_put_amount'], 2.5)
+        self.assertEqual(stats['avg_get_amount'], 1.5)
+        self.assertEqual(stats['max_put_amount'], 3.0)
+        self.assertEqual(stats['max_get_amount'], 2.0)
+        self.assertAlmostEqual(stats['put_rate'], 1.0, places=6)
+        self.assertAlmostEqual(stats['get_rate'], 0.6, places=6)
+        self.assertEqual(stats['unexpected_nempty_count'], 0)
+        self.assertEqual(stats['unexpected_nfull_count'], 0)
+        self.assertEqual(stats['current_amount'], 2.0)
+
+    def test3_flow_probe_reset(self):
+        r = DSResource(amount=0, capacity=5, sim=self.sim)
+        probe = r.add_flow_probe()
+
+        r.put_n_nowait(3)
+        self.sim.run(2)
+        before = probe.stats()
+        self.assertEqual(before['put_amount_total'], 3.0)
+
+        probe.reset()
+        r.get_n_nowait(2)
+        self.sim.run(5)
+        after = probe.stats()
+        self.assertEqual(after['duration'], 3)
+        self.assertEqual(after['put_event_count'], 0)
+        self.assertEqual(after['get_event_count'], 1)
+        self.assertEqual(after['put_amount_total'], 0.0)
+        self.assertEqual(after['get_amount_total'], 2.0)
+        self.assertEqual(after['current_amount'], 1.0)
+
+
+class TestResourceLatencyProbe(unittest.TestCase):
+
+    def setUp(self):
+        self.sim = DSSimulation()
+
+    def test1_latency_probe_name(self):
+        r = DSResource(amount=0, capacity=1, name='r0', sim=self.sim)
+        probe = r.add_latency_probe()
+        self.assertEqual(probe.name, 'r0.latency_probe')
+        probe2 = r.add_latency_probe(name='lat')
+        self.assertEqual(probe2.name, 'r0.lat')
+
+    def test2_latency_probe_blocked_get(self):
+        r = DSResource(amount=0, capacity=1, sim=self.sim)
+        probe = r.add_latency_probe()
+
+        def consumer():
+            got = yield from r.gget(timeout=5)
+            self.assertEqual(got, 1)
+
+        def producer():
+            yield from self.sim.gwait(2)
+            r.put_nowait()
+
+        self.sim.schedule(0, consumer())
+        self.sim.schedule(0, producer())
+        self.sim.run(10)
+
+        stats = probe.get_statistics()
+        self.assertEqual(stats['get_wait_count'], 1)
+        self.assertEqual(stats['get_wait_timeout_count'], 0)
+        self.assertAlmostEqual(stats['get_wait_time_total'], 2.0, places=6)
+        self.assertAlmostEqual(stats['get_wait_time_avg'], 2.0, places=6)
+        self.assertEqual(stats['put_wait_count'], 0)
+
+    def test3_latency_probe_blocked_put(self):
+        r = DSResource(amount=1, capacity=1, sim=self.sim)
+        probe = r.add_latency_probe()
+
+        def putter():
+            got = yield from r.gput(timeout=5)
+            self.assertEqual(got, 1)
+
+        def drainer():
+            yield from self.sim.gwait(3)
+            r.get_nowait()
+
+        self.sim.schedule(0, putter())
+        self.sim.schedule(0, drainer())
+        self.sim.run(10)
+
+        stats = probe.get_statistics()
+        self.assertEqual(stats['put_wait_count'], 1)
+        self.assertEqual(stats['put_wait_timeout_count'], 0)
+        self.assertAlmostEqual(stats['put_wait_time_total'], 3.0, places=6)
+        self.assertAlmostEqual(stats['put_wait_time_avg'], 3.0, places=6)
+        self.assertEqual(stats['get_wait_count'], 0)
+
+    def test4_latency_probe_timeout(self):
+        r = DSResource(amount=1, capacity=1, sim=self.sim)
+        probe = r.add_latency_probe()
+
+        def putter():
+            got = yield from r.gput(timeout=2)
+            self.assertEqual(got, 0)
+
+        self.sim.schedule(0, putter())
+        self.sim.run(10)
+
+        stats = probe.get_statistics()
+        self.assertEqual(stats['put_wait_count'], 1)
+        self.assertEqual(stats['put_wait_timeout_count'], 1)
+        self.assertAlmostEqual(stats['put_wait_time_total'], 2.0, places=6)
+        self.assertEqual(stats['get_wait_count'], 0)
+
+
 # ---------------------------------------------------------------------------
 # ResourceMixin
 # ---------------------------------------------------------------------------

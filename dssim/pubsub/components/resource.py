@@ -84,6 +84,7 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
         *args: Any,
         nempty_ep: Optional[DSPub] = None,
         nfull_ep: Optional[DSPub] = None,
+        ops_ep: Optional[DSPub] = None,
         **kwargs: Any,
     ) -> None:
         ''' Init DSResource component.
@@ -94,6 +95,7 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
         self._resource = _ResourceBookkeeper(amount=amount, capacity=capacity, owner=self)
         self.tx_nempty = nempty_ep if nempty_ep is not None else self.sim.publisher(name=self.name + '.tx_nempty')
         self.tx_nfull = nfull_ep if nfull_ep is not None else self.sim.publisher(name=self.name + '.tx_nfull')
+        self.tx_ops = ops_ep if ops_ep is not None else self.sim.publisher(name=self.name + '.tx_ops')
 
     # ------------------------------------------------------------------
     # Internal notification hooks
@@ -102,17 +104,35 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
     def _try_take_n_nowait(self, amount: NumericType = 1, owner: Any = None, **policy_params: Any) -> NumericType:
         return self.get_n_nowait(amount)
 
-    def _fire_nempty(self) -> None:
-        if self.tx_nempty.has_subscribers():
-            self.sim.signal(self.tx_nempty, self.tx_nempty)
-
-    def _fire_nfull(self) -> None:
-        if self.tx_nfull.has_subscribers():
-            self.sim.signal(self.tx_nfull, self.tx_nfull)
-
-    def _fire_changed(self) -> None:
-        if self.tx_changed.has_subscribers():
-            self.sim.signal(self.tx_changed, self.tx_changed)
+    def _fire_ops(
+        self,
+        op: str,
+        requested: NumericType,
+        moved: NumericType,
+        success: bool,
+        blocked: bool = False,
+        timeout: bool = False,
+        wait_time: float = 0.0,
+        api: str = '',
+    ) -> None:
+        if self.tx_ops.has_subscribers():
+            self.sim.signal(
+                {
+                    'kind': 'resource_op',
+                    'op': op,
+                    'api': api or op,
+                    'requested': float(requested),
+                    'moved': float(moved),
+                    'success': success,
+                    'blocked': blocked,
+                    'timeout': timeout,
+                    'wait_time': wait_time,
+                    'time': float(self.sim.time),
+                    'amount': float(self.amount),
+                    'capacity': float(self.capacity),
+                },
+                self.tx_ops,
+            )
 
     # ------------------------------------------------------------------
     # Nowait operations
@@ -133,10 +153,14 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
 
     def put_n_nowait(self, amount: NumericType) -> NumericType:
         ''' Put amount units into the resource pool immediately. '''
+        requested = amount
         retval = self._resource.put_n_nowait(amount)
         if retval > 0:
-            self._fire_nempty()
-            self._fire_changed()
+            self.tx_nempty.has_subscribers() and self.sim.signal(self.tx_nempty, self.tx_nempty)
+            self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+            self.tx_ops.has_subscribers() and self._fire_ops('put', requested=requested, moved=retval, success=True, api='put_n_nowait')
+        else:
+            self.tx_ops.has_subscribers() and self._fire_ops('put', requested=requested, moved=0, success=False, api='put_n_nowait')
         return retval
 
     def get_nowait(self, **policy_params: Any) -> NumericType:
@@ -145,10 +169,14 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
 
     def get_n_nowait(self, amount: NumericType = 1, **policy_params: Any) -> NumericType:
         ''' Get amount units from the resource pool immediately. '''
+        requested = amount
         retval = self._resource.get_n_nowait(amount)
         if retval > 0:
-            self._fire_nfull()
-            self._fire_changed()
+            self.tx_nfull.has_subscribers() and self.sim.signal(self.tx_nfull, self.tx_nfull)
+            self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+            self.tx_ops.has_subscribers() and self._fire_ops('get', requested=requested, moved=retval, success=True, api='get_n_nowait')
+        else:
+            self.tx_ops.has_subscribers() and self._fire_ops('get', requested=requested, moved=0, success=False, api='get_n_nowait')
         return retval
 
     # ------------------------------------------------------------------
@@ -161,21 +189,40 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
 
     def gput_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
         ''' Put amount units into the resource pool (generator version), waiting if at capacity. '''
+        t_start = float(self.sim.time)
         if self.amount + amount <= self.capacity:
             retval = self._resource.put_n_nowait(amount)
             if retval > 0:
-                self._fire_nempty()
-                self._fire_changed()
+                self.tx_nempty.has_subscribers() and self.sim.signal(self.tx_nempty, self.tx_nempty)
+                self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+                self.tx_ops.has_subscribers() and self._fire_ops(
+                    'put', requested=amount, moved=retval, success=True, blocked=False, wait_time=0.0, api='gput_n'
+                )
+            else:
+                self.tx_ops.has_subscribers() and self._fire_ops(
+                    'put', requested=amount, moved=0, success=False, blocked=False, wait_time=0.0, api='gput_n'
+                )
             return retval
         with self.sim.consume(self.tx_nfull, **policy_params):
             obj = yield from self.sim.gwait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
+        waited = float(self.sim.time) - t_start
         if obj is None:
             retval: NumericType = 0
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'put', requested=amount, moved=0, success=False, blocked=True, timeout=True, wait_time=waited, api='gput_n'
+            )
         else:
             retval = self._resource.put_n_nowait(amount)
             if retval > 0:
-                self._fire_nempty()
-                self._fire_changed()
+                self.tx_nempty.has_subscribers() and self.sim.signal(self.tx_nempty, self.tx_nempty)
+                self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+                self.tx_ops.has_subscribers() and self._fire_ops(
+                    'put', requested=amount, moved=retval, success=True, blocked=True, wait_time=waited, api='gput_n'
+                )
+            else:
+                self.tx_ops.has_subscribers() and self._fire_ops(
+                    'put', requested=amount, moved=0, success=False, blocked=True, wait_time=waited, api='gput_n'
+                )
         return retval
 
     def gget(self, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
@@ -184,21 +231,40 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
 
     def gget_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
         ''' Get amount units from the resource pool (generator version), waiting if not available. '''
+        t_start = float(self.sim.time)
         if self.amount >= amount:
             retval = self._resource.get_n_nowait(amount)
             if retval > 0:
-                self._fire_nfull()
-                self._fire_changed()
+                self.tx_nfull.has_subscribers() and self.sim.signal(self.tx_nfull, self.tx_nfull)
+                self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+                self.tx_ops.has_subscribers() and self._fire_ops(
+                    'get', requested=amount, moved=retval, success=True, blocked=False, wait_time=0.0, api='gget_n'
+                )
+            else:
+                self.tx_ops.has_subscribers() and self._fire_ops(
+                    'get', requested=amount, moved=0, success=False, blocked=False, wait_time=0.0, api='gget_n'
+                )
             return retval
         with self.sim.consume(self.tx_nempty, **policy_params):
             obj = yield from self.sim.gwait(timeout, cond=lambda e:self.amount >= amount)
+        waited = float(self.sim.time) - t_start
         if obj is None:
             retval: NumericType = 0
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'get', requested=amount, moved=0, success=False, blocked=True, timeout=True, wait_time=waited, api='gget_n'
+            )
         else:
             retval = self._resource.get_n_nowait(amount)
             if retval > 0:
-                self._fire_nfull()
-                self._fire_changed()
+                self.tx_nfull.has_subscribers() and self.sim.signal(self.tx_nfull, self.tx_nfull)
+                self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+                self.tx_ops.has_subscribers() and self._fire_ops(
+                    'get', requested=amount, moved=retval, success=True, blocked=True, wait_time=waited, api='gget_n'
+                )
+            else:
+                self.tx_ops.has_subscribers() and self._fire_ops(
+                    'get', requested=amount, moved=0, success=False, blocked=True, wait_time=waited, api='gget_n'
+                )
         return retval
 
     # ------------------------------------------------------------------
@@ -211,21 +277,40 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
 
     async def put_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
         ''' Put amount units into the resource pool, waiting if at capacity. '''
+        t_start = float(self.sim.time)
         if self.amount + amount <= self.capacity:
             retval = self._resource.put_n_nowait(amount)
             if retval > 0:
-                self._fire_nempty()
-                self._fire_changed()
+                self.tx_nempty.has_subscribers() and self.sim.signal(self.tx_nempty, self.tx_nempty)
+                self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+                self.tx_ops.has_subscribers() and self._fire_ops(
+                    'put', requested=amount, moved=retval, success=True, blocked=False, wait_time=0.0, api='put_n'
+                )
+            else:
+                self.tx_ops.has_subscribers() and self._fire_ops(
+                    'put', requested=amount, moved=0, success=False, blocked=False, wait_time=0.0, api='put_n'
+                )
             return retval
         with self.sim.consume(self.tx_nfull, **policy_params):
             obj = await self.sim.wait(timeout, cond=lambda e:self.amount + amount <= self.capacity)
+        waited = float(self.sim.time) - t_start
         if obj is None:
             retval: NumericType = 0
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'put', requested=amount, moved=0, success=False, blocked=True, timeout=True, wait_time=waited, api='put_n'
+            )
         else:
             retval = self._resource.put_n_nowait(amount)
             if retval > 0:
-                self._fire_nempty()
-                self._fire_changed()
+                self.tx_nempty.has_subscribers() and self.sim.signal(self.tx_nempty, self.tx_nempty)
+                self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+                self.tx_ops.has_subscribers() and self._fire_ops(
+                    'put', requested=amount, moved=retval, success=True, blocked=True, wait_time=waited, api='put_n'
+                )
+            else:
+                self.tx_ops.has_subscribers() and self._fire_ops(
+                    'put', requested=amount, moved=0, success=False, blocked=True, wait_time=waited, api='put_n'
+                )
         return retval
 
     async def get(self, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
@@ -234,21 +319,40 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
 
     async def get_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
         ''' Get amount units from the resource pool, waiting if not available. '''
+        t_start = float(self.sim.time)
         if self.amount >= amount:
             retval = self._resource.get_n_nowait(amount)
             if retval > 0:
-                self._fire_nfull()
-                self._fire_changed()
+                self.tx_nfull.has_subscribers() and self.sim.signal(self.tx_nfull, self.tx_nfull)
+                self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+                self.tx_ops.has_subscribers() and self._fire_ops(
+                    'get', requested=amount, moved=retval, success=True, blocked=False, wait_time=0.0, api='get_n'
+                )
+            else:
+                self.tx_ops.has_subscribers() and self._fire_ops(
+                    'get', requested=amount, moved=0, success=False, blocked=False, wait_time=0.0, api='get_n'
+                )
             return retval
         with self.sim.consume(self.tx_nempty, **policy_params):
             obj = await self.sim.wait(timeout, cond=lambda e:self.amount >= amount)
+        waited = float(self.sim.time) - t_start
         if obj is None:
             retval: NumericType = 0
+            self.tx_ops.has_subscribers() and self._fire_ops(
+                'get', requested=amount, moved=0, success=False, blocked=True, timeout=True, wait_time=waited, api='get_n'
+            )
         else:
             retval = self._resource.get_n_nowait(amount)
             if retval > 0:
-                self._fire_nfull()
-                self._fire_changed()
+                self.tx_nfull.has_subscribers() and self.sim.signal(self.tx_nfull, self.tx_nfull)
+                self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
+                self.tx_ops.has_subscribers() and self._fire_ops(
+                    'get', requested=amount, moved=retval, success=True, blocked=True, wait_time=waited, api='get_n'
+                )
+            else:
+                self.tx_ops.has_subscribers() and self._fire_ops(
+                    'get', requested=amount, moved=0, success=False, blocked=True, wait_time=waited, api='get_n'
+                )
         return retval
 
 
@@ -304,84 +408,28 @@ class DSUnitResource(DSResource):
         return DSResource.get_n_nowait(self, 1, **policy_params)
 
     def gput(self, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
-        if self.amount < self.capacity:
-            retval = self._resource.put_n_nowait(1)
-            if retval > 0:
-                self._fire_nempty()
-                self._fire_changed()
-            return retval
-        with self.sim.consume(self.tx_nfull, **policy_params):
-            obj = yield from self.sim.gwait(timeout, cond=self._can_put_unit)
-        if obj is None:
-            return 0
-        retval = self._resource.put_n_nowait(1)
-        if retval > 0:
-            self._fire_nempty()
-            self._fire_changed()
-        return retval
+        return (yield from DSResource.gput_n(self, timeout=timeout, amount=1, **policy_params))
 
     def gput_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
         self._assert_unit_amount(amount)
         return (yield from self.gput(timeout, **policy_params))
 
     def gget(self, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
-        if self.amount > 0:
-            retval = self._resource.get_n_nowait(1)
-            if retval > 0:
-                self._fire_nfull()
-                self._fire_changed()
-            return retval
-        with self.sim.consume(self.tx_nempty, **policy_params):
-            obj = yield from self.sim.gwait(timeout, cond=self._can_get_unit)
-        if obj is None:
-            return 0
-        retval = self._resource.get_n_nowait(1)
-        if retval > 0:
-            self._fire_nfull()
-            self._fire_changed()
-        return retval
+        return (yield from DSResource.gget_n(self, timeout=timeout, amount=1, **policy_params))
 
     def gget_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> Generator[EventType, None, NumericType]:
         self._assert_unit_amount(amount)
         return (yield from self.gget(timeout, **policy_params))
 
     async def put(self, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
-        if self.amount < self.capacity:
-            retval = self._resource.put_n_nowait(1)
-            if retval > 0:
-                self._fire_nempty()
-                self._fire_changed()
-            return retval
-        with self.sim.consume(self.tx_nfull, **policy_params):
-            obj = await self.sim.wait(timeout, cond=self._can_put_unit)
-        if obj is None:
-            return 0
-        retval = self._resource.put_n_nowait(1)
-        if retval > 0:
-            self._fire_nempty()
-            self._fire_changed()
-        return retval
+        return await DSResource.put_n(self, timeout=timeout, amount=1, **policy_params)
 
     async def put_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
         self._assert_unit_amount(amount)
         return await self.put(timeout, **policy_params)
 
     async def get(self, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
-        if self.amount > 0:
-            retval = self._resource.get_n_nowait(1)
-            if retval > 0:
-                self._fire_nfull()
-                self._fire_changed()
-            return retval
-        with self.sim.consume(self.tx_nempty, **policy_params):
-            obj = await self.sim.wait(timeout, cond=self._can_get_unit)
-        if obj is None:
-            return 0
-        retval = self._resource.get_n_nowait(1)
-        if retval > 0:
-            self._fire_nfull()
-            self._fire_changed()
-        return retval
+        return await DSResource.get_n(self, timeout=timeout, amount=1, **policy_params)
 
     async def get_n(self, timeout: TimeType = float('inf'), amount: NumericType = 1, **policy_params: Any) -> NumericType:
         self._assert_unit_amount(amount)
@@ -459,8 +507,8 @@ class DSPriorityResource(DSResource):
     # ------------------------------------------------------------------
 
     def _on_reclaimed(self, released: NumericType) -> None:
-        self._fire_nempty()
-        self._fire_changed()
+        self.tx_nempty.has_subscribers() and self.sim.signal(self.tx_nempty, self.tx_nempty)
+        self.tx_changed.has_subscribers() and self.sim.signal(self.tx_changed, self.tx_changed)
 
     def _held_amount(self, owner: Any) -> NumericType:
         return self._priority.held_amount(owner)
