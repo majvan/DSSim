@@ -69,7 +69,7 @@ class Packet:
 class OutputPort(DSComponent):
     """Serialises packets onto a 1 Gbps link via a FIFO or priority queue."""
 
-    def __init__(self, capacity=200, policy=None, **kwargs):
+    def __init__(self, capacity=200, policy=None, tx_mode='pubsub', **kwargs):
         super().__init__(**kwargs)
 
         queue_kwargs = dict(capacity=capacity, name=self.name + '.q')
@@ -77,11 +77,18 @@ class OutputPort(DSComponent):
             queue_kwargs['policy'] = policy
         self.queue = self.sim.queue(**queue_kwargs)
 
-        self.tx    = self.sim.publisher(name=self.name + '.tx')
+        if tx_mode not in ('pubsub', 'direct'):
+            raise ValueError("tx_mode must be either 'pubsub' or 'direct'.")
+        self.tx_mode = tx_mode
+        self.tx = self.sim.publisher(name=self.name + '.tx') if tx_mode == 'pubsub' else None
+        self._tx_listeners = []
         self.drops = 0
 
     def start(self):
         self.sim.process(self._transmit()).schedule(0)
+
+    def add_tx_listener(self, fn):
+        self._tx_listeners.append(fn)
 
     def enqueue(self, pkt):
         pkt.born = self.sim.time
@@ -93,7 +100,11 @@ class OutputPort(DSComponent):
             pkt = await self.queue.get(timeout=float('inf'))
             pkt.started = self.sim.time          # record start-of-service
             await self.sim.sleep(pkt.tx_time())
-            self.tx.signal(pkt)
+            if self.tx_mode == 'pubsub':
+                self.tx.signal(pkt)
+            else:
+                for fn in self._tx_listeners:
+                    fn(pkt)
 
 
 # ── PacketSource ──────────────────────────────────────────────────────────────
@@ -101,13 +112,16 @@ class OutputPort(DSComponent):
 class PacketSource:
     """Generates packets with Poisson inter-arrival times."""
 
-    def __init__(self, sim, endpoint, interval, size, priority, label):
+    def __init__(self, sim, endpoint, interval, size, priority, label, dispatch_mode='pubsub'):
         self.sim      = sim
         self.endpoint = endpoint
         self.interval = interval   # mean inter-arrival (μs)
         self.size     = size
         self.priority = priority
         self.label    = label
+        if dispatch_mode not in ('pubsub', 'direct'):
+            raise ValueError("dispatch_mode must be either 'pubsub' or 'direct'.")
+        self.dispatch_mode = dispatch_mode
 
     def start(self):
         self.sim.schedule(0, self._run())
@@ -117,7 +131,10 @@ class PacketSource:
         while True:
             yield from self.sim.gwait(rng.expovariate(1.0 / self.interval))
             pkt = Packet(dst=0, size=self.size, priority=self.priority)
-            self.sim.signal(pkt, self.endpoint)
+            if self.dispatch_mode == 'pubsub':
+                self.sim.signal(pkt, self.endpoint)
+            else:
+                self.endpoint(pkt)
 
 
 # ── CreditedSender ────────────────────────────────────────────────────────────
@@ -130,7 +147,7 @@ class CreditedSender(DSComponent):
     lambda reads instance variables directly — no filter/circuit machinery needed.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, tx_mode='pubsub', **kwargs):
         super().__init__(**kwargs)
 
         self._credits  = MAX_CREDITS
@@ -140,7 +157,11 @@ class CreditedSender(DSComponent):
         self._tx_link    = self.sim.publisher(name=self.name + '._tx_link')
         self._tx_credits = self.sim.publisher(name=self.name + '._tx_credits')
 
-        self.tx             = self.sim.publisher(name=self.name + '.tx')
+        if tx_mode not in ('pubsub', 'direct'):
+            raise ValueError("tx_mode must be either 'pubsub' or 'direct'.")
+        self.tx_mode = tx_mode
+        self.tx = self.sim.publisher(name=self.name + '.tx') if tx_mode == 'pubsub' else None
+        self._tx_listeners = []
         self.pauses         = 0
         self.total_pause_us = 0.0
 
@@ -153,6 +174,9 @@ class CreditedSender(DSComponent):
     def enqueue(self, pkt):
         pkt.born = self.sim.time
         self._inbox.put_nowait(pkt)
+
+    def add_tx_listener(self, fn):
+        self._tx_listeners.append(fn)
 
     def set_link(self, state: str):
         """'UP' or 'DOWN' — immediately blocks or unblocks the sender."""
@@ -181,7 +205,11 @@ class CreditedSender(DSComponent):
 
             pkt.started = self.sim.time
             await self.sim.sleep(pkt.tx_time())
-            self.tx.signal(pkt)
+            if self.tx_mode == 'pubsub':
+                self.tx.signal(pkt)
+            else:
+                for fn in self._tx_listeners:
+                    fn(pkt)
 
 
 # ── credit refiller ───────────────────────────────────────────────────────────
@@ -237,15 +265,13 @@ def run_isolated(policy=None):
 
 # ── scenario 1: QoS priority queuing ─────────────────────────────────────────
 
-def run_scenario1(policy=None, duration=100_000):
+def run_scenario1(policy=None, duration=100_000, fair_perf_mode=False):
     label = 'FIFO' if policy is None else 'Priority'
 
     sim   = DSSimulation()
-    port  = OutputPort(name='port', sim=sim, policy=policy)
-    probe = port.queue.add_stats_probe()
-
-    voip_cb = sim.callback(port.enqueue)
-    bulk_cb = sim.callback(port.enqueue)
+    tx_mode = 'direct' if fair_perf_mode else 'pubsub'
+    port = OutputPort(name='port', sim=sim, policy=policy, tx_mode=tx_mode)
+    probe = port.queue.add_stats_probe() if not fair_perf_mode else None
 
     voip_lat, bulk_lat = [], []
 
@@ -256,19 +282,35 @@ def run_scenario1(policy=None, duration=100_000):
         else:
             bulk_lat.append(qwait)
 
-    port.tx.add_subscriber(sim.callback(on_exit), port.tx.Phase.PRE)
+    if fair_perf_mode:
+        port.add_tx_listener(on_exit)
+        voip_endpoint = port.enqueue
+        bulk_endpoint = port.enqueue
+        dispatch_mode = 'direct'
+    else:
+        port.tx.add_subscriber(sim.callback(on_exit), port.tx.Phase.PRE)
+        voip_endpoint = sim.callback(port.enqueue)
+        bulk_endpoint = sim.callback(port.enqueue)
+        dispatch_mode = 'pubsub'
 
-    voip_src = PacketSource(sim, voip_cb, interval=5,  size=64,   priority=0, label='voip')
-    bulk_src = PacketSource(sim, bulk_cb, interval=15, size=1500, priority=7, label='bulk')
+    voip_src = PacketSource(
+        sim, voip_endpoint, interval=5, size=64, priority=0, label='voip',
+        dispatch_mode=dispatch_mode,
+    )
+    bulk_src = PacketSource(
+        sim, bulk_endpoint, interval=15, size=1500, priority=7, label='bulk',
+        dispatch_mode=dispatch_mode,
+    )
 
     port.start()
     voip_src.start()
     bulk_src.start()
     sim.run(until=duration)
 
-    s = probe.stats()
+    s = probe.stats() if probe is not None else None
     print(f'\n{SEP}')
-    print(f'  {label} output port — {duration:,} μs  (1 Gbps link, 90 % offered load)')
+    mode = 'fair perf mode' if fair_perf_mode else 'full pubsub mode'
+    print(f'  {label} output port — {duration:,} μs  (1 Gbps link, 90 % offered load, {mode})')
     print(SEP)
     if voip_lat:
         print(f'  VoIP (64 B)    packets: {len(voip_lat):6,}   drops: {port.drops}')
@@ -280,28 +322,44 @@ def run_scenario1(policy=None, duration=100_000):
         print(f'                 latency avg:{statistics.mean(bulk_lat):6.1f} μs'
               f'   p50:{pct(bulk_lat, 50):6.1f} μs'
               f'   p99:{pct(bulk_lat, 99):6.1f} μs')
-    print(f'  Queue  avg len:{s["time_avg_len"]:6.2f}   max len: {s["max_len"]:3d}')
+    if s is not None:
+        print(f'  Queue  avg len:{s["time_avg_len"]:6.2f}   max len: {s["max_len"]:3d}')
+    else:
+        print('  Queue  stats probe: disabled in fair perf mode')
     print(SEP)
 
 
 # ── scenario 2: credit-based flow control ────────────────────────────────────
 
-def run_scenario2(duration=10_000):
+def run_scenario2(duration=10_000, fair_perf_mode=False):
     sim    = DSSimulation()
-    sender = CreditedSender(name='sender', sim=sim)
-
-    voip_cb = sim.callback(sender.enqueue)
-    bulk_cb = sim.callback(sender.enqueue)
+    tx_mode = 'direct' if fair_perf_mode else 'pubsub'
+    sender = CreditedSender(name='sender', sim=sim, tx_mode=tx_mode)
 
     all_lat = []
 
     def on_exit(pkt):
         all_lat.append(pkt.started - pkt.born)
 
-    sender.tx.add_subscriber(sim.callback(on_exit), sender.tx.Phase.PRE)
+    if fair_perf_mode:
+        sender.add_tx_listener(on_exit)
+        voip_endpoint = sender.enqueue
+        bulk_endpoint = sender.enqueue
+        dispatch_mode = 'direct'
+    else:
+        sender.tx.add_subscriber(sim.callback(on_exit), sender.tx.Phase.PRE)
+        voip_endpoint = sim.callback(sender.enqueue)
+        bulk_endpoint = sim.callback(sender.enqueue)
+        dispatch_mode = 'pubsub'
 
-    voip_src = PacketSource(sim, voip_cb, interval=5,  size=64,   priority=0, label='voip')
-    bulk_src = PacketSource(sim, bulk_cb, interval=15, size=1500, priority=7, label='bulk')
+    voip_src = PacketSource(
+        sim, voip_endpoint, interval=5, size=64, priority=0, label='voip',
+        dispatch_mode=dispatch_mode,
+    )
+    bulk_src = PacketSource(
+        sim, bulk_endpoint, interval=15, size=1500, priority=7, label='bulk',
+        dispatch_mode=dispatch_mode,
+    )
 
     sender.start()
     voip_src.start()
@@ -324,7 +382,8 @@ def run_scenario2(duration=10_000):
     credit_pauses    = sender.pauses - 1
 
     print(f'\n{SEP}')
-    print(f'  Credit-based sender — {duration:,} μs (link fault at t=5000–5200 μs)')
+    mode = 'fair perf mode' if fair_perf_mode else 'full pubsub mode'
+    print(f'  Credit-based sender — {duration:,} μs (link fault at t=5000–5200 μs, {mode})')
     print(SEP)
     print(f'  Packets forwarded:  {len(all_lat):5,}   drops: 0')
     print(f'  Credit pauses:      {credit_pauses:5,}   '
