@@ -28,8 +28,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'projects'))
 import crossroad_pubsub       as pubsub_mod
 import crossroad_lite         as lite_mod
 import crossroad_lite_direct  as direct_mod
-import crossroad_simpy        as simpy_mod
-import crossroad_salabim      as salabim_mod
 from dssim.timequeue import TQBinTree, TQBisect
 
 RUNS = 30
@@ -45,6 +43,16 @@ def _parse_args():
         choices=['all', 'grid', 'grid-delay'],
         default='all',
         help='Run only a selected scenario (default: all).',
+    )
+    parser.add_argument(
+        '--with-simpy',
+        action='store_true',
+        help='Include SimPy benchmark rows.',
+    )
+    parser.add_argument(
+        '--with-salabim',
+        action='store_true',
+        help='Include salabim benchmark rows.',
     )
     return parser.parse_args()
 
@@ -98,6 +106,26 @@ def section(title):
 if __name__ == '__main__':
     args = _parse_args()
     run_all = args.scenario == 'all'
+    include_simpy = args.with_simpy
+    include_salabim = args.with_salabim
+    simpy_mod = None
+    salabim_mod = None
+
+    if include_simpy:
+        try:
+            import crossroad_simpy as simpy_mod  # type: ignore
+        except ModuleNotFoundError as exc:
+            raise SystemExit(
+                f'Cannot use --with-simpy: missing dependency while importing crossroad_simpy ({exc}).'
+            ) from exc
+
+    if include_salabim:
+        try:
+            import crossroad_salabim as salabim_mod  # type: ignore
+        except ModuleNotFoundError as exc:
+            raise SystemExit(
+                f'Cannot use --with-salabim: missing dependency while importing crossroad_salabim ({exc}).'
+            ) from exc
 
     if run_all or args.scenario == 'grid':
         section("Scenario: 2x2 grid, straight-through, 1 hour")
@@ -105,13 +133,11 @@ if __name__ == '__main__':
         dssim_rows.extend(bench_dssim_tq("dssim_pubsub ", pubsub_mod, lambda: pubsub_mod.run_grid(SIM_TIME, pubsub_mod.DEFAULT_ROUTING)))
         dssim_rows.extend(bench_dssim_tq("dssim_lite   ", lite_mod,   lambda: lite_mod.run_grid(SIM_TIME, lite_mod.DEFAULT_ROUTING)))
         dssim_rows.extend(bench_dssim_tq("dssim_lite_direct", direct_mod, lambda: direct_mod.run_grid(SIM_TIME, direct_mod.DEFAULT_ROUTING)))
-        r_simpy   = bench("simpy",   lambda: simpy_mod.run_grid(SIM_TIME, simpy_mod.DEFAULT_ROUTING))
-        r_salabim = bench("salabim", lambda: salabim_mod.run_grid(SIM_TIME, salabim_mod.DEFAULT_ROUTING))
-
-        fastest = min([t for _, t in dssim_rows] + [r_simpy, r_salabim])
-        print(f"\n  relative to fastest ({fastest*1000:.1f} ms):")
-        for name, t in dssim_rows + [("simpy", r_simpy), ("salabim", r_salabim)]:
-            print(f"    {name:<22}  {t/fastest:.2f}x")
+        all_rows = list(dssim_rows)
+        if include_simpy:
+            all_rows.append(("simpy", bench("simpy", lambda: simpy_mod.run_grid(SIM_TIME, simpy_mod.DEFAULT_ROUTING))))
+        if include_salabim:
+            all_rows.append(("salabim", bench("salabim", lambda: salabim_mod.run_grid(SIM_TIME, salabim_mod.DEFAULT_ROUTING))))
 
     if run_all or args.scenario == 'grid-delay':
         section("Scenario: 2x2 grid, aligned delays (12s EW / 15s NS), 1 hour")
@@ -119,12 +145,10 @@ if __name__ == '__main__':
         dssim_rows_d.extend(bench_dssim_tq("dssim_pubsub ", pubsub_mod, lambda: pubsub_mod.run_grid_with_delays(SIM_TIME, pubsub_mod.DEFAULT_ROUTING, 12, 15)))
         dssim_rows_d.extend(bench_dssim_tq("dssim_lite   ", lite_mod,   lambda: lite_mod.run_grid_with_delays(SIM_TIME, lite_mod.DEFAULT_ROUTING, 12, 15)))
         dssim_rows_d.extend(bench_dssim_tq("dssim_lite_direct", direct_mod, lambda: direct_mod.run_grid_with_delays(SIM_TIME, direct_mod.DEFAULT_ROUTING, 12, 15)))
-        r_simpy_d   = bench("simpy",   lambda: simpy_mod.run_grid_with_delays(SIM_TIME, simpy_mod.DEFAULT_ROUTING, 12, 15))
-        r_salabim_d = bench("salabim", lambda: salabim_mod.run_grid_with_delays(SIM_TIME, salabim_mod.DEFAULT_ROUTING, 12, 15))
-
-        fastest_d = min([t for _, t in dssim_rows_d] + [r_simpy_d, r_salabim_d])
-        print(f"\n  relative to fastest ({fastest_d*1000:.1f} ms):")
-        for name, t in dssim_rows_d + [("simpy", r_simpy_d), ("salabim", r_salabim_d)]:
-            print(f"    {name:<22}  {t/fastest_d:.2f}x")
+        all_rows_d = list(dssim_rows_d)
+        if include_simpy:
+            all_rows_d.append(("simpy", bench("simpy", lambda: simpy_mod.run_grid_with_delays(SIM_TIME, simpy_mod.DEFAULT_ROUTING, 12, 15))))
+        if include_salabim:
+            all_rows_d.append(("salabim", bench("salabim", lambda: salabim_mod.run_grid_with_delays(SIM_TIME, salabim_mod.DEFAULT_ROUTING, 12, 15))))
 
     print()

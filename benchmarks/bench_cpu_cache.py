@@ -26,8 +26,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'projects'))
 
 import cpu_cache_lite    as lite_mod
 import cpu_cache_pubsub  as pubsub_mod
-import cpu_cache_simpy   as simpy_mod
-import cpu_cache_salabim as salabim_mod
 from dssim.timequeue import TQBinTree, TQBisect
 
 RUNS    = 5
@@ -47,6 +45,16 @@ def _parse_args():
         choices=['all', 'single', 'multi', 'irq-single', 'irq-multi'],
         default='all',
         help='Run only a selected scenario (default: all).',
+    )
+    parser.add_argument(
+        '--with-simpy',
+        action='store_true',
+        help='Include SimPy benchmark rows.',
+    )
+    parser.add_argument(
+        '--with-salabim',
+        action='store_true',
+        help='Include salabim benchmark rows (IRQ scenarios).',
     )
     return parser.parse_args()
 
@@ -97,21 +105,42 @@ def section(title):
     print(f"{'='*64}")
 
 
-def summary(rows, baseline_name, baseline_t):
-    print(f"\n  {'Implementation':<26}  {'median ms':>10}  {f'vs {baseline_name}':>12}")
-    print(f"  {'─'*52}")
+def summary(rows):
+    print(f"\n  {'Implementation':<26}  {'median ms':>10}")
+    print(f"  {'─'*40}")
     for name, t in rows:
-        print(f"  {name:<26}  {t*1000:>10.1f}  {t/baseline_t:>11.2f}x")
-    print(f"  {baseline_name:<26}  {baseline_t*1000:>10.1f}  {'1.00x':>12}")
+        print(f"  {name:<26}  {t*1000:>10.1f}")
 
 
 if __name__ == '__main__':
     args = _parse_args()
     run_all = args.scenario == 'all'
+    include_simpy = args.with_simpy
+    include_salabim = args.with_salabim
+    simpy_mod = None
+    salabim_mod = None
+
+    if include_simpy:
+        try:
+            import cpu_cache_simpy as simpy_mod  # type: ignore
+        except ModuleNotFoundError as exc:
+            raise SystemExit(
+                f'Cannot use --with-simpy: missing dependency while importing cpu_cache_simpy ({exc}).'
+            ) from exc
+
+    if include_salabim:
+        try:
+            import cpu_cache_salabim as salabim_mod  # type: ignore
+        except ModuleNotFoundError as exc:
+            raise SystemExit(
+                f'Cannot use --with-salabim: missing dependency while importing cpu_cache_salabim ({exc}).'
+            ) from exc
 
     rows_s = None
+    rows_s_ps = None
     r_simpy_s = None
     rows_m = None
+    rows_m_ps = None
     r_simpy_m = None
 
     # ── Scenario 1: single core ─────────────────────────────────────────────
@@ -120,8 +149,11 @@ if __name__ == '__main__':
         wl_single = lite_mod.make_workload(N_S, seed=SEED)
         rows_s = bench_dssim_tq('dssim_lite', lite_mod, lambda: lite_mod._run_one(wl_single))
         rows_s_ps = bench_dssim_tq('dssim_pubsub', pubsub_mod, lambda: pubsub_mod._run_one(wl_single))
-        r_simpy_s = bench('simpy', lambda: simpy_mod._run_one(wl_single))
-        summary(rows_s + rows_s_ps, 'simpy', r_simpy_s)
+        rows_single_all = rows_s + rows_s_ps
+        if include_simpy:
+            r_simpy_s = bench('simpy', lambda: simpy_mod._run_one(wl_single))
+            rows_single_all.append(('simpy', r_simpy_s))
+        summary(rows_single_all)
 
     # ── Scenario 2: 16 cores, shared L2 contention ─────────────────────────
     if run_all or args.scenario == 'multi':
@@ -130,12 +162,15 @@ if __name__ == '__main__':
             lambda: lite_mod.run(n_cores=N_CORES, n_accesses=N_M, seed=SEED))
         rows_m_ps = bench_dssim_tq('dssim_pubsub', pubsub_mod,
             lambda: pubsub_mod.run(n_cores=N_CORES, n_accesses=N_M, seed=SEED))
-        r_simpy_m = bench('simpy',
-            lambda: simpy_mod.run(n_cores=N_CORES, n_accesses=N_M, seed=SEED))
-        summary(rows_m + rows_m_ps, 'simpy', r_simpy_m)
+        rows_multi_all = rows_m + rows_m_ps
+        if include_simpy:
+            r_simpy_m = bench('simpy',
+                lambda: simpy_mod.run(n_cores=N_CORES, n_accesses=N_M, seed=SEED))
+            rows_multi_all.append(('simpy', r_simpy_m))
+        summary(rows_multi_all)
 
     # ── Scaling table ───────────────────────────────────────────────────────
-    if rows_s is not None and rows_m is not None:
+    if rows_s is not None and rows_m is not None and rows_s_ps is not None and rows_m_ps is not None:
         section(f"Scaling: single → {N_CORES} cores")
         single_map = {name: t for name, t in rows_s + rows_s_ps}
         multi_map  = {name: t for name, t in rows_m + rows_m_ps}
@@ -145,22 +180,34 @@ if __name__ == '__main__':
             s = single_map[name]
             m = multi_map[name]
             print(f"  {name:<26}  {s*1000:>10.1f}  {m*1000:>10.1f}  {m/s:>6.2f}x")
-        print(f"  {'simpy':<26}  {r_simpy_s*1000:>10.1f}  {r_simpy_m*1000:>10.1f}  {r_simpy_m/r_simpy_s:>6.2f}x")
+        if include_simpy and r_simpy_s is not None and r_simpy_m is not None:
+            print(f"  {'simpy':<26}  {r_simpy_s*1000:>10.1f}  {r_simpy_m*1000:>10.1f}  {r_simpy_m/r_simpy_s:>6.2f}x")
 
     # ── Scenario 3: IRQ — 1 core + periodic ISR ────────────────────────────
     if run_all or args.scenario == 'irq-single':
         section(f"Scenario: IRQ  N={N_IRQ:,}  (1 core, ~{N_IRQ // 40:,} IRQs expected)")
         rows_irq = bench_dssim_tq('dssim_lite+irq', lite_mod,
             lambda: lite_mod.run_with_irq(n_accesses=N_IRQ, seed=SEED))
-        r_simpy_irq   = bench('simpy+irq',
-            lambda: simpy_mod.run_with_irq(n_accesses=N_IRQ, seed=SEED))
-        r_salabim_irq = bench('salabim+irq',
-            lambda: salabim_mod.run_with_irq(n_accesses=N_IRQ, seed=SEED))
+        rows_irq_all = list(rows_irq)
+        r_simpy_irq = None
+        r_salabim_irq = None
+        if include_simpy:
+            r_simpy_irq = bench('simpy+irq',
+                lambda: simpy_mod.run_with_irq(n_accesses=N_IRQ, seed=SEED))
+            rows_irq_all.append(('simpy+irq', r_simpy_irq))
+        if include_salabim:
+            r_salabim_irq = bench('salabim+irq',
+                lambda: salabim_mod.run_with_irq(n_accesses=N_IRQ, seed=SEED))
+            rows_irq_all.append(('salabim+irq', r_salabim_irq))
 
-        rows_irq_all = rows_irq + [('simpy+irq', r_simpy_irq), ('salabim+irq', r_salabim_irq)]
-        summary(rows_irq_all[:-1], 'salabim+irq', r_salabim_irq)
+        if include_salabim and r_salabim_irq is not None:
+            summary(rows_irq_all)
+        elif include_simpy and r_simpy_irq is not None:
+            summary(rows_irq_all)
+        else:
+            summary(rows_irq_all)
 
-        if rows_s is not None and r_simpy_s is not None:
+        if rows_s is not None and include_simpy and r_simpy_s is not None and r_simpy_irq is not None:
             print()
             irq_no_irq_s = {n: t for n, t in rows_s}
             irq_no_irq_i = {n: t for n, t in rows_irq}
@@ -180,15 +227,26 @@ if __name__ == '__main__':
 
         rows_irq_m = bench_dssim_tq('dssim_lite+irq', lite_mod,
             lambda: lite_mod.run_with_irq(n_cores=N_CORES, n_accesses=N_M, seed=SEED))
-        r_simpy_irq_m   = bench('simpy+irq',
-            lambda: simpy_mod.run_with_irq(n_cores=N_CORES, n_accesses=N_M, seed=SEED))
-        r_salabim_irq_m = bench('salabim+irq',
-            lambda: salabim_mod.run_with_irq(n_cores=N_CORES, n_accesses=N_M, seed=SEED))
+        rows_irq_m_all = list(rows_irq_m)
+        r_simpy_irq_m = None
+        r_salabim_irq_m = None
+        if include_simpy:
+            r_simpy_irq_m = bench('simpy+irq',
+                lambda: simpy_mod.run_with_irq(n_cores=N_CORES, n_accesses=N_M, seed=SEED))
+            rows_irq_m_all.append(('simpy+irq', r_simpy_irq_m))
+        if include_salabim:
+            r_salabim_irq_m = bench('salabim+irq',
+                lambda: salabim_mod.run_with_irq(n_cores=N_CORES, n_accesses=N_M, seed=SEED))
+            rows_irq_m_all.append(('salabim+irq', r_salabim_irq_m))
 
-        rows_irq_m_all = rows_irq_m + [('simpy+irq', r_simpy_irq_m), ('salabim+irq', r_salabim_irq_m)]
-        summary(rows_irq_m_all[:-1], 'salabim+irq', r_salabim_irq_m)
+        if include_salabim and r_salabim_irq_m is not None:
+            summary(rows_irq_m_all)
+        elif include_simpy and r_simpy_irq_m is not None:
+            summary(rows_irq_m_all)
+        else:
+            summary(rows_irq_m_all)
 
-        if rows_m is not None and r_simpy_m is not None:
+        if rows_m is not None and include_simpy and r_simpy_m is not None and r_simpy_irq_m is not None:
             print()
             irq_m_map = {n: t for n, t in rows_irq_m}
             print(f"\n  IRQ multi-core overhead  (vs no-IRQ multi-core, same N)")
