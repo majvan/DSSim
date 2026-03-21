@@ -40,9 +40,27 @@ TestObject = object()
 
 class ICondition:
     ''' An interface for a condition checkable classes '''
+    # If True, this condition needs source information for correct evaluation,
+    # i.e. check() must receive a source-aware payload carrying event source.
+    cond_source_aware: bool = False
+
     @abstractmethod
     def check(self, event: EventType) -> Tuple[bool, Any]:
         raise NotImplementedError("The ICondition is an interface. Use derived class.")
+
+class ISourceScoped:
+    '''Condition-like object that can decide whether an event source is relevant.'''
+    @abstractmethod
+    def is_relevant_source(self, source: Any) -> bool:
+        raise NotImplementedError("The ISourceScoped is an interface. Use derived class.")
+
+
+class SourceAwareEvent:
+    __slots__ = ('event', 'source')
+
+    def __init__(self, event: EventType, source: Any) -> None:
+        self.event = event
+        self.source = source
 
 
 class CallableConditionMixin:
@@ -54,6 +72,7 @@ class CallableConditionMixin:
 
 class StackedCond(ICondition):
     ''' A condition which can stack several simple conditions '''
+    cond_source_aware: bool = True
 
     def __init__(self) -> None:
         self.conds: list[Any] = []
@@ -78,20 +97,23 @@ class StackedCond(ICondition):
         # Exceptions bypass all conditions — check once before the loop.
         # retval never changes inside the loop (only mutated after break),
         # so this is equivalent to the per-iteration check that was here before.
-        if isinstance(event, Exception):
-            self.value = event
-            return True, event
+        plain_event = event.event if isinstance(event, SourceAwareEvent) else event
+        if isinstance(plain_event, Exception):
+            self.value = plain_event
+            return True, plain_event
         signaled, retval = False, event
         for cond in self.conds:
+            plain_retval = retval.event if isinstance(retval, SourceAwareEvent) else retval
             # ICondition first: its __call__ returns a tuple (always truthy), so it must
             # not fall through to the callable branch below.
             is_icond = isinstance(cond, ICondition)
             if is_icond:
-                signaled, event = cond.check(retval)
-            elif callable(cond) and cond(retval):  # plain lambda / function
-                signaled, event = True, retval
-            elif cond == retval:  # exact event match (e.g. None timeout sentinel)
-                signaled, event = True, retval
+                check_event = retval if getattr(cond, 'cond_source_aware', False) else plain_retval
+                signaled, event = cond.check(check_event)
+            elif callable(cond) and cond(plain_retval):  # plain lambda / function
+                signaled, event = True, plain_retval
+            elif cond == plain_retval:  # exact event match (e.g. None timeout sentinel)
+                signaled, event = True, plain_retval
             # else the event does not match our condition and hence will be ignored
             #     signaled, event = False, None  # not needed
             if signaled:

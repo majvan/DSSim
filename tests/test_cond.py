@@ -18,8 +18,8 @@ import unittest
 from contextlib import contextmanager
 from unittest.mock import Mock, MagicMock, call
 from dssim import DSSimulation, DSProcess, DSFuture
-from dssim.pubsub.base import TestObject
-from dssim.pubsub.cond import DSFilter as _f, DSCircuit
+from dssim.pubsub.base import TestObject, ISourceScoped
+from dssim.pubsub.cond import DSFilter as _f, DSCircuit, DSEpsCond
 from dssim.pubsub.process import _StartProcess
 
 def _pop_timequeue_event(time_queue):
@@ -129,6 +129,54 @@ class TestDSFilter(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             -fna  # once a filter is negative (reseter), it cannot be negated again
+
+    def test2a_init_eps_cond_lambda(self):
+        sim = DSSimulation()
+        trigger = DSFuture(sim=sim)
+        cond = DSEpsCond(lambda e: isinstance(e, int) and e > 10, eps=[trigger._finish_tx])
+
+        f = _f(cond, sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        self.assertEqual(str(cond), f"DSEpsCond({cond.cond})")
+        self.assertEqual(cond.get_eps(), {trigger._finish_tx})
+        self.assertEqual(cond.check(3), (False, None))
+        self.assertEqual(cond.check(12), (True, 12))
+        self.assertEqual(cond.cond_value(), 12)
+        self.assertEqual(f.get_eps(), {f._finish_tx, trigger._finish_tx})
+
+        self.assertEqual(f.check(3), (False, None))
+        self.assertEqual(f.check(11), (True, 11))
+        self.assertEqual(f.check(1), (False, None))
+
+    def test2b_init_eps_cond_value(self):
+        sim = DSSimulation()
+        trigger = DSFuture(sim=sim)
+        cond = sim.eps_cond('tick', eps=[trigger._finish_tx])
+
+        f = _f(cond, sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        self.assertEqual(cond.get_eps(), {trigger._finish_tx})
+        self.assertEqual(cond.check('other'), (False, None))
+        self.assertEqual(cond.check('tick'), (True, 'tick'))
+        self.assertEqual(cond.cond_value(), 'tick')
+        self.assertEqual(f.get_eps(), {f._finish_tx, trigger._finish_tx})
+
+        self.assertEqual(f.check('other'), (False, None))
+        self.assertEqual(f.check('tick'), (True, 'tick'))
+        self.assertEqual(f.check('other'), (False, None))
+
+    def test2c_source_scoped_interface(self):
+        sim = DSSimulation()
+        p = sim.publisher(name='p')
+        q = sim.publisher(name='q')
+
+        eps_cond = sim.eps_cond(lambda e: e == 'ok', [p])
+        f_eps = _f(eps_cond, sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        f_plain = _f(lambda e: e == 'ok', sigtype=_f.SignalType.REEVALUATE, sim=sim)
+
+        self.assertTrue(isinstance(eps_cond, ISourceScoped))
+        self.assertTrue(isinstance(f_eps, ISourceScoped))
+        self.assertTrue(f_eps.is_relevant_source(p))
+        self.assertFalse(f_eps.is_relevant_source(q))
+        self.assertTrue(f_plain.is_relevant_source(q))
 
 
     def test3_init_future(self):
@@ -1317,3 +1365,103 @@ class TestDSCircuit(unittest.TestCase):
         self.assertEqual(delta, 3)
         self.assertEqual(set(got.keys()), {f_a, f_b})
         self.assertTrue(all(v['a'] and v['b'] for v in got.values()))
+
+    def test5_eps_cond_independent_reevaluate_and(self):
+        sim = DSSimulation()
+        temp_pub = sim.publisher(name='temp')
+        pressure_pub = sim.publisher(name='pressure')
+
+        temp_cond = sim.eps_cond(lambda e: e == 'stable', [temp_pub])
+        pressure_cond = sim.eps_cond(lambda e: e == 'ok', [pressure_pub])
+
+        f_temp = _f(temp_cond, sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        f_pressure = _f(pressure_cond, sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        ready = f_temp & f_pressure
+
+        result = [None]
+
+        def controller():
+            result[0] = yield from ready.gwait(timeout=10)
+
+        def scenario():
+            yield from sim.gwait(1)
+            temp_pub.signal('stable')
+            yield from sim.gwait(1)
+            pressure_pub.signal('ok')
+
+        sim.schedule(0, controller())
+        sim.schedule(0, scenario())
+        sim.run()
+
+        self.assertIsNotNone(result[0])
+        self.assertIn(f_temp, result[0])
+        self.assertIn(f_pressure, result[0])
+
+    def test6_eps_cond_pulsed_with_reevaluate(self):
+        sim = DSSimulation()
+        temp_pub = sim.publisher(name='temp')
+        operator_pub = sim.publisher(name='operator')
+
+        temp_cond = sim.eps_cond(lambda e: e == 'stable', [temp_pub])
+        op_cond = sim.eps_cond(lambda e: e == 'go', [operator_pub])
+
+        f_temp = _f(temp_cond, sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        f_operator = _f(op_cond, sigtype=_f.SignalType.PULSED, sim=sim)
+        ready = f_temp & f_operator
+
+        result = [None]
+
+        def controller():
+            result[0] = yield from ready.gwait(timeout=20)
+
+        def scenario():
+            yield from sim.gwait(1)
+            operator_pub.signal('go')  # too early, should not latch
+            yield from sim.gwait(1)
+            temp_pub.signal('stable')
+            yield from sim.gwait(1)
+            operator_pub.signal('go')  # now AND should fire
+
+        sim.schedule(0, controller())
+        sim.schedule(0, scenario())
+        sim.run()
+
+        self.assertIsNotNone(result[0])
+        self.assertIn(f_temp, result[0])
+
+    def test7_eps_cond_reevaluate_toggle_independence(self):
+        sim = DSSimulation()
+        temp_pub = sim.publisher(name='temp')
+        pressure_pub = sim.publisher(name='pressure')
+
+        temp_cond = sim.eps_cond(lambda e: e == 'stable', [temp_pub])
+        pressure_cond = sim.eps_cond(lambda e: e == 'ok', [pressure_pub])
+
+        f_temp = _f(temp_cond, sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        f_pressure = _f(pressure_cond, sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        ready = f_temp & f_pressure
+
+        results = []
+
+        def controller():
+            while True:
+                r = yield from ready.gwait(timeout=20)
+                if r is None:
+                    break
+                results.append(sim.time)
+
+        def scenario():
+            yield from sim.gwait(1)
+            temp_pub.signal('stable')
+            yield from sim.gwait(1)
+            pressure_pub.signal('ok')
+            yield from sim.gwait(1)
+            temp_pub.signal('drifted')
+            yield from sim.gwait(1)
+            temp_pub.signal('stable')
+
+        sim.schedule(0, controller())
+        sim.schedule(0, scenario())
+        sim.run()
+
+        self.assertEqual(results, [2, 4])

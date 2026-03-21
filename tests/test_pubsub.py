@@ -19,6 +19,7 @@ from unittest.mock import Mock, call
 from dssim import DSProcess, DSCallback, DSCondCallback, DSKWCondCallback, DSCondSub, DSKWCallback, DSSimulation, DSSub, DSTrackableEvent
 from dssim import DSPub, NotifierDict, NotifierRoundRobin, NotifierPriority
 from dssim.pubsub import NotifierRoundRobinItem
+from dssim.pubsub.base import SourceAwareEvent
 
 class SimMock:
     pass
@@ -639,7 +640,8 @@ class TestNotifierDict(unittest.TestCase):
 
 
 class _DirectSubscriber(DSSub):
-    supports_direct_send = True
+    dispatch_direct = True
+    dispatch_source_aware = False
 
     def __init__(self, retval, *args, **kwargs):
         self.retval = retval
@@ -673,6 +675,20 @@ class _RoutedSubscriber(DSCondSub):
         return self.retval
 
 
+class _SourceAwareSubscriber(DSSub):
+    dispatch_direct = False
+    dispatch_source_aware = True
+
+    def __init__(self, retval, *args, **kwargs):
+        self.retval = retval
+        self.events = []
+        super().__init__(*args, **kwargs)
+
+    def send(self, event):
+        self.events.append(event)
+        return self.retval
+
+
 class TestPubSubDirectDispatch(unittest.TestCase):
     def setUp(self):
         self.sim = DSSimulation()
@@ -689,15 +705,24 @@ class TestPubSubDirectDispatch(unittest.TestCase):
         self.assertEqual(observer.events, ['evt'])
         self.sim.send_object.assert_not_called()
 
-    def test_pre_observer_without_direct_flag_uses_sim_send_object(self):
+    def test_pre_observer_dispatched_uses_sim_send_object(self):
         pub = DSPub(sim=self.sim)
         observer = _RoutedSubscriber(False, sim=self.sim, cond=lambda e: True)
         pub.add_subscriber(observer, phase=DSPub.Phase.PRE)
 
         pub.send('evt')
 
-        self.assertEqual(observer.events, ['evt'])
-        self.sim.send_object.assert_called_once_with(observer, 'evt')
+        self.assertEqual(len(observer.events), 1)
+        observed = observer.events[0]
+        self.assertTrue(isinstance(observed, SourceAwareEvent))
+        self.assertEqual(observed.event, 'evt')
+        self.assertIs(observed.source, pub)
+        self.sim.send_object.assert_called_once()
+        sent_subscriber, sent_payload = self.sim.send_object.call_args.args
+        self.assertIs(sent_subscriber, observer)
+        self.assertTrue(isinstance(sent_payload, SourceAwareEvent))
+        self.assertEqual(sent_payload.event, 'evt')
+        self.assertIs(sent_payload.source, pub)
 
     def test_consume_phase_mixes_direct_and_routed_dispatch(self):
         pub = DSPub(sim=self.sim)
@@ -709,8 +734,17 @@ class TestPubSubDirectDispatch(unittest.TestCase):
         pub.send('evt')
 
         self.assertEqual(c0.events, ['evt'])
-        self.assertEqual(c1.events, ['evt'])
-        self.sim.send_object.assert_called_once_with(c1, 'evt')
+        self.assertEqual(len(c1.events), 1)
+        observed = c1.events[0]
+        self.assertTrue(isinstance(observed, SourceAwareEvent))
+        self.assertEqual(observed.event, 'evt')
+        self.assertIs(observed.source, pub)
+        self.sim.send_object.assert_called_once()
+        sent_subscriber, sent_payload = self.sim.send_object.call_args.args
+        self.assertIs(sent_subscriber, c1)
+        self.assertTrue(isinstance(sent_payload, SourceAwareEvent))
+        self.assertEqual(sent_payload.event, 'evt')
+        self.assertIs(sent_payload.source, pub)
 
     def test_plain_dssub_defaults_to_direct_dispatch(self):
         pub = DSPub(sim=self.sim)
@@ -719,9 +753,44 @@ class TestPubSubDirectDispatch(unittest.TestCase):
 
         pub.send('evt')
 
-        self.assertTrue(observer.supports_direct_send)
+        self.assertTrue(observer.dispatch_direct)
+        self.assertFalse(observer.dispatch_source_aware)
         self.assertEqual(observer.events, ['evt'])
         self.sim.send_object.assert_not_called()
+
+    def test_pre_observer_source_aware_uses_wrapped_payload(self):
+        pub = DSPub(sim=self.sim)
+        observer = _SourceAwareSubscriber(False, sim=self.sim)
+        pub.add_subscriber(observer, phase=DSPub.Phase.PRE)
+
+        pub.send('evt')
+
+        self.assertEqual(len(observer.events), 1)
+        wrapped = observer.events[0]
+        self.assertTrue(isinstance(wrapped, SourceAwareEvent))
+        self.assertEqual(wrapped.event, 'evt')
+        self.assertIs(wrapped.source, pub)
+        self.sim.send_object.assert_called_once()
+        sent_subscriber, sent_payload = self.sim.send_object.call_args.args
+        self.assertIs(sent_subscriber, observer)
+        self.assertTrue(isinstance(sent_payload, SourceAwareEvent))
+
+    def test_pre_source_aware_reuses_same_wrapper_for_same_payload(self):
+        pub = DSPub(sim=self.sim)
+        o1 = _RoutedSubscriber(False, sim=self.sim, cond=lambda e: True)
+        o2 = _RoutedSubscriber(False, sim=self.sim, cond=lambda e: True)
+        pub.add_subscriber(o1, phase=DSPub.Phase.PRE)
+        pub.add_subscriber(o2, phase=DSPub.Phase.PRE)
+
+        pub.send('evt')
+
+        self.assertEqual(len(o1.events), 1)
+        self.assertEqual(len(o2.events), 1)
+        self.assertIs(o1.events[0], o2.events[0])
+        self.assertTrue(isinstance(o1.events[0], SourceAwareEvent))
+        calls = self.sim.send_object.call_args_list
+        self.assertEqual(len(calls), 2)
+        self.assertIs(calls[0].args[1], calls[1].args[1])
 
     def test_plain_dssub_consume_short_circuit(self):
         pub = DSPub(sim=self.sim)

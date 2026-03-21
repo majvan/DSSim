@@ -19,7 +19,8 @@ a running simulation loop.
 import unittest
 from unittest.mock import Mock, call
 from dssim import DSSimulation, DSAbortException
-from dssim import DSSchedulable, DSProcess, DSCallback
+from dssim import DSSchedulable, DSProcess, DSCallback, DSFilter
+from dssim.pubsub.base import SourceAwareEvent
 from dssim.pubsub.process import DSSubscriberContextManager, DSTimeoutContext, DSTimeoutContextError
 from dssim import DSPub
 
@@ -317,6 +318,116 @@ class TestSubscriberContext(unittest.TestCase):
         self.assertTrue(cm.consume == b.get_eps() | c.get_eps())
         self.assertTrue(cm.postp == d.get_eps())
         self.assertTrue(cm.postn == b.get_eps())
+
+    def test3_context_does_not_switch_process_type_for_source_aware_components(self):
+        sim = DSSimulation()
+        process = DSProcess(self.__process(), sim=sim)
+        sim.pid = process
+        scoped = sim.filter(lambda e: True)
+
+        orig_dispatch_direct = process.dispatch_direct
+        orig_dispatch_source_aware = process.dispatch_source_aware
+        with sim.observe_pre(scoped):
+            self.assertEqual(process.dispatch_direct, orig_dispatch_direct)
+            self.assertEqual(process.dispatch_source_aware, orig_dispatch_source_aware)
+        self.assertEqual(process.dispatch_direct, orig_dispatch_direct)
+        self.assertEqual(process.dispatch_source_aware, orig_dispatch_source_aware)
+
+    def test4_context_keeps_process_type_for_regular_components(self):
+        sim = DSSimulation()
+        process = DSProcess(self.__process(), sim=sim)
+        sim.pid = process
+        pub = DSPub(sim=sim)
+
+        orig_dispatch_direct = process.dispatch_direct
+        orig_dispatch_source_aware = process.dispatch_source_aware
+        with sim.observe_pre(pub):
+            self.assertEqual(process.dispatch_direct, orig_dispatch_direct)
+            self.assertEqual(process.dispatch_source_aware, orig_dispatch_source_aware)
+        self.assertEqual(process.dispatch_direct, orig_dispatch_direct)
+        self.assertEqual(process.dispatch_source_aware, orig_dispatch_source_aware)
+
+    def test5_pub_subscription_wait_lambda_receives_plain_event(self):
+        sim = DSSimulation()
+        pub = sim.publisher(name='pub')
+        seen = []
+        result = []
+
+        def cond(event):
+            seen.append(event)
+            return event == 'A'
+
+        def waiter():
+            with sim.observe_pre(pub):
+                out = yield from sim.gwait(timeout=1, cond=cond)
+                result.append(out)
+
+        def producer():
+            yield from sim.gwait(0)
+            pub.signal('A')
+
+        sim.schedule(0, waiter())
+        sim.schedule(0, producer())
+        sim.run(2)
+
+        self.assertEqual(result, ['A'])
+        self.assertIn('A', seen)
+        self.assertFalse(any(isinstance(ev, SourceAwareEvent) for ev in seen))
+
+    def test6_nested_pub_and_filter_subscription_keeps_lambda_plain(self):
+        sim = DSSimulation()
+        pub = sim.publisher(name='pub')
+        flt = sim.filter(lambda e: e == 'A')
+        seen = []
+        result = []
+        something = object()
+
+        def cond(event):
+            seen.append(event)
+            return (event == 'A') or (event == something)
+
+        def waiter():
+            with sim.observe_pre(pub):
+                with sim.observe_pre(flt):
+                    out = yield from sim.gwait(timeout=1, cond=cond)
+                    result.append(out)
+
+        def producer():
+            yield from sim.gwait(0)
+            pub.signal('A')
+
+        sim.schedule(0, waiter())
+        sim.schedule(0, producer())
+        sim.run(2)
+
+        self.assertEqual(result, ['A'])
+        self.assertIn('A', seen)
+        self.assertFalse(any(isinstance(ev, SourceAwareEvent) for ev in seen))
+
+    def test7_source_aware_condition_wait_uses_source_wrapped_event(self):
+        sim = DSSimulation()
+        pub_a = sim.publisher(name='pub_a')
+        pub_b = sim.publisher(name='pub_b')
+        eps_cond = sim.eps_cond(lambda e: e == 'A', [pub_a])
+        flt = sim.filter(eps_cond, sigtype=DSFilter.SignalType.REEVALUATE)
+        result = []
+
+        def waiter():
+            with sim.observe_pre(pub_a, pub_b):
+                out = yield from sim.gwait(timeout=1, cond=flt)
+                result.append(out)
+
+        def producer():
+            yield from sim.gwait(0)
+            pub_b.signal('A')  # irrelevant source for eps_cond
+            yield from sim.gwait(0)
+            pub_a.signal('A')  # relevant source
+
+        sim.schedule(0, waiter())
+        sim.schedule(0, producer())
+        sim.run(2)
+
+        self.assertEqual(result, ['A'])
 
 
 # ---------------------------------------------------------------------------

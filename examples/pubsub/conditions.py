@@ -126,7 +126,7 @@ async def demo_filtering1():
     cond0, cond1 = f(fut0), f(fut1)
     cond = cond0 | cond1
     ret = await sim.wait(1, cond)
-    assert ret == {}
+    assert ret is None
     assert cond.value is None
     assert sim.time == time + 1
 
@@ -151,7 +151,7 @@ async def demo_filtering1():
     cond0, cond1 = f(fut0), f(fut1)
     cond = cond0 | cond1
     ret = await sim.wait(1, cond=cond)
-    assert ret == {}
+    assert ret is None
     assert cond.value is None
     assert sim.time == time + 1
 
@@ -189,7 +189,7 @@ async def demo_filtering2():
     cond0, cond1 = f(fut0), f(fut1)
     cond = cond0 & cond1
     ret = await sim.wait(1, cond)
-    assert ret == {}
+    assert ret is None
     assert cond.value is None
     assert sim.time == time + 1
 
@@ -214,7 +214,7 @@ async def demo_filtering2():
     cond0, cond1 = f(fut0), f(fut1)
     cond = cond0 & cond1
     ret = await sim.wait(1, cond=cond)
-    assert ret == {}
+    assert ret is None
     assert cond.value is None
     assert sim.time == time + 1
 
@@ -306,7 +306,7 @@ async def demo_filtering4():
     cond1 = f(DSProcess(return_greeting_after(5, 'hello'), sim=sim).schedule(0))
     cond = (cond0 | cond1)    
     ret = await sim.wait(1, cond)
-    assert ret == {}
+    assert ret is None
     assert cond.value is None
     assert sim.time == time + 1
 
@@ -324,7 +324,7 @@ async def demo_filtering4():
     cond1 = f(DSProcess(return_greeting_after(5, 'hello'), sim=sim).schedule(0))
     cond = (cond0 | cond1)
     ret = await sim.wait(1, cond=cond)
-    assert ret == {}
+    assert ret is None
     assert cond.value is None
     assert sim.time == time + 1
 
@@ -352,7 +352,7 @@ async def demo_filtering5():
     cond1 = f(DSProcess(return_greeting_after(5, 'hello'), sim=sim).schedule(0))
     cond = (cond0 & cond1)    
     ret = await sim.wait(1, cond)
-    assert ret == {}
+    assert ret is None
     assert cond.value is None
     assert sim.time == time + 1
 
@@ -370,7 +370,7 @@ async def demo_filtering5():
     cond1 = f(DSProcess(return_greeting_after(5, 'hello'), sim=sim).schedule(0))
     cond = (cond0 & cond1)
     ret = await sim.wait(1, cond=cond)
-    assert ret == {}
+    assert ret is None
     assert cond.value is None
     assert sim.time == time + 1
 

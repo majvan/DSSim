@@ -30,6 +30,8 @@ class DSFuture(DSCondSub, SignalMixin, IFuture):
     '''
     # Futures/processes keep simulator-owned dispatch semantics for completion
     # and failure paths (StopIteration/exception handling).
+    dispatch_direct: bool = False
+    dispatch_source_aware: bool = True
     supports_direct_send: bool = False
 
     def __init__(self, *args, **kwargs) -> None:
@@ -55,7 +57,7 @@ class DSFuture(DSCondSub, SignalMixin, IFuture):
         if exc is None:
             exc = DSAbortException(self)
         try:
-            if self.supports_direct_send:
+            if self.dispatch_direct:
                 self.send(exc)
             else:
                 self.sim.send_object(self, exc)

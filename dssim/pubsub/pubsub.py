@@ -23,8 +23,8 @@ from abc import abstractmethod
 from enum import IntEnum
 from bisect import bisect_left, insort
 from typing import List, Dict, Any, Type, Generator, Callable, Tuple, Iterator, TYPE_CHECKING
-from dssim.base import TimeType, DSComponent, DSEvent, EventType, SignalMixin, ISubscriber
-from dssim.pubsub.base import CondType, AlwaysTrue, SubscriberMetadata, StackedCond
+from dssim.base import TimeType, DSComponent, DSEvent, EventType, EventRetType, SignalMixin, ISubscriber
+from dssim.pubsub.base import CondType, AlwaysTrue, SubscriberMetadata, StackedCond, SourceAwareEvent
 
 
 if TYPE_CHECKING:
@@ -57,7 +57,8 @@ def TrackEvent(fcn):
 
 class DSSub(DSComponent, ISubscriber):
     # Plain subscribers are direct-send capable by default.
-    supports_direct_send: bool = True
+    dispatch_direct: bool = True
+    dispatch_source_aware: bool = False
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -82,7 +83,8 @@ class DSSub(DSComponent, ISubscriber):
 class DSCondSub(DSComponent, ISubscriber):
     # Condition-aware subscribers can still be direct-send capable when
     # configured with an unconditional predicate.
-    supports_direct_send: bool = False
+    dispatch_direct: bool = False
+    dispatch_source_aware: bool = True
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -349,6 +351,9 @@ class DSPub(DSSub, SignalMixin):
         self.subs = (notifier(), notifier(), notifier(), notifier())
         self._subscriber_count = 0  # total ref-count across all tiers; kept in sync by add/remove_subscriber
         self._phase_subscriber_count = [0, 0, 0, 0]
+        # Hot-path reusable source-aware envelope for this publisher.
+        self._wrapped_payload = SourceAwareEvent(None, self)
+        self._wrapped_payload_in_use = False
         # A publisher takes any event - no conditional
         self.meta.cond.push(AlwaysTrue)
 
@@ -371,52 +376,66 @@ class DSPub(DSSub, SignalMixin):
         pre, consume, post_hit, post_miss = self.subs
         pre_count, consume_count, post_hit_count, post_miss_count = self._phase_subscriber_count
 
-        # Emit the signal to all pre-observers
-        if pre_count > 0:
-            for subscriber, refs in pre:
-                if refs:
-                    if subscriber.supports_direct_send:
-                        subscriber.send(event)
-                    else:
-                        self.sim.send_object(subscriber, event)
-
-        # Emit the signal to all consumers and stop with the first one
-        # which accepted the signal
-        consumed = False
-        accepted_consumer = None
-        if consume_count > 0:
-            for consumer, refs in consume:
-                if refs:
-                    if consumer.supports_direct_send:
-                        retval = consumer.send(event)
-                    else:
-                        retval = self.sim.send_object(consumer, event)
-                    if retval:
-                        consumed = True
-                        accepted_consumer = consumer
-                        # The event was consumed.
-                        consume.rewind()  # this will rewind for round robin
-                        break
-        if consumed:
-            # Notify all the post-observers about consumed event.
-            if post_hit_count > 0:
-                hit_payload = {'consumer': accepted_consumer, 'event': event}
-                for subscriber, prefs in post_hit:
-                    # The post-observers will receive a dict with two objects
-                    if prefs:
-                        if subscriber.supports_direct_send:
-                            subscriber.send(hit_payload)
-                        else:
-                            self.sim.send_object(subscriber, hit_payload)
+        # Re-root source context at this publisher: downstream source-scoped
+        # conditions should see this DSPub as the immediate event source.
+        # Avoiding creating a new object, re-using class-bounded one.
+        base_event = event.event if isinstance(event, SourceAwareEvent) else event
+        if not self._wrapped_payload_in_use:
+            use_shared_wrapper = True
+            wrapped_payload = self._wrapped_payload
+            self._wrapped_payload_in_use = True
         else:
-            # Emit the missed signal to all post-observers
-            if post_miss_count > 0:
-                for subscriber, refs in post_miss:
+            use_shared_wrapper = False
+            # Re-entrant send() on the same publisher uses an isolated wrapper.
+            # Here we cannot avoid allocating a new wrapped event.
+            wrapped_payload = SourceAwareEvent(None, self)
+        wrapped_payload.event = base_event
+
+        def _dispatch(subscriber: ISubscriber, payload: EventType, wrapped_payload: SourceAwareEvent) -> EventRetType:
+            event_obj = wrapped_payload if subscriber.dispatch_source_aware else payload
+            if subscriber.dispatch_direct:
+                return subscriber.send(event_obj)
+            return self.sim.send_object(subscriber, event_obj)
+
+        try:
+            # Emit the signal to all pre-observers
+            if pre_count > 0:
+                for subscriber, refs in pre:
                     if refs:
-                        if subscriber.supports_direct_send:
-                            subscriber.send(event)
-                        else:
-                            self.sim.send_object(subscriber, event)
+                        _dispatch(subscriber, event, wrapped_payload)
+
+            # Emit the signal to all consumers and stop with the first one
+            # which accepted the signal
+            consumed = False
+            accepted_consumer = None
+            if consume_count > 0:
+                for consumer, refs in consume:
+                    if refs:
+                        retval = _dispatch(consumer, event, wrapped_payload)
+                        if retval:
+                            consumed = True
+                            accepted_consumer = consumer
+                            # The event was consumed.
+                            consume.rewind()  # this will rewind for round robin
+                            break
+            if consumed:
+                # Notify all the post-observers about consumed event.
+                if post_hit_count > 0:
+                    hit_payload = {'consumer': accepted_consumer, 'event': event}
+                    wrapped_payload.event = hit_payload
+                    for subscriber, prefs in post_hit:
+                        # The post-observers will receive a dict with two objects
+                        if prefs:
+                            _dispatch(subscriber, hit_payload, wrapped_payload)
+            else:
+                # Emit the missed signal to all post-observers
+                if post_miss_count > 0:
+                    for subscriber, refs in post_miss:
+                        if refs:
+                            _dispatch(subscriber, event, wrapped_payload)
+        finally:
+            if use_shared_wrapper:
+                self._wrapped_payload_in_use = False
 
         # cleanup- remove items with zero references
         # We do not cleanup in remove_subscriber, because remove_subscriber could

@@ -19,7 +19,15 @@ import inspect
 from functools import wraps
 from typing import List, Any, Union, Tuple, Callable, Generator, Coroutine, Optional, Iterator, TYPE_CHECKING
 from dssim.timequeue import TQBinTree, NowQueue, ITimeQueue
-from dssim.base import NumericType, TimeType, EventType, EventRetType, DSComponentSingleton, ISubscriber, IFuture
+from dssim.base import (
+    NumericType,
+    TimeType,
+    EventType,
+    EventRetType,
+    DSComponentSingleton,
+    ISubscriber,
+    IFuture,
+)
 from dssim.pubsub import SimPubsubMixin
 from dssim.pubsub.future import SimFutureMixin
 from dssim.pubsub.process import SimProcessMixin

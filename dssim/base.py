@@ -35,6 +35,16 @@ EventRetType = Optional[bool]
 class ISubscriber(ABC):
     ''' Minimal interface for objects that receive simulation events.
     Pure-Python generators satisfy this interface via their built-in send(). '''	
+    dispatch_direct: bool = True
+    dispatch_source_aware: bool = False
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if getattr(cls, 'cond_source_aware', False) and not getattr(cls, 'dispatch_source_aware', False):
+            raise TypeError(
+                f'{cls.__name__}: cond_source_aware=True requires dispatch_source_aware=True'
+            )
+
     @abstractmethod
     def send(self, event: EventType) -> EventRetType: ...
 

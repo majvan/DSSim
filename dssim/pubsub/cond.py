@@ -20,7 +20,7 @@ import inspect
 import copy
 from enum import Enum
 from dssim.base import TimeType, EventType, EventRetType
-from dssim.pubsub.base import CondType, ICondition, CallableConditionMixin, SubscriberMetadata, TestObject
+from dssim.pubsub.base import CondType, AlwaysTrue, ICondition, ISourceScoped, CallableConditionMixin, SubscriberMetadata, TestObject, SourceAwareEvent
 from dssim.pubsub.future import DSFuture
 from dssim.pubsub.process import DSProcess
 from dssim.pubsub.pubsub import TrackEvent
@@ -34,6 +34,12 @@ if TYPE_CHECKING:
 FilterExpression = Callable[[Iterable[object]], bool]
 SignalType = Union["DSFilter", "DSCircuit"]
 SignalList = List[SignalType]
+
+
+def _split_source_aware(event: EventType) -> Tuple[EventType, Optional[object]]:
+    if isinstance(event, SourceAwareEvent):
+        return event.event, event.source
+    return event, None
 
 
 class _ConditionWaitMixin:
@@ -68,7 +74,42 @@ class _ConditionWaitMixin:
             return await self.sim.wait(timeout=timeout, cond=self, val=val)
 
 
-class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin):
+class DSEpsCond(ICondition, ISourceScoped, CallableConditionMixin):
+    '''Reusable condition wrapper with explicit event publishers (endpoints).
+
+    Useful for REEVALUATE filters when condition state can toggle over time and
+    rechecks must be triggered by specific publishers.
+    '''
+
+    def __init__(self, cond: CondType = AlwaysTrue, eps: Iterable["DSPub"] = ()) -> None:
+        self.cond = cond
+        self._eps = tuple(eps)
+        self.value: EventType = None
+
+    def check(self, event: EventType) -> Tuple[bool, EventType]:
+        if callable(self.cond):
+            signaled = bool(self.cond(event))
+        else:
+            signaled = self.cond == event
+        self.value = event if signaled else None
+        return signaled, self.value
+
+    def cond_value(self) -> EventType:
+        return self.value
+
+    def get_eps(self) -> Set["DSPub"]:
+        return set(self._eps)
+
+    def is_relevant_source(self, source: object) -> bool:
+        if source is None:
+            return True
+        return any(ep is source for ep in self._eps)
+
+    def __str__(self) -> str:
+        return f'DSEpsCond({self.cond})'
+
+
+class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, ISourceScoped, CallableConditionMixin):
     ''' A future which can be used in the circuit. It can be used as a signal to a
     circuit.
 
@@ -89,6 +130,9 @@ class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin
         PULSED = 2  # Returns "signaled" only when __call__(event) matches, but never stays in the state
 
     ONE_LINER = None
+    cond_source_aware: bool = True
+    dispatch_direct: bool = False
+    dispatch_source_aware: bool = True
 
     def __init__(self, cond: CondType = None, sigtype: SignalType = SignalType.DEFAULT, signal_timeout: bool = False, forward_events: Optional[bool] = None, *args: Any, **kwargs: Any):
         super().__init__(*args, **kwargs)
@@ -124,11 +168,12 @@ class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin
 
     @TrackEvent
     def send(self, event: EventType) -> bool:
+        event, source = _split_source_aware(event)
         # DSFilter.send must use condition semantics (not DSFuture.finish semantics).
         if event is TestObject:
-            return self.check(event)[0]
+            return self.check(event, source)[0]
         was_signaled = self.signaled
-        signaled, _ = self.check(event)
+        signaled, _ = self.check(event, source)
         # Wake waiters that observe this filter via _finish_tx.
         # Use the original payload so REEVALUATE conditions keep correct state.
         if signaled and (self.reevaluate or not was_signaled):
@@ -214,7 +259,14 @@ class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin
             return True, self.cond_value()
         return False, None
 
-    def check(self, event: EventType) -> Tuple[bool, EventType]:
+    def check(self, event: EventType, source: Optional[object] = None) -> Tuple[bool, EventType]:
+        event, scoped_source = _split_source_aware(event)
+        if source is None:
+            source = scoped_source
+        if isinstance(self.cond, ISourceScoped) and not self.cond.is_relevant_source(source):
+            if self.signaled:
+                return True, self.cond_value()
+            return False, None
         if self.signaled and not self.reevaluate:
             return True, self.cond_value()
         # Probe mode used by check_and_wait/check_and_gwait.
@@ -233,6 +285,13 @@ class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin
             retval |= set(get_eps())
         return retval
 
+    def is_relevant_source(self, source: object) -> bool:
+        if source is None:
+            return True
+        if isinstance(self.cond, ISourceScoped):
+            return self.cond.is_relevant_source(source)
+        return True
+
     def finish(self, value: EventType) -> None:
         self._finish(value, async_future=True)
 
@@ -249,10 +308,6 @@ class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin
         return self.value
 
 
-    def get_process(self) -> Optional[DSProcess]:
-        return self.cond if isinstance(self.cond, DSProcess) else None
-
-
 class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin):
     ''' DSCircuit aggregates several DSFutures / DSCircuits into logical
     circuit (AND / OR).
@@ -260,6 +315,10 @@ class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixi
     It evaluates the circuit after every event by propagating down (to the signals)
     all the events.
     '''
+
+    cond_source_aware: bool = True
+    dispatch_direct: bool = False
+    dispatch_source_aware: bool = True
 
     def __init__(self, expression: FilterExpression, signals: SignalList, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -334,13 +393,21 @@ class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixi
     def finished(self) -> bool:
         return self.signaled
 
-    def _gather_results(self, event: EventType, futures: SignalList) -> List[bool]:
+    def _is_relevant_source(self, signal: SignalType, source: Optional[object]) -> bool:
+        if source is None:
+            return True
+        if isinstance(signal, ISourceScoped):
+            return signal.is_relevant_source(source)
+        return True
+
+    def _gather_results(self, event: EventType, futures: SignalList, source: Optional[object] = None) -> List[bool]:
         retval = []
         for fut in futures:
-            if isinstance(fut, ICondition):
-                retval.append(fut.check(event)[0])
+            if isinstance(fut, ICondition) and self._is_relevant_source(fut, source):
+                signaled = fut.check(event, source)[0]
             else:
-                retval.append(fut.finished())
+                signaled = fut.finished()
+            retval.append(signaled)
         return retval
 
     def get_eps(self) -> Set["DSPub"]:
@@ -353,8 +420,11 @@ class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixi
             retval |= s.get_eps()
         return retval
 
-    def check(self, event: EventType) -> Tuple[bool, EventType]:
+    def check(self, event: EventType, source: Optional[object] = None) -> Tuple[bool, EventType]:
         ''' Handles logic for the event. Pushes the event to the inputs and then evaluates the circuit. '''
+        event, scoped_source = _split_source_aware(event)
+        if source is None:
+            source = scoped_source
         signaled = False
         # In the following, we have to send the event to the whole circuit. The reason is that
         # once some gate is signaled, it could be reset later; however if the signal stops event
@@ -363,7 +433,7 @@ class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixi
         if not self.positive:
             # For resetting signals we check if they are signaled
             if len(self.setters) > 0:
-                results = self._gather_results(event, self.setters)
+                results = self._gather_results(event, self.setters, source)
                 signaled = self.expression(results)
             if signaled:
                 # and if they are signaled, they reset the input setters
@@ -372,7 +442,7 @@ class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixi
         else:
             # For normal (mixed signals) we check first if the logic of reseters reset the circuit
             if len(self.resetters) > 0:
-                results = self._gather_results(event, self.resetters)
+                results = self._gather_results(event, self.resetters, source)
                 reset_signal = self.expression(results)
             else:
                 reset_signal = False
@@ -383,7 +453,7 @@ class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixi
                 signaled = False
             else:
                 if len(self.setters) > 0:
-                    results = self._gather_results(event, self.setters)
+                    results = self._gather_results(event, self.setters, source)
                     signaled = self.expression(results)
             self.signaled = signaled
             if signaled:
@@ -395,6 +465,9 @@ class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixi
 
 # In the following, self is in fact of type DSSimulation, but PyLance makes troubles with variable types
 class SimFilterMixin:
+    def eps_cond(self: Any, cond: CondType = AlwaysTrue, eps: Iterable["DSPub"] = ()) -> DSEpsCond:
+        return DSEpsCond(cond=cond, eps=eps)
+
     def filter(self: Any, *args: Any, **kwargs: Any) -> DSFilter:
         sim: DSSimulation = kwargs.pop('sim', self)
         if sim is not self:

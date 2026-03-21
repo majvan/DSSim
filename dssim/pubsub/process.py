@@ -22,7 +22,7 @@ from contextlib import contextmanager
 from functools import wraps
 import inspect
 from dssim.base import TimeType, EventType, EventRetType, SignalMixin, ISubscriber
-from dssim.pubsub.base import CondType, AlwaysFalse, AlwaysTrue, DSAbortException, DSTransferableCondition, SubscriberMetadata, TestObject
+from dssim.pubsub.base import CondType, AlwaysFalse, AlwaysTrue, DSAbortException, DSTransferableCondition, SubscriberMetadata, TestObject, ICondition
 from dssim.pubsub.pubsub import DSSub, DSCallback, TrackEvent, DSPub
 from dssim.pubsub.future import DSFuture
 
@@ -181,8 +181,9 @@ class DSProcess(DSFuture, SignalMixin):
         When cond is a DSFuture (or DSProcess), automatically subscribes to its finish endpoint
         so the caller wakes up when the future completes.
         '''
+        is_condition_future = isinstance(cond, ICondition)
         if isinstance(cond, DSFuture):
-            if cond.finished():
+            if cond.finished() and not is_condition_future:
                 if cond.exc is not None:
                     raise cond.exc
                 return cond
@@ -193,6 +194,8 @@ class DSProcess(DSFuture, SignalMixin):
                     event = yield from self.sim._gwait_for_event(timeout, val)
                 finally:
                     conds.pop()
+            if event is None:
+                return None
             if cond.exc is not None:
                 raise cond.exc
             if hasattr(cond, 'cond_value'):
@@ -212,8 +215,9 @@ class DSProcess(DSFuture, SignalMixin):
         ''' Async variant of gwait.
         When cond is a DSFuture (or DSProcess), automatically subscribes to its finish endpoint.
         '''
+        is_condition_future = isinstance(cond, ICondition)
         if isinstance(cond, DSFuture):
-            if cond.finished():
+            if cond.finished() and not is_condition_future:
                 if cond.exc is not None:
                     raise cond.exc
                 return cond
@@ -224,6 +228,8 @@ class DSProcess(DSFuture, SignalMixin):
                     event = await self.sim._wait_for_event(timeout, val)
                 finally:
                     conds.pop()
+            if event is None:
+                return None
             if cond.exc is not None:
                 raise cond.exc
             if hasattr(cond, 'cond_value'):
