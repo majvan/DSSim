@@ -10,7 +10,7 @@
 project = 'DSSim'
 copyright = '2023, majvan'
 author = 'majvan'
-release = '1.0.1'
+release = '1.1.0'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
