@@ -54,7 +54,111 @@ The `stats()` dict contains:
 | `get_count` | int | Total number of successful get operations |
 | `current_len` | int | Queue length at time of `stats()` call |
 
-### 8.2.3 Resetting and Detaching
+### 8.2.3 Operations Probe
+
+`QueueOpsProbe` tracks every API-level operation attempt — puts, gets, pops, removes, and setitem calls — together with their outcomes (success, failure, blocked, timeout) and transferred item counts. It complements `QueueStatsProbe` when you need to know *why* items are moving (or not).
+
+```python
+ops = q.add_ops_probe()
+
+# ... run the simulation ...
+sim.run(until=100)
+
+s = ops.stats()
+print(f"put attempts: {s['put_attempt_count']}  success: {s['put_success_count']}  fail: {s['put_fail_count']}")
+print(f"get attempts: {s['get_attempt_count']}  blocked: {s['get_blocked_count']}  timeout: {s['get_timeout_count']}")
+print(f"items moved:  put {s['put_moved_items']}  get {s['get_moved_items']}")
+print(f"max batch:    put {s['max_put_batch']}  get {s['max_get_batch']}")
+```
+
+#### Operations Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `start_time` | float | Probe start time |
+| `end_time` | float | Time of last observed operation |
+| `duration` | float | `end_time - start_time` |
+| `current_len` | int | Queue length at last operation |
+| `max_len` | int | Maximum observed queue length |
+| `min_len` | int | Minimum observed queue length |
+| `put_attempt_count` | int | Total put calls |
+| `put_success_count` | int | Puts that transferred items |
+| `put_fail_count` | int | Puts that transferred nothing |
+| `put_blocked_count` | int | Puts that had to wait (queue full) |
+| `put_timeout_count` | int | Puts that timed out while waiting |
+| `put_requested_items` | int | Total items requested to put |
+| `put_moved_items` | int | Total items actually put |
+| `get_attempt_count` | int | Total get calls |
+| `get_success_count` | int | Gets that transferred items |
+| `get_fail_count` | int | Gets that transferred nothing |
+| `get_blocked_count` | int | Gets that had to wait (queue empty) |
+| `get_timeout_count` | int | Gets that timed out while waiting |
+| `get_requested_items` | int | Total items requested to get |
+| `get_moved_items` | int | Total items actually got |
+| `pop_attempt_count` | int | Total pop calls |
+| `pop_success_count` | int | Pops that removed an item |
+| `pop_fail_count` | int | Pops on an empty queue |
+| `pop_moved_items` | int | Total items popped |
+| `remove_attempt_count` | int | Total remove calls |
+| `remove_success_count` | int | Removes that found the item |
+| `remove_fail_count` | int | Removes where item was absent |
+| `remove_moved_items` | int | Total items removed |
+| `setitem_count` | int | Total `queue[i] = x` replacements |
+| `max_put_batch` | int | Largest single put transfer |
+| `max_get_batch` | int | Largest single get transfer |
+
+### 8.2.4 Latency Probe
+
+`QueueLatencyProbe` measures two kinds of time:
+
+- **Stay time** — how long each item spends inside the queue (from put to get/pop/remove).
+- **Wait time** — how long a blocked `gput` or `gget` call waits before it can proceed.
+
+```python
+lat = q.add_latency_probe()
+
+# ... run the simulation ...
+sim.run(until=100)
+
+s = lat.stats()
+print(f"items tracked:   {s['stay_count']}")
+print(f"avg stay time:   {s['stay_time_avg']:.3f}")
+print(f"min/max stay:    {s['stay_time_min']:.3f} / {s['stay_time_max']:.3f}")
+print(f"get waits:       {s['get_wait_count']}  avg {s['get_wait_time_avg']:.3f}")
+print(f"put waits:       {s['put_wait_count']}  avg {s['put_wait_time_avg']:.3f}")
+```
+
+If the probe is attached to a queue that already contains items, those items are **seeded** — their entry timestamp is set to the current simulation time. `seeded_item_count` reports how many items were seeded. `untracked_exit_count` reports items that left the queue without a matching entry timestamp (e.g. items that entered before the probe was attached and were not seeded).
+
+#### Latency Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `start_time` | float | Probe start time |
+| `end_time` | float | Time of last observed operation |
+| `duration` | float | `end_time - start_time` |
+| `tracked_item_count` | int | Items still inside the queue with tracked entry times |
+| `seeded_item_count` | int | Items that were in the queue when probe attached |
+| `untracked_exit_count` | int | Items that left without a tracked entry time |
+| `stay_count` | int | Items with completed stay-time measurement |
+| `stay_time_total` | float | Sum of all stay times |
+| `stay_time_avg` | float | Mean stay time |
+| `stay_time_min` | float | Shortest stay time |
+| `stay_time_max` | float | Longest stay time |
+| `put_wait_count` | int | Blocked put operations |
+| `put_wait_timeout_count` | int | Blocked puts that timed out |
+| `put_wait_time_total` | float | Sum of all put wait times |
+| `put_wait_time_avg` | float | Mean put wait time |
+| `put_wait_time_min` | float | Shortest put wait |
+| `put_wait_time_max` | float | Longest put wait |
+| `get_wait_count` | int | Blocked get operations |
+| `get_wait_timeout_count` | int | Blocked gets that timed out |
+| `get_wait_time_total` | float | Sum of all get wait times |
+| `get_wait_time_avg` | float | Mean get wait time |
+| `get_wait_time_min` | float | Shortest get wait |
+| `get_wait_time_max` | float | Longest get wait |
+
+### 8.2.5 Resetting and Detaching
 
 ```python
 probe.reset()    # clear accumulated statistics; start fresh from now
@@ -106,6 +210,82 @@ print(f"preempted amount: {s['preempted_amount']:.2f}")
 | `preempt_count` | int | Number of preemption events (DSPriorityResource only) |
 | `preempted_amount` | float | Total amount reclaimed by preemption |
 | `current_amount` | float | Amount at time of `stats()` call |
+
+### 8.3.2 Flow Probe
+
+`ResourceFlowProbe` tracks transferred amounts and rates — how much is being put in and taken out over time. It focuses on successful transfers only and computes throughput rates.
+
+```python
+flow = r.add_flow_probe()
+
+# ... run the simulation ...
+sim.run(until=100)
+
+s = flow.stats()
+print(f"put events: {s['put_event_count']}  total amount: {s['put_amount_total']:.1f}")
+print(f"get events: {s['get_event_count']}  total amount: {s['get_amount_total']:.1f}")
+print(f"net amount: {s['net_amount_total']:.1f}")
+print(f"put rate:   {s['put_rate']:.2f} units/s")
+print(f"get rate:   {s['get_rate']:.2f} units/s")
+```
+
+#### Flow Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `start_time` | float | Probe start time |
+| `end_time` | float | Time of `stats()` call |
+| `duration` | float | `end_time - start_time` |
+| `put_event_count` | int | Number of successful put events |
+| `get_event_count` | int | Number of successful get events |
+| `put_amount_total` | float | Total amount added |
+| `get_amount_total` | float | Total amount consumed |
+| `net_amount_total` | float | `put_amount_total - get_amount_total` |
+| `avg_put_amount` | float | Mean amount per put event |
+| `avg_get_amount` | float | Mean amount per get event |
+| `max_put_amount` | float | Largest single put |
+| `max_get_amount` | float | Largest single get |
+| `put_rate` | float | `put_amount_total / duration` |
+| `get_rate` | float | `get_amount_total / duration` |
+| `unexpected_nempty_count` | int | `tx_nempty` events with no amount increase (diagnostic) |
+| `unexpected_nfull_count` | int | `tx_nfull` events with no amount decrease (diagnostic) |
+| `current_amount` | float | Resource amount at last observation |
+
+### 8.3.3 Latency Probe
+
+`ResourceLatencyProbe` measures how long blocked `gput` and `gget` calls wait before they can proceed. It only records operations that actually blocked — non-blocking calls are invisible to this probe.
+
+```python
+lat = r.add_latency_probe()
+
+# ... run the simulation ...
+sim.run(until=100)
+
+s = lat.stats()
+print(f"get waits:  {s['get_wait_count']}  avg {s['get_wait_time_avg']:.3f}  max {s['get_wait_time_max']:.3f}")
+print(f"put waits:  {s['put_wait_count']}  avg {s['put_wait_time_avg']:.3f}  max {s['put_wait_time_max']:.3f}")
+print(f"timeouts:   get {s['get_wait_timeout_count']}  put {s['put_wait_timeout_count']}")
+```
+
+#### Latency Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `start_time` | float | Probe start time |
+| `end_time` | float | Time of `stats()` call |
+| `duration` | float | `end_time - start_time` |
+| `put_wait_count` | int | Blocked put operations |
+| `put_wait_timeout_count` | int | Blocked puts that timed out |
+| `put_wait_time_total` | float | Sum of all put wait times |
+| `put_wait_time_avg` | float | Mean put wait time |
+| `put_wait_time_min` | float | Shortest put wait |
+| `put_wait_time_max` | float | Longest put wait |
+| `get_wait_count` | int | Blocked get operations |
+| `get_wait_timeout_count` | int | Blocked gets that timed out |
+| `get_wait_time_total` | float | Sum of all get wait times |
+| `get_wait_time_avg` | float | Mean get wait time |
+| `get_wait_time_min` | float | Shortest get wait |
+| `get_wait_time_max` | float | Longest get wait |
 
 ---
 
@@ -263,8 +443,9 @@ Every subscriber and publisher node whose `send()` was called with this event is
 
 ## 8.8 Key Takeaways
 
-- Probes are attached via `add_probe()` / `add_stats_probe()` and detached via `remove_probe()`.
-- Built-in `QueueStatsProbe` and `ResourceStatsProbe` provide time-weighted occupancy, throughput, and (for priority resources) preemption statistics.
+- Probes are attached via `add_probe()` or the factory methods (`add_stats_probe()`, `add_ops_probe()`, `add_latency_probe()`, `add_flow_probe()`) and detached via `remove_probe()`.
+- **Queue probes:** `QueueStatsProbe` (occupancy, throughput), `QueueOpsProbe` (per-operation success/fail/blocked/timeout counts), `QueueLatencyProbe` (item stay time, blocked wait time).
+- **Resource probes:** `ResourceStatsProbe` (amount occupancy, preemption stats), `ResourceFlowProbe` (transfer rates, moved amounts), `ResourceLatencyProbe` (blocked wait time).
 - `probe.reset()` clears accumulated data; `probe.close()` stops collection.
 - Custom probes only need an `attach(component)` method; they can subscribe to any endpoint in `PRE` phase to remain non-intrusive.
 - For time-series sampling, pair a `DSTimer` with a callback that reads component state on each tick.
