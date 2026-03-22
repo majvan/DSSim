@@ -17,12 +17,10 @@ to be able create advanced expressions for conditions.
 '''
 from typing import List, Set, Any, Dict, Tuple, Union, Optional, Callable, Iterable, Generator, TYPE_CHECKING
 import inspect
-import copy
 from enum import Enum
 from dssim.base import TimeType, EventType, EventRetType
-from dssim.pubsub.base import CondType, ICondition, CallableConditionMixin, SubscriberMetadata, TestObject
+from dssim.pubsub.base import CondType, ICondition, CallableConditionMixin, SubscriberMetadata, TestObject, AlwaysTrue
 from dssim.pubsub.future import DSFuture
-from dssim.pubsub.process import DSProcess
 from dssim.pubsub.pubsub import TrackEvent
 
 
@@ -36,135 +34,322 @@ SignalType = Union["DSFilter", "DSCircuit"]
 SignalList = List[SignalType]
 
 
-class _ConditionWaitMixin:
+class _ConditionProxy(ICondition, CallableConditionMixin):
+    """Adapter that preserves ICondition semantics but avoids DSFuture shortcuts."""
+
+    def __init__(self, cond: ICondition) -> None:
+        self._cond = cond
+
+    def check(self, event: EventType) -> Tuple[bool, EventType]:
+        return self._cond.check(event)
+
+    def cond_value(self) -> EventType:
+        getter = getattr(self._cond, 'cond_value', None)
+        if callable(getter):
+            return getter()
+        return None
+
+
+class _FilterWaitMixin:
+    def _should_auto_detach_on_precheck_hit(self) -> bool:
+        """Allow subclasses to keep send()/wait() detach semantics consistent."""
+        return True
+
+    def _detach_on_precheck_hit(self) -> None:
+        if not self.one_shot or not self.is_attached():
+            return
+        if not self._should_auto_detach_on_precheck_hit():
+            return
+        self.detach()
+
+    def attach(self) -> Any:
+        raise NotImplementedError
+
+    def is_attached(self) -> bool:
+        raise NotImplementedError
+
     def gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
         # Self-contained gated wait: subscribe to condition endpoints while blocked.
+        if not self.is_attached():
+            self.attach()
+        cond = _ConditionProxy(self)
         with self.sim.observe_pre(self):
-            retval = yield from self.sim.gwait(timeout=timeout, cond=self, val=val)
+            retval = yield from self.sim.gwait(timeout=timeout, cond=cond, val=val)
         return retval
 
     async def wait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> EventType:
         # Self-contained gated wait: subscribe to condition endpoints while blocked.
+        if not self.is_attached():
+            self.attach()
+        cond = _ConditionProxy(self)
         with self.sim.observe_pre(self):
-            return await self.sim.wait(timeout=timeout, cond=self, val=val)
+            return await self.sim.wait(timeout=timeout, cond=cond, val=val)
 
     def check_and_gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
         # Pre-check first (without endpoint registration). Register producers only
         # when we actually need to block.
+        if not self.is_attached():
+            self.attach()
         signaled, event = self.check(TestObject)
         if signaled:
+            self._detach_on_precheck_hit()
             return event
+        cond = _ConditionProxy(self)
         with self.sim.observe_pre(self):
-            retval = yield from self.sim.gwait(timeout=timeout, cond=self, val=val)
+            retval = yield from self.sim.gwait(timeout=timeout, cond=cond, val=val)
         return retval
 
     async def check_and_wait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> EventType:
         # Pre-check first (without endpoint registration). Register producers only
         # when we actually need to block.
+        if not self.is_attached():
+            self.attach()
         signaled, event = self.check(TestObject)
         if signaled:
+            self._detach_on_precheck_hit()
             return event
+        cond = _ConditionProxy(self)
         with self.sim.observe_pre(self):
-            return await self.sim.wait(timeout=timeout, cond=self, val=val)
+            return await self.sim.wait(timeout=timeout, cond=cond, val=val)
 
 
-class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin):
-    ''' A future which can be used in the circuit. It can be used as a signal to a
-    circuit.
-
-    Features:
-    1. DSFilter can be reevaluated, i.e. the finished() is not monostable. It can
-    once return True and the next call return False (if reevaluate is True).
-    2. DSFilter can be pulsed, i.e. the finished() never returns True, but the call
-    to DSFilter can return True (signaled). This requires the filter to be reevaluated.
-    3. DSFilter can be negated. This is possible: filter = -DSFilter(...).
-    Such expression will always change the filter policy to be pulsed.
-    4. DSFilter can forward all the events to the attached cond (default for generators
-    and coroutines).
-    '''
+class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
+    '''Endpoint-driven filter (router) used as a leaf in circuit trees.'''
 
     class SignalType(Enum):
-        DEFAULT = 0  # Monostable. If once signaled, always signaled
-        REEVALUATE = 1  # Reevaluated after every event, i.e. the value changes after every event
-        PULSED = 2  # Returns "signaled" only when __call__(event) matches, but never stays in the state
+        LATCH = 0
+        REEVALUATE = 1
+        PULSED = 2
 
     ONE_LINER = None
 
-    def __init__(self, cond: CondType = None, sigtype: SignalType = SignalType.DEFAULT, signal_timeout: bool = False, forward_events: Optional[bool] = None, *args: Any, **kwargs: Any):
+    def __init__(
+        self,
+        cond: CondType = AlwaysTrue,
+        sigtype: SignalType = SignalType.LATCH,
+        signal_timeout: bool = False,
+        eps: Iterable["DSPub"] = (),
+        signal_to_endpoint: bool = True,
+        one_shot: bool = True,
+        *args: Any,
+        **kwargs: Any,
+    ):
+        """Create an endpoint-driven filter.
+
+        The filter subscribes to source endpoints and maintains local signal state
+        according to selected signal type (LATCH/REEVALUATE/PULSED).
+        """
         super().__init__(*args, **kwargs)
         self.expression: Optional[FilterExpression] = self.ONE_LINER
-        self.signals: SignalList = [self,]
-        self.positive = True  # positive sign
+        self.signals: SignalList = [self]
+        self.positive = True
         self.signaled = False
         self.value: EventType = None
         self.cond = cond
-        # Reevaluation means that after every event we receive we have to re-evaluate
-        # the condition
-        # If not reevaluation set, then once filter matches, it is flipped to signaled
-        self.pulse = sigtype in (self.SignalType.PULSED,)
-        self.reevaluate = sigtype in (self.SignalType.REEVALUATE, self.SignalType.PULSED,)
-        # Signalling timeout is for generators. If a generator returns with None, this means
-        # that it timed out. If signal_timeout is True, such timeout would be understood
-        # as a valid signal.
         self.signal_timeout = signal_timeout
+        self.signal_to_endpoint = signal_to_endpoint
+        self.one_shot = one_shot
+        self.pulse = sigtype in (self.SignalType.PULSED,)
+        self.reevaluate = sigtype in (self.SignalType.REEVALUATE, self.SignalType.PULSED)
+        self.forward_events = False  # intentionally unsupported in the new endpoint-driven design
+        self._is_attached = False
+        self._base_eps: Set["DSPub"] = set()
+        self._eps: Set["DSPub"] = set()
+        self._listeners: Set["DSCircuit"] = set()
+        self._pulse_token = -1
+        self._pulse_value: EventType = None
+
         if inspect.isgenerator(self.cond) or inspect.iscoroutine(self.cond):
-            # We create a new process from generator
-            self.cond = self.sim.process(self.cond).schedule(0)  # convert to DSProcess so we could get return value
-            # It is assumed that the coro / generator runs in the same 'context' as the current process.
-            # The coro / generator gets events which were planned for the current running process by default.
-            self.forward_events = (forward_events != False)  # True => True, None => True, False => False
-        else:
-            self.forward_events = (forward_events == True)  # True => True, None => False, False => False
+            # Wrapping is still supported for convenience, but no event forwarding is performed.
+            self.cond = self.sim.process(self.cond).schedule(0)
+        self._refresh_cond_traits()
+
+        source_eps = list(eps)
+        if len(source_eps) == 0:
+            get_eps = getattr(self.cond, 'get_eps', None)
+            if callable(get_eps):
+                source_eps = list(get_eps())
+        for ep in source_eps:
+            self.add_ep(ep)
+
+    def _refresh_cond_traits(self) -> None:
+        """Cache condition traits used in the hot check()/_match_event() path."""
+        self._cond_is_future = isinstance(self.cond, DSFuture)
+        self._cond_is_icond = isinstance(self.cond, ICondition)
+        self._cond_is_callable = callable(self.cond)
 
     def create_metadata(self, **kwargs: Any) -> SubscriberMetadata:
+        """Accept all incoming events; filtering is handled by check()."""
         self.meta = SubscriberMetadata()
-        # A condition accepts any event 
-        self.meta.cond.push(lambda e:True)
+        self.meta.cond.push(lambda _e: True)
         return self.meta
+
+    def add_ep(self, ep: "DSPub") -> None:
+        """Attach this filter to an endpoint PRE phase."""
+        self._base_eps.add(ep)
+        if not self._is_attached:
+            return
+        if ep in self._eps:
+            return
+        self._eps.add(ep)
+        ep.add_subscriber(self, ep.Phase.PRE)
+
+    def remove_ep(self, ep: "DSPub") -> None:
+        """Detach this filter from an endpoint and forget it from base endpoints."""
+        self._base_eps.discard(ep)
+        if ep not in self._eps:
+            return
+        ep.remove_subscriber(self, ep.Phase.PRE)
+        self._eps.remove(ep)
+
+    def register_listener(self, circuit: "DSCircuit") -> None:
+        """Register a parent circuit that should be notified on signal changes."""
+        self._listeners.add(circuit)
+
+    def unregister_listener(self, circuit: "DSCircuit") -> None:
+        """Remove a previously registered parent circuit listener."""
+        self._listeners.discard(circuit)
+
+    def set_one_shot(self, one_shot: bool = True) -> "DSFilter":
+        """Fluent builder setter for one-shot behavior."""
+        self.one_shot = one_shot
+        return self
+
+    def _should_auto_detach_on_precheck_hit(self) -> bool:
+        """Mirror send()/finish() semantics: keep attached while parent circuits listen."""
+        return not self._listeners
+
+    def attach(self) -> "DSFilter":
+        """Reconnect endpoint subscriptions remembered in _base_eps."""
+        self._attach_recursive(set())
+        return self
+
+    def is_attached(self) -> bool:
+        """Return whether this filter is currently connected to endpoints."""
+        return self._is_attached
+
+    def _attach_recursive(self, visited: Set[int]) -> None:
+        """Internal recursive attach helper with cycle guard."""
+        obj_id = id(self)
+        if obj_id in visited:
+            return
+        visited.add(obj_id)
+        self._is_attached = True
+        for ep in tuple(self._base_eps):
+            if ep in self._eps:
+                continue
+            self._eps.add(ep)
+            ep.add_subscriber(self, ep.Phase.PRE)
+
+    def detach(self) -> None:
+        """Disconnect endpoint subscriptions and listener links."""
+        self._detach_recursive(set())
+
+    def _detach_recursive(self, visited: Set[int]) -> None:
+        """Internal recursive detach helper with cycle guard."""
+        obj_id = id(self)
+        if obj_id in visited:
+            return
+        visited.add(obj_id)
+        self._is_attached = False
+        for circuit in tuple(self._listeners):
+            self.unregister_listener(circuit)
+        for ep in tuple(self._eps):
+            ep.remove_subscriber(self, ep.Phase.PRE)
+            self._eps.remove(ep)
+
+    def _match_event(self, event: EventType) -> Tuple[bool, EventType]:
+        """Evaluate condition against event and normalize matched value payload."""
+        if self._cond_is_future:
+            if not self.cond.finished():
+                return False, None
+            if self.cond.exc is not None:
+                return False, None
+            if self.cond.value is None and self.signal_timeout:
+                return True, None
+            if self.pulse:
+                return event == self.cond, event
+            return True, self.cond.value
+        if self.cond == event:
+            return True, event
+        if self._cond_is_icond:
+            signaled, value = self.cond.check(event)
+            if not signaled:
+                return False, None
+            cond_value = getattr(self.cond, 'cond_value', None)
+            if callable(cond_value):
+                return True, cond_value()
+            return True, value
+        if self._cond_is_callable and self.cond(event):
+            return True, event
+        return False, None
+
+    def _update_state(self, matched: bool, value: EventType, token: int) -> Tuple[bool, EventType]:
+        """Update latched/pulsed state and return normalized signal tuple."""
+        if self.pulse:
+            if matched:
+                self.value = value
+                self._pulse_token = token
+                self._pulse_value = value
+                return True, value
+            return False, None
+
+        if self.signaled and not self.reevaluate:
+            return True, self.cond_value()
+
+        self.signaled = matched
+        if matched:
+            self.value = value
+            return True, self.cond_value()
+        return False, None
+
+    def _emit_match(self, value: EventType) -> None:
+        """Publish a matched hit to own finish endpoint.
+
+        Caller is responsible for deciding whether the current event should emit.
+        """
+        if self.signal_to_endpoint:
+            wakeup = value if self.pulse else TestObject
+            self._finish_tx.signal(wakeup)
 
     @TrackEvent
     def send(self, event: EventType) -> bool:
-        # DSFilter.send must use condition semantics (not DSFuture.finish semantics).
-        if event is TestObject:
-            return self.check(event)[0]
+        """Receive endpoint event, update state, emit wakeup, notify parent circuits."""
+        token = self.sim.num_events
         was_signaled = self.signaled
-        signaled, _ = self.check(event)
-        # Wake waiters that observe this filter via _finish_tx.
-        # Use the original payload so REEVALUATE conditions keep correct state.
-        if signaled and (self.reevaluate or not was_signaled):
-            # PULSED filters must deliver the real event so waiters receive the value.
-            # REEVALUATE (non-pulse) fires TestObject so circuit.check(TestObject) re-reads
-            # each filter's cached signaled state without cross-contaminating other filters.
-            wakeup = event if self.pulse else TestObject
-            self._finish_tx.signal(wakeup)
+        signaled, value = self.check(event, token=token)
+        if signaled and (self.pulse or self.reevaluate or not was_signaled):
+            self._emit_match(value)
+        for circuit in tuple(self._listeners):
+            circuit.notify(self, token=token, signaled=signaled, value=value, event=event)
+        # When a filter is part of a circuit (has parent circuit listeners), one_shot auto-detach
+        # cannot be run when the parent circuit's AND hadn't been satisfied yet.
+        # This prevents PULSED filters to permanently disconnect after their first pulse
+        # never receiving subsequent pulses needed for the circuit to fire.
+        if signaled and self.one_shot and self._is_attached and not self._listeners:
+            self.detach()
         return signaled
 
-    def gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
-        # Keep DSFilter wait semantics value-centric even when already signaled.
-        if self.signaled:
-            return self.cond_value()
-        with self.sim.observe_pre(self):
-            retval = yield from self.sim.gwait(timeout=timeout, cond=self, val=val)
-        return retval
-
-    async def wait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> EventType:
-        # Keep DSFilter wait semantics value-centric even when already signaled.
-        if self.signaled:
-            return self.cond_value()
-        with self.sim.observe_pre(self):
-            return await self.sim.wait(timeout=timeout, cond=self, val=val)
-
     def __or__(self, other: "DSFilter") -> "DSCircuit":
+        """Build OR circuit with another filter/circuit leaf."""
         return DSCircuit.build(self, other, any)
 
     def __and__(self, other: "DSFilter") -> "DSCircuit":
+        """Build AND circuit with another filter/circuit leaf."""
         return DSCircuit.build(self, other, all)
-   
+
     def __neg__(self) -> "DSFilter":
         if not self.positive:
             raise ValueError('You can negate a DSFilter only once')
-        f = copy.copy(self)
-        f.pulse, f.reevaluate = True, True
+        f = DSFilter(
+            cond=self.cond,
+            sigtype=self.SignalType.PULSED,
+            signal_timeout=self.signal_timeout,
+            eps=self._eps,
+            signal_to_endpoint=self.signal_to_endpoint,
+            one_shot=self.one_shot,
+            sim=self.sim,
+        )
         f.positive = False
         return f
 
@@ -175,104 +360,106 @@ class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin
         return retval
 
     def finished(self) -> bool:
+        """Return current persistent signaled state."""
         return self.signaled
 
-    def _check_event(self, event: EventType, allow_forward: bool) -> Tuple[bool, EventType]:
-        signaled, value = False, None
-        if isinstance(self.cond, DSFuture):
-            # now we should get this signaled only after return
-            if self.forward_events and allow_forward:
-                # Process bootstrap must always be generator.send(None).
-                # If the process is not started yet, discard the triggering
-                # payload and use None to prime it.
-                forwarded = event
-                if isinstance(self.cond, DSProcess) and not self.cond.started():
-                    forwarded = None
-                # Route through simulation dispatch so condition-gated
-                # subscribers and finished processes are handled uniformly.
-                self.sim.send_object(self.cond, forwarded)
-            if self.cond.finished():
-                if self.cond.exc is not None:
-                    pass
-                elif self.cond.value is None and self.signal_timeout:
-                    signaled, value = True, None
-                elif self.pulse:
-                    signaled, value = (event == self.cond), event
-                else:
-                    signaled, value = True, self.cond.value
-        elif self.cond == event:
-            signaled, value = True, event
-        elif callable(self.cond) and self.cond(event):
-            signaled, value = True, event
-        # elif self is event:
-        #     signaled, value = True, event
-        if not self.pulse:
-            # A resetting- circuit only pulses its signal, but does not keep the signal, neither value
-            self.signaled = signaled
-        if signaled:
-            self._finish(value, async_future=False)
-            return True, self.cond_value()
-        return False, None
-
-    def check(self, event: EventType) -> Tuple[bool, EventType]:
+    def check(self, event: EventType, token: Optional[int] = None) -> Tuple[bool, EventType]:
+        """Evaluate this filter for event (or probe with TestObject)."""
         if self.signaled and not self.reevaluate:
             return True, self.cond_value()
-        # Probe mode used by check_and_wait/check_and_gwait.
-        # Keep already-signaled state untouched, otherwise evaluate without
-        # forwarding payload into nested futures/processes.
         if event is TestObject:
+            if self.pulse:
+                return False, None
             if self.signaled:
                 return True, self.cond_value()
-            return self._check_event(event, allow_forward=False)
-        return self._check_event(event, allow_forward=True)
+            if token is None:
+                token = self.sim.num_events
+            matched, value = self._match_event(event)
+            return self._update_state(matched, value, token)
+        if token is None:
+            token = self.sim.num_events
+        matched, value = self._match_event(event)
+        return self._update_state(matched, value, token)
 
     def get_eps(self) -> Set["DSPub"]:
-        retval = {self._finish_tx,}
-        get_eps = getattr(self.cond, 'get_eps', None)
-        if callable(get_eps):
-            retval |= set(get_eps())
-        return retval
+        """Expose wait endpoint used by observe_pre/wait infrastructure."""
+        return {self._finish_tx}
 
-    def finish(self, value: EventType) -> None:
-        self._finish(value, async_future=True)
+    def reset(self) -> None:
+        """Reset signal state and re-attach subscriptions if they were detached."""
+        self.attach()
+        self.signaled = False
+        self.value = None
+        self._pulse_token = -1
+        self._pulse_value = None
 
-    def _finish(self, value: EventType, async_future: bool) -> None:
+    def finish(self, value: EventType) -> EventType:
+        """Externally force signal state and notify endpoint/listeners."""
+        token = self.sim.num_events
+        self.exc = None
         self.value = value
-        if not self.pulse:
+        if self.pulse:
+            self.signaled = False
+            self._pulse_token = token
+            self._pulse_value = value
+            wakeup = value
+        else:
             self.signaled = True
-        if async_future:
-            # Async finish should wake waiters in probe mode so circuits evaluate
-            # cached signaled states and do not accidentally reset sibling filters.
-            self._finish_tx.signal(TestObject)
+            wakeup = TestObject
+        if self.signal_to_endpoint:
+            self._finish_tx.signal(wakeup)
+        for circuit in tuple(self._listeners):
+            circuit.notify(self, token=token, signaled=True, value=value, event=value)
+        if self.one_shot and self._is_attached and not self._listeners:
+            self.detach()
+        return value
 
     def cond_value(self) -> EventType:
+        """Return last matched (or externally finished) value."""
         return self.value
 
 
-    def get_process(self) -> Optional[DSProcess]:
-        return self.cond if isinstance(self.cond, DSProcess) else None
+class DSCircuit(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
+    '''Logical circuit composed from filters and nested circuits.'''
 
+    SignalType = DSFilter.SignalType
+    _NOTIFY = object()
 
-class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixin):
-    ''' DSCircuit aggregates several DSFutures / DSCircuits into logical
-    circuit (AND / OR).
-
-    It evaluates the circuit after every event by propagating down (to the signals)
-    all the events.
-    '''
-
-    def __init__(self, expression: FilterExpression, signals: SignalList, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        expression: FilterExpression,
+        signals: SignalList,
+        sigtype: SignalType = SignalType.REEVALUATE,
+        signal_to_endpoint: bool = True,
+        one_shot: bool = True,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        """Create logical circuit from filters/circuits and expression (all/any)."""
+        if len(signals) == 0:
+            raise ValueError('DSCircuit requires at least one signal.')
+        sim = kwargs.pop('sim', signals[0].sim)
+        super().__init__(*args, sim=sim, **kwargs)
         self.expression = expression
-        self.signals = signals
-        self.set_signals()
+        self.signals = list(signals)
         self.positive = True
         self.signaled = False
-        # The sim is required for awaitable
-        self.sim = self.signals[0].sim  # get the sim from the first signal
+        self.value: EventType = None
+        if sigtype == self.SignalType.PULSED:
+            raise ValueError('DSCircuit does not support SignalType.PULSED.')
+        self.reevaluate = sigtype == self.SignalType.REEVALUATE
+        self.signal_to_endpoint = signal_to_endpoint
+        self.one_shot = one_shot
+        self.sim = sim
+        self._is_attached = False
+        self.set_signals()
+        self._listeners: Set["DSCircuit"] = set()
+        self._pending = False
+        self._pending_token = -1
 
     @staticmethod
     def build(first: SignalType, second: SignalType, expr: FilterExpression) -> "DSCircuit":
+        """Build/merge flattened circuits when expression/sign polarity allows it."""
         if (first.expression == expr) and (second.expression == expr):
             return DSCircuit(expr, first.signals + second.signals)
         if (second.expression == expr) and (first.expression == DSFilter.ONE_LINER):
@@ -283,8 +470,6 @@ class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixi
                 first.signals.append(second)
                 first.set_signals()
                 return first
-            # A reset circuit is mergeable only if it is one_liner. The reason
-            # is that a reset circuit when signaled resets all his setters.
             if not second.positive:
                 assert type(first) == DSCircuit
                 first.signals.append(second)
@@ -292,18 +477,144 @@ class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixi
                 return first
         return DSCircuit(expr, [first, second])
 
+    def register_listener(self, circuit: "DSCircuit") -> None:
+        """Register parent circuit to receive deferred notify events."""
+        self._listeners.add(circuit)
+
+    def unregister_listener(self, circuit: "DSCircuit") -> None:
+        """Unregister parent circuit listener."""
+        self._listeners.discard(circuit)
+
+    def set_one_shot(self, one_shot: bool = True, recursive: bool = True) -> "DSCircuit":
+        """Fluent builder setter for one-shot behavior.
+
+        By default, this propagates to all child filters/circuits in the tree.
+        Keeping this only on the parent circuit is usually incorrect: child
+        filters remain one-shot by default, so they can detach after first hit
+        and stop feeding the parent even when the parent itself is configured
+        as non-one-shot.
+        """
+        self.one_shot = one_shot
+        if recursive:
+            for s in self.signals:
+                if isinstance(s, (DSFilter, DSCircuit)):
+                    s.set_one_shot(one_shot)
+        return self
+
+    def _should_auto_detach_on_precheck_hit(self) -> bool:
+        """Mirror send()/flush() semantics: one-shot circuit detaches on first hit."""
+        return True
+
+    def attach(self) -> "DSCircuit":
+        """Reconnect nested filter subscriptions and listener graph."""
+        self._attach_recursive(set())
+        return self
+
+    def is_attached(self) -> bool:
+        """Return whether this circuit listener graph is currently active."""
+        return self._is_attached
+
+    def _attach_recursive(self, visited: Set[int]) -> None:
+        """Internal recursive attach helper with cycle guard."""
+        obj_id = id(self)
+        if obj_id in visited:
+            return
+        visited.add(obj_id)
+        self._is_attached = True
+        for s in self.signals:
+            attach_recursive = getattr(s, '_attach_recursive', None)
+            if callable(attach_recursive):
+                attach_recursive(visited)
+            else:
+                attach_signal = getattr(s, 'attach', None)
+                if callable(attach_signal):
+                    attach_signal()
+        self._attach_signals()
+
+    def detach(self) -> None:
+        """Recursively disconnect nested subscriptions and listener links."""
+        self._detach_recursive(set())
+
+    def _detach_recursive(self, visited: Set[int]) -> None:
+        """Internal recursive detach helper with cycle guard."""
+        obj_id = id(self)
+        if obj_id in visited:
+            return
+        visited.add(obj_id)
+        self._is_attached = False
+        for s in self.signals:
+            unregister = getattr(s, 'unregister_listener', None)
+            if callable(unregister):
+                unregister(self)
+        for circuit in tuple(self._listeners):
+            self.unregister_listener(circuit)
+        for s in self.signals:
+            detach_recursive = getattr(s, '_detach_recursive', None)
+            if callable(detach_recursive):
+                detach_recursive(visited)
+        self._pending = False
+        self._pending_token = -1
+
+    def notify(
+        self,
+        source: SignalType,
+        token: int,
+        signaled: bool,
+        value: EventType,
+        event: EventType,
+    ) -> None:
+        """Queue deferred circuit re-evaluation for this simulation event token."""
+        _ = (source, signaled, value, event)
+        if token > self._pending_token:
+            self._pending_token = token
+        if not self._pending:
+            self._pending = True
+            self.sim.signal(self._NOTIFY, self)
+
+    def _attach_signals(self) -> None:
+        """Attach this circuit as listener to all direct child signals."""
+        if not self._is_attached:
+            return
+        for s in self.signals:
+            register = getattr(s, 'register_listener', None)
+            if callable(register):
+                register(self)
+
     def set_signals(self) -> None:
+        """Split children into setters and resetters and wire listeners."""
         self.setters, self.resetters = [], []
         for s in self.signals:
             if s.positive:
                 self.setters.append(s)
             else:
                 self.resetters.append(s)
+        self._attach_signals()
+
+    def _reset_signal(self, signal: SignalType) -> None:
+        """Reset one child signal via reset() if available, else by attributes."""
+        reset = getattr(signal, 'reset', None)
+        if callable(reset):
+            reset()
+            return
+        if hasattr(signal, 'signaled'):
+            signal.signaled = False
+        if hasattr(signal, 'value'):
+            signal.value = None
+
+    def reset(self) -> None:
+        """Reset this circuit and all setter children; re-attach subscriptions."""
+        self.attach()
+        self.signaled = False
+        self.value = None
+        for el in self.setters:
+            self._reset_signal(el)
 
     def __or__(self, other: "DSCircuit") -> "DSCircuit":
+        """Build OR circuit with another circuit/filter."""
         return DSCircuit.build(self, other, any)
 
     def __and__(self, other: "DSCircuit") -> "DSCircuit":
+        """Build AND circuit with another circuit/filter."""
         return DSCircuit.build(self, other, all)
 
     def __neg__(self) -> "DSCircuit":
@@ -311,19 +622,11 @@ class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixi
         return self
 
     def cond_value(self) -> Dict[Union[DSFilter, "DSCircuit"], EventType]:
-        retval: Dict[Union[DSFilter, "DSCircuit"], EventType] = {}
-        for el in self.setters:
-            if not el.finished():
-                continue
-            if isinstance(el, DSCircuit):
-                embedded = el.cond_value()
-                retval.update(embedded)
-            elif hasattr(el, 'cond_value'):
-                retval[el] = el.cond_value()
-            else:
-                retval[el] = el.value
-        return retval
-    
+        """Return current aggregated payload map for signaled branch."""
+        if isinstance(self.value, dict):
+            return self.value
+        return {}
+
     def __str__(self) -> str:
         expression = ' | ' if self.expression == any else ' & '
         strings = [str(v) for v in self.setters + self.resetters]
@@ -332,64 +635,138 @@ class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixi
         return f'{sign}({retval})'
 
     def finished(self) -> bool:
+        """Return current circuit signaled state."""
         return self.signaled
 
-    def _gather_results(self, event: EventType, futures: SignalList) -> List[bool]:
-        retval = []
-        for fut in futures:
-            if isinstance(fut, ICondition):
-                retval.append(fut.check(event)[0])
+    def _state_for(self, signal: SignalType, token: Optional[int], drive_event: Optional[EventType]) -> Tuple[bool, EventType]:
+        """Read child state for direct drive evaluation or deferred token-based flush."""
+        if drive_event is not None:
+            if isinstance(signal, ICondition):
+                return signal.check(drive_event)
+            signaled = signal.finished()
+            if not signaled:
+                return False, None
+            if hasattr(signal, 'cond_value'):
+                return True, signal.cond_value()
+            return True, signal.value
+
+        if isinstance(signal, DSFilter) and signal.pulse:
+            active = token is not None and signal._pulse_token == token
+            if active:
+                return True, signal._pulse_value
+            return False, None
+
+        signaled = signal.finished()
+        if not signaled:
+            return False, None
+        if hasattr(signal, 'cond_value'):
+            return True, signal.cond_value()
+        return True, signal.value
+
+    @staticmethod
+    def _payload_from_states(states: List[Tuple[SignalType, bool, EventType]]) -> Dict[Union[DSFilter, "DSCircuit"], EventType]:
+        """Flatten child states into payload map of signal->value."""
+        payload: Dict[Union[DSFilter, "DSCircuit"], EventType] = {}
+        for signal, signaled, value in states:
+            if not signaled:
+                continue
+            if isinstance(signal, DSCircuit) and isinstance(value, dict):
+                payload.update(value)
             else:
-                retval.append(fut.finished())
-        return retval
+                payload[signal] = value
+        return payload
+
+    def _evaluate(self, token: Optional[int], drive_event: Optional[EventType]) -> Tuple[bool, Optional[Dict[Union[DSFilter, "DSCircuit"], EventType]]]:
+        """Evaluate full circuit logic, including resetter handling and payload build."""
+        if self.signaled and not self.reevaluate:
+            return True, self.cond_value()
+        setter_states = [(*((s,) + self._state_for(s, token, drive_event)),) for s in self.setters]
+        resetter_states = [(*((s,) + self._state_for(s, token, drive_event)),) for s in self.resetters]
+        setter_flags = [state[1] for state in setter_states]
+        resetter_flags = [state[1] for state in resetter_states]
+
+        if not self.positive:
+            signaled = len(setter_flags) > 0 and self.expression(setter_flags)
+            if signaled:
+                for el in self.setters:
+                    self._reset_signal(el)
+                payload = self._payload_from_states(setter_states)
+                self.value = payload
+                self.signaled = False
+                return True, payload
+            self.value = None
+            self.signaled = False
+            return False, None
+
+        reset_signal = len(resetter_flags) > 0 and self.expression(resetter_flags)
+        if reset_signal:
+            for el in self.setters:
+                self._reset_signal(el)
+            self.signaled = False
+            self.value = None
+            return False, None
+
+        signaled = len(setter_flags) > 0 and self.expression(setter_flags)
+        if signaled:
+            payload = self._payload_from_states(setter_states)
+            self.signaled = True
+            self.value = payload
+            return True, payload
+        self.signaled = False
+        self.value = None
+        return False, None
+
+    def _flush_notify(self) -> bool:
+        """Perform deferred one-shot evaluation for the latest pending token."""
+        token = self._pending_token if self._pending_token >= 0 else None
+        self._pending = False
+        self._pending_token = -1
+        signaled, payload = self._evaluate(token=token, drive_event=None)
+        if signaled and self.signal_to_endpoint:
+            self._finish_tx.signal(payload)
+        for circuit in tuple(self._listeners):
+            circuit.notify(self, token=(token if token is not None else self.sim.num_events), signaled=signaled, value=payload, event=payload)
+        if signaled and self.one_shot and self._is_attached:
+            self.detach()
+        return signaled
+
+    @TrackEvent
+    def send(self, event: EventType) -> bool:
+        """Handle direct event drive or internal deferred _NOTIFY flush."""
+        if event is self._NOTIFY:
+            return self._flush_notify()
+        token = self.sim.num_events
+        signaled, payload = self._evaluate(token=token, drive_event=event)
+        if signaled and self.signal_to_endpoint:
+            self._finish_tx.signal(payload)
+        for circuit in tuple(self._listeners):
+            circuit.notify(self, token=token, signaled=signaled, value=payload, event=event)
+        if signaled and self.one_shot and self._is_attached:
+            self.detach()
+        return signaled
 
     def get_eps(self) -> Set["DSPub"]:
-        retval = set()
-        # Including self._finish_tx would create loop dependency when waiting on self (i.e. await self):
-        # 1. When this is finished, it would signal _finish_tx
-        # 2. _finish_tx would produce an event which would be caught by self and self would signal again
-        # Another solution for this is not to produce signaled state if the event comes from self._finish_tx
-        for s in self.signals:
-            retval |= s.get_eps()
-        return retval
+        """Expose wait endpoint used by observe_pre/wait infrastructure."""
+        return {self._finish_tx}
 
     def check(self, event: EventType) -> Tuple[bool, EventType]:
-        ''' Handles logic for the event. Pushes the event to the inputs and then evaluates the circuit. '''
-        signaled = False
-        # In the following, we have to send the event to the whole circuit. The reason is that
-        # once some gate is signaled, it could be reset later; however if the signal stops event
-        # to be spread to other gates; the other gates could be activated as well with the same
-        # event.
-        if not self.positive:
-            # For resetting signals we check if they are signaled
-            if len(self.setters) > 0:
-                results = self._gather_results(event, self.setters)
-                signaled = self.expression(results)
+        """Evaluate/probe this circuit and return (signaled, payload)."""
+        if event is TestObject:
+            if self.signaled:
+                return True, self.cond_value()
+            token = self.sim.num_events
+            signaled, payload = self._evaluate(token=token, drive_event=event)
             if signaled:
-                # and if they are signaled, they reset the input setters
-                for el in self.setters:
-                    el.signaled = False
-        else:
-            # For normal (mixed signals) we check first if the logic of reseters reset the circuit
-            if len(self.resetters) > 0:
-                results = self._gather_results(event, self.resetters)
-                reset_signal = self.expression(results)
-            else:
-                reset_signal = False
-            if reset_signal:
-                # If they do, they reset the input setters
-                for el in self.setters:
-                    el.signaled = False
-                signaled = False
-            else:
-                if len(self.setters) > 0:
-                    results = self._gather_results(event, self.setters)
-                    signaled = self.expression(results)
-            self.signaled = signaled
-            if signaled:
-                self.finish(self.cond_value())
-        if signaled:
+                return True, payload
+            return False, None
+        if isinstance(event, dict) and len(event) > 0 and all(isinstance(k, (DSFilter, DSCircuit)) for k in event.keys()):
+            return True, event
+        if self.signaled and event == self.value:
             return True, self.cond_value()
+        token = self.sim.num_events
+        signaled, payload = self._evaluate(token=token, drive_event=event)
+        if signaled:
+            return True, payload
         return False, None
     
 

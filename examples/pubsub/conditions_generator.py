@@ -11,7 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSSimulation, DSFilter as f
+from dssim import DSSimulation
+
+
+def f(*args, **kwargs):
+    return sim.filter(*args, **kwargs)
 
 
 def return_apologize_after_10():
@@ -23,7 +27,7 @@ def waiting_for_table_service():
     cond = f({'food': 'ham'}) & f({'food': 'eggs'}) & f({'drink': 'tea'}) & f({'tool': 'fork'}) & f({'tool': 'knife'}) | \
         f({'food': 'yogurt'}) & f({'food': 'muesli'}) & (f({'drink': 'milk'}) | f({'drink': 'juice'})) & f({'tool': 'spoon'})
     # print(cond)  # here you can printout the condition
-    ret = yield from sim.gwait(30, cond=cond)
+    ret = yield from cond.gwait(30)
     assert tuple(ret.values()) == ({'food': 'yogurt'}, {'food': 'muesli'}, {'drink': 'milk'}, {'tool': 'spoon'})
     if ret is not None:
         ret = {'service': 'good'}
@@ -36,14 +40,14 @@ def demo_filtering():
     t2 = sim.schedule_event(5, {'greeting': 'world'})
     # The following OR is a bit artificial (or-ing 2 same structures), but it will be constructed. See
     # the next case for explanation why we constructed it.
-    ret = yield from sim.gwait(6, cond=-f(t1) | (f(t0) & f(t2)) | (f(t2) & f(t0)))
+    ret = yield from (-f(t1) | (f(t0) & f(t2)) | (f(t2) & f(t0))).gwait(6)
     assert sim.time == time + 5
 
     time = sim.time
     t0 = sim.schedule_event(3, {'greeting': 'hello'})
     t1 = sim.schedule_event(4, {'greeting': 'I dont like you'})
     t2 = sim.schedule_event(5, {'greeting': 'world'})
-    ret = yield from sim.gwait(6, cond=-f(t1) & (f(t0) & f(t2)) | (f(t2) & f(t0)))
+    ret = yield from (-f(t1) & (f(t0) & f(t2)) | (f(t2) & f(t0))).gwait(6)
     assert sim.time == time + 5
 
     # Test compounded expressions in the resetter
@@ -55,7 +59,7 @@ def demo_filtering():
     t4 = sim.schedule_event(7, {'greeting': '!'})
     t5 = sim.schedule_event(8, {'greeting': 'hello'})
     t6 = sim.schedule_event(9, {'greeting': 'world'})
-    ret = yield from sim.gwait(10, cond=-(f(t1) & f(t3)) & f(t0) & f(t2) & f(t4))
+    ret = yield from (-(f(t1) & f(t3)) & f(t0) & f(t2) & f(t4)).gwait(10)
     assert sim.time == time + 9
 
     time = sim.time
@@ -66,20 +70,20 @@ def demo_filtering():
     t4 = sim.schedule_event(7, {'greeting': 'hello'})
     t5 = sim.schedule_event(8, {'greeting': 'world'})
     t6 = sim.schedule_event(9, {'greeting': 'Neither I like you'})
-    ret = yield from sim.gwait(10, cond=-(f(t6) | f(t2)) & f(t0) & f(t1) & f(t3))
+    ret = yield from (-(f(t6) | f(t2)) & f(t0) & f(t1) & f(t3)).gwait(10)
     assert sim.time == time + 8
     sim.cleanup()
 
     time = sim.time
     t1, t2 = sim.schedule_event(1, {'value': 'ham'}), sim.schedule_event(2, {'value': 'eggs'})
-    ret = yield from sim.gwait(cond=f(t1) & f(t2))
+    ret = yield from (f(t1) & f(t2)).gwait()
     assert tuple(ret.values()) == ({'value': 'ham'}, {'value': 'eggs'})
     assert sim.time == time + 2
     print(ret)
     
     time = sim.time
     t1, t2 = sim.schedule_event(1, {'value': 'ham'}), sim.schedule_event(2, {'value': 'eggs'})
-    ret = yield from sim.gwait(cond=f(t1) | f(t2))
+    ret = yield from (f(t1) | f(t2)).gwait()
     assert tuple(ret.values()) == ({'value': 'ham'},)
     assert sim.time == time + 1
     print(ret)
@@ -87,7 +91,7 @@ def demo_filtering():
 
     time = sim.time
     t1, t2, t3 = [sim.schedule_event(i, i + 1) for i in range(3)]
-    ret = yield from sim.gwait(cond=f(t1) & f(t2) | f(t3))
+    ret = yield from (f(t1) & f(t2) | f(t3)).gwait()
     assert tuple(ret.values()) == (1, 2)  # after t1 and t2 it should finish, so the last is t2
     assert sim.time == time + 1
     print(ret)  
@@ -95,7 +99,7 @@ def demo_filtering():
 
     time = sim.time
     t1, t2, t3 = sim.schedule_event(3, {'value': 'ham'}), sim.schedule_event(1, {'value': 'ham'}), sim.schedule_event(2, {'value': 'eggs'})
-    ret = yield from sim.gwait(cond=f(t1) & f(t2) | f(t3))
+    ret = yield from (f(t1) & f(t2) | f(t3)).gwait()
     assert tuple(ret.values()) == ({'value': 'ham'}, {'value': 'ham'})  # the first event {'value': 'ham'} satisfies both f(t1) and f(t2) filters, hence it finishes after 1 second
     assert sim.time == time + 1
     print(ret)
@@ -105,7 +109,7 @@ def demo_filtering():
     t1, t2 = sim.schedule_event(1, {'food': 'ham'}), sim.schedule_event(2, {'food': 'eggs'}),
     t3, = sim.schedule_event(3, {'drink': 'tea'}),
     t4, t5 = sim.schedule_event(4, {'tool': 'knife'}), sim.schedule_event(6, {'tool': 'fork'}), 
-    ret = yield from sim.gwait(cond=f(lambda e:'food' in e) & f(t4) & f(t5) | f(lambda e:'drink' in e))
+    ret = yield from (f(lambda e:'food' in e) & f(t4) & f(t5) | f(lambda e:'drink' in e)).gwait()
     assert tuple(ret.values()) == ({'drink': 'tea'},)  # waiting for either food with tools or a drink - first we are satisfied with the drink
     assert sim.time == time + 3
     print(ret)
@@ -113,10 +117,13 @@ def demo_filtering():
 
     time = sim.time
     t0 = sim.schedule_event(10, {'apologize': 'sorry'})
-    t1, t2 = sim.schedule_event(3, {'food': 'ham'}), sim.schedule_event(1, {'food': 'eggs'}), 
-    t3, t4 = sim.schedule_event(5, {'food': 'yogurt'}), sim.schedule_event(2, {'food': 'muesli'}),
-    t5, t6, t7 = sim.schedule_event(7, {'drink': 'tea'}), sim.schedule_event(6, {'drink': 'juice'}), sim.schedule_event(3, {'drink': 'milk'}),
-    ret = yield from sim.gwait(cond=f(waiting_for_table_service(), sim=sim) | f(t0))
+    # With endpoint-driven filters there is no implicit event forwarding into nested
+    # processes, so food/drink events must be routed explicitly to the table-service process.
+    table_service = sim.schedule(0, waiting_for_table_service())
+    t1, t2 = sim.schedule_event(3, {'food': 'ham'}, table_service), sim.schedule_event(1, {'food': 'eggs'}, table_service), 
+    t3, t4 = sim.schedule_event(5, {'food': 'yogurt'}, table_service), sim.schedule_event(2, {'food': 'muesli'}, table_service),
+    t5, t6, t7 = sim.schedule_event(7, {'drink': 'tea'}, table_service), sim.schedule_event(6, {'drink': 'juice'}, table_service), sim.schedule_event(3, {'drink': 'milk'}, table_service),
+    ret = yield from (f(table_service, sim=sim) | f(t0)).gwait()
     # We were served with yogurt + muesli + milk + spoon in table service; but the waiting_for_table_service returns only one event
     assert tuple(ret.values()) == ({'service': 'good'},)
     assert sim.time == time + 5
@@ -126,7 +133,7 @@ def demo_filtering():
     # Test case: A generator "return_greetings_after_10" is going to send event after we return from wait. We should not be affected.
     time = sim.time
     t0 = sim.schedule_event(3, {'greeting': 'hello'})
-    ret = yield from sim.gwait(cond=f(t0) | f(return_apologize_after_10(), sim=sim))
+    ret = yield from (f(t0) | f(return_apologize_after_10(), sim=sim)).gwait()
     assert tuple(ret.values()) == ({'greeting': 'hello'},)
     assert sim.time == time + 3
     ret = yield from sim.gwait(30, cond=lambda e:True)
@@ -135,9 +142,9 @@ def demo_filtering():
 
     time = sim.time
     # The following timeout events from particular filters will not be forwarded to this process unless we subscribe for it.
-    # sim.gwait(cond=c) will subscribe for these events via the DSFuture branch
+    # c.gwait() will subscribe for these events via the DSFuture branch.
     c = f(sim.gsleep(2), signal_timeout=True, sim=sim) & f(sim.gsleep(6), signal_timeout=True, sim=sim) | f(sim.gsleep(4), signal_timeout=True, sim=sim) & f(sim.gsleep(5), signal_timeout=True, sim=sim)
-    ret = yield from sim.gwait(cond=c)
+    ret = yield from c.gwait()
     assert sim.time == time + 5  # wait for (2 and 6) or (1 and 5) => signal at 1 then 5 makes this true
     assert tuple(ret.values()) == (None, None)
 
@@ -146,7 +153,5 @@ if __name__ == '__main__':
     sim = DSSimulation()
     proc = sim.schedule(0, demo_filtering())
     retval = sim.run()
-    # Keep time deterministic while allowing internal event-bookkeeping
-    # differences (e.g., stale timeout marker handling strategy).
     assert retval[0] == 79
-    assert retval[1] >= 82
+    assert retval[1] == 73

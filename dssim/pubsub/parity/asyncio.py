@@ -192,7 +192,7 @@ async def gather(*coros_or_futures, return_exceptions=False):
     loop = get_running_loop()
     filters = [DSFilter(c, sim=loop) for c in coros_or_futures]
     f = DSCircuit(all, filters, sim=loop)
-    retval = await f
+    retval = await f.wait()
     return [retval[f] for f in filters]  # values have to be sorted by input order
 
 async def sleep(delay, result=None):
@@ -215,7 +215,8 @@ async def wait(aws, *, timeout=None, return_when=ALL_COMPLETED):
         f = DSCircuit(all, filters)
     else:
         f = DSCircuit(any, filters)
-    retval = await f
+    wait_timeout = float('inf') if timeout is None else timeout
+    retval = await f.wait(wait_timeout)
     return [retval[f] for f in filters]  # values have to be sorted by input order
 
 

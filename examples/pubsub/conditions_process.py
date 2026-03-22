@@ -11,7 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dssim import DSProcess, DSSchedulable, DSSimulation, DSFilter as _f
+from dssim import DSProcess, DSSchedulable, DSSimulation
+
+
+def f(*args, **kwargs):
+    return sim.filter(*args, **kwargs)
 
 
 @DSSchedulable
@@ -35,14 +39,14 @@ def main():
 
     time = sim.time
     proc = DSProcess(process_with_no_external_events()).schedule(0)
-    ret = yield from sim.gwait(cond=_f(proc))
+    ret = yield from f(proc).gwait()
     print(sim.time, ret)
     assert sim.time == time + 3
     assert ret == 'Hello from introvert'
 
     time = sim.time
     proc = sim.schedule(0, DSProcess(process_with_no_external_events()))
-    ret = yield from sim.gwait(cond=_f(proc))
+    ret = yield from f(proc).gwait()
     print(sim.time, ret)
     assert sim.time == time + 3
     assert ret == 'Hello from introvert'
@@ -50,7 +54,7 @@ def main():
     time = sim.time
     proc = sim.schedule(0, DSProcess(process_with_external_events()))
     sim.schedule(4, pusher('first', proc))
-    ret = yield from sim.gwait(cond=_f(proc))  # this will work despite the fact that the last push was not scheduled by our process
+    ret = yield from f(proc).gwait()  # this will work despite the fact that the last push was not scheduled by our process
     print(sim.time, ret)
     assert sim.time == time + 4
     assert ret == 'Hello from extrovert, last event I had was "signal from pusher first"'
@@ -72,29 +76,28 @@ def main():
     # print(sim.time, ret)
 
     time = sim.time
-    filt = _f(process_with_external_events())
-    proc = filt.get_process()
+    proc = sim.schedule(0, DSProcess(process_with_external_events()))
+    filt = f(proc)
     sim.schedule(6, pusher('third', proc))
-    ret = yield from sim.gwait(cond=filt)
+    ret = yield from filt.gwait()
     print(sim.time, ret)
     assert sim.time == time + 6
     assert ret == 'Hello from extrovert, last event I had was "signal from pusher third"'
 
     time = sim.time
-    filt = _f(DSProcess(process_with_external_events()).schedule(0))
-    proc = filt.get_process()
+    proc = DSProcess(process_with_external_events()).schedule(0)
+    filt = f(proc)
     sim.schedule(7, pusher('forth', proc))
-    ret = yield from sim.gwait(cond=filt)
+    ret = yield from filt.gwait()
     print(sim.time, ret)
     assert sim.time == time + 7
     assert ret == 'Hello from extrovert, last event I had was "signal from pusher forth"'
 
     time = sim.time
     proc = sim.schedule(0, DSProcess(process_with_external_events()))
-    filt = _f(proc)
-    assert proc == filt.get_process()
+    filt = f(proc)
     sim.schedule(8, pusher('fifth', proc))
-    ret = yield from sim.gwait(cond=filt)
+    ret = yield from filt.gwait()
     print(sim.time, ret)
     assert sim.time == time + 8
     assert ret == 'Hello from extrovert, last event I had was "signal from pusher fifth"'
@@ -104,7 +107,5 @@ if __name__ == '__main__':
     sim = DSSimulation()
     sim.schedule(0, main())
     retval = sim.run(100)
-    # Keep time deterministic while allowing internal event-bookkeeping
-    # differences (e.g., stale timeout marker handling strategy).
     assert retval[0] == 31
-    assert retval[1] >= 30
+    assert retval[1] == 36

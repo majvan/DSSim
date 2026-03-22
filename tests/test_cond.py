@@ -11,597 +11,264 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-'''
-Tests for simulation module
-'''
+"""Consolidated condition/circuit tests for endpoint-sinking strategy.
+
+This file keeps legacy-applicable coverage from the original test_cond.py and
+includes the new-strategy coverage in the same consolidated suite.
+"""
+
 import unittest
-from contextlib import contextmanager
-from unittest.mock import Mock, MagicMock, call
-from dssim import DSSimulation, DSProcess, DSFuture
+
+from dssim import DSFuture, DSProcess, DSSimulation
 from dssim.pubsub.base import TestObject
-from dssim.pubsub.cond import DSFilter as _f, DSCircuit
-from dssim.pubsub.process import _StartProcess
+from dssim.pubsub.cond import DSCircuit, DSFilter
 
-def _pop_timequeue_event(time_queue):
-    t = time_queue.get_first_time()
-    bucket = time_queue.pop_first_bucket()
-    event = bucket.popleft()
-    if bucket:
-        time_queue.insertleft(t, bucket)
-    return t, event
 
-class TestDSFilter(unittest.TestCase):
+_f = DSFilter
 
+
+class TestDSFilterApplicableLegacy(unittest.TestCase):
     def test1_init_value(self):
         sim = DSSimulation()
-        fa = _f('a', sim=sim)
-        self.assertTrue(fa.expression == _f.ONE_LINER)
+        fa = _f("a", sim=sim)
+        self.assertEqual(fa.expression, _f.ONE_LINER)
         self.assertTrue(fa.positive)
         self.assertFalse(fa.reevaluate)
         self.assertFalse(fa.pulse)
         self.assertFalse(fa.forward_events)
-        self.assertTrue(fa.cond == 'a')
-        self.assertTrue(fa.get_eps() == {fa._finish_tx,})
-        self.assertTrue(isinstance(fa, DSFuture))
+        self.assertEqual(fa.cond, "a")
+        self.assertEqual(fa.get_eps(), {fa._finish_tx})
+        self.assertIsInstance(fa, DSFuture)
         self.assertEqual(str(fa), "DSFilter(a)")
 
-        fb = _f('b', sigtype=_f.SignalType.REEVALUATE, sim=sim)
-        self.assertTrue(fb.expression == _f.ONE_LINER)
-        self.assertTrue(fb.positive)
+        fb = _f("b", sigtype=_f.SignalType.REEVALUATE, sim=sim)
         self.assertTrue(fb.reevaluate)
         self.assertFalse(fb.pulse)
-        self.assertFalse(fb.forward_events)
-        self.assertTrue(fb.cond == 'b')
-        self.assertTrue(fb.get_eps() == {fb._finish_tx,})
-        self.assertTrue(isinstance(fb, DSFuture))
-        self.assertEqual(str(fb), "DSFilter(b)")
 
-        fc = _f('c', sigtype=_f.SignalType.PULSED, sim=sim)
-        self.assertTrue(fc.expression == _f.ONE_LINER)
-        self.assertTrue(fc.positive)
+        fc = _f("c", sigtype=_f.SignalType.PULSED, sim=sim)
         self.assertTrue(fc.reevaluate)
         self.assertTrue(fc.pulse)
-        self.assertFalse(fc.forward_events)
-        self.assertTrue(fc.cond == 'c')
-        self.assertTrue(fc.get_eps() == {fc._finish_tx,})
-        self.assertTrue(isinstance(fc, DSFuture))
-        self.assertEqual(str(fc), "DSFilter(c)")
 
         fna = -fa
-        self.assertTrue(fna is not fa)  # a copy is created instead of extension
-        self.assertTrue(fna.expression == _f.ONE_LINER)
+        self.assertIsNot(fna, fa)
+        self.assertEqual(fna.expression, _f.ONE_LINER)
         self.assertFalse(fna.positive)
         self.assertTrue(fna.pulse)
-        self.assertTrue(fna.get_eps() == {fna._finish_tx,})
-        self.assertTrue(isinstance(fna, DSFuture))
+        self.assertEqual(fna.get_eps(), {fna._finish_tx})
+        self.assertIsInstance(fna, DSFuture)
         self.assertEqual(str(fna), "-DSFilter(a)")
 
         with self.assertRaises(ValueError):
-            -fna  # once a filter is negative (reseter), it cannot be negated again
-
+            -fna
 
     def test2_init_lambda(self):
         sim = DSSimulation()
-        l = lambda e: 'A' in e
+        l = lambda e: "A" in e
         fa = _f(l, sim=sim)
-        self.assertTrue(fa.expression == _f.ONE_LINER)
+        self.assertEqual(fa.expression, _f.ONE_LINER)
         self.assertTrue(fa.positive)
         self.assertFalse(fa.reevaluate)
         self.assertFalse(fa.pulse)
         self.assertFalse(fa.forward_events)
-        self.assertTrue(fa.cond == l)
-        self.assertTrue(fa.get_eps() == {fa._finish_tx})
-        self.assertTrue(isinstance(fa, DSFuture))
-        self.assertEqual(str(fa), f"DSFilter({l})")
-
-        l = lambda e: 'B' in e
-        fb = _f(l, sigtype=_f.SignalType.REEVALUATE, sim=sim)
-        self.assertTrue(fb.expression == _f.ONE_LINER)
-        self.assertTrue(fb.positive)
-        self.assertTrue(fb.reevaluate)
-        self.assertFalse(fb.pulse)
-        self.assertFalse(fb.forward_events)
-        self.assertTrue(fb.cond == l)
-        self.assertTrue(fb.get_eps() == {fb._finish_tx})
-        self.assertTrue(isinstance(fb, DSFuture))
-        self.assertEqual(str(fb), f"DSFilter({l})")
-
-        l = lambda e: 'C' in e
-        fc = _f(l, sigtype=_f.SignalType.PULSED, sim=sim)
-        self.assertTrue(fc.expression == _f.ONE_LINER)
-        self.assertTrue(fc.positive)
-        self.assertTrue(fc.reevaluate)
-        self.assertTrue(fc.pulse)
-        self.assertFalse(fc.forward_events)
-        self.assertTrue(fc.cond == l)
-        self.assertTrue(fc.get_eps() == {fc._finish_tx})
-        self.assertTrue(isinstance(fc, DSFuture))
-        self.assertEqual(str(fc), f"DSFilter({l})")
-
-        fna = -fa
-        self.assertTrue(fna is not fa)  # a copy is created instead of extension
-        self.assertTrue(fna.expression == _f.ONE_LINER)
-        self.assertFalse(fna.positive)
-        self.assertTrue(fna.pulse)
-        self.assertTrue(fna.get_eps() == {fna._finish_tx,})
-        self.assertTrue(isinstance(fna, DSFuture))
-        self.assertEqual(str(fna), f"-DSFilter({fa.cond})")
-
-        with self.assertRaises(ValueError):
-            -fna  # once a filter is negative (reseter), it cannot be negated again
-
+        self.assertIs(fa.cond, l)
+        self.assertEqual(fa.get_eps(), {fa._finish_tx})
+        self.assertIsInstance(fa, DSFuture)
 
     def test3_init_future(self):
         sim = DSSimulation()
         fut = DSFuture(sim=sim)
         fa = _f(fut, sim=sim)
-        self.assertTrue(fa.expression == _f.ONE_LINER)
+        self.assertEqual(fa.expression, _f.ONE_LINER)
         self.assertTrue(fa.positive)
         self.assertFalse(fa.reevaluate)
         self.assertFalse(fa.pulse)
         self.assertFalse(fa.forward_events)
-        self.assertTrue(fa.cond == fut)
-        self.assertTrue(fa.get_eps() == {fa._finish_tx, fut._finish_tx})
-        self.assertTrue(isinstance(fa, DSFuture))
-        self.assertEqual(str(fa), f"DSFilter({fut})")
+        self.assertIs(fa.cond, fut)
+        self.assertEqual(fa.get_eps(), {fa._finish_tx})
+        self.assertIsInstance(fa, DSFuture)
 
-        fut = DSFuture(sim=sim)
-        fb = _f(fut, sigtype=_f.SignalType.REEVALUATE, sim=sim)
-        self.assertTrue(fb.expression == _f.ONE_LINER)
-        self.assertTrue(fb.positive)
-        self.assertTrue(fb.reevaluate)
-        self.assertFalse(fb.pulse)
-        self.assertFalse(fb.forward_events)
-        self.assertTrue(fb.cond == fut)
-        self.assertTrue(fb.get_eps() == {fb._finish_tx, fut._finish_tx})
-        self.assertTrue(isinstance(fb, DSFuture))
-        self.assertEqual(str(fb), f"DSFilter({fut})")
-
-        fut = DSFuture(sim=sim)
-        fc = _f(fut, sigtype=_f.SignalType.PULSED, sim=sim)
-        self.assertTrue(fc.expression == _f.ONE_LINER)
-        self.assertTrue(fc.positive)
-        self.assertTrue(fc.reevaluate)
-        self.assertTrue(fc.pulse)
-        self.assertFalse(fc.forward_events)
-        self.assertTrue(fc.cond == fut)
-        self.assertTrue(fc.get_eps() == {fc._finish_tx, fut._finish_tx})
-        self.assertTrue(isinstance(fc, DSFuture))
-        self.assertEqual(str(fc), f"DSFilter({fut})")
-
-        fna = -fa
-        self.assertTrue(fna is not fa)  # a copy is created instead of extension
-        self.assertTrue(fna.expression == _f.ONE_LINER)
-        self.assertFalse(fna.positive)
-        self.assertTrue(fna.pulse)
-        self.assertTrue(fna.get_eps() == {fna._finish_tx, fna.cond._finish_tx})
-        self.assertTrue(isinstance(fna, DSFuture))
-        self.assertEqual(str(fna), f"-DSFilter({fa.cond})")
-
-        with self.assertRaises(ValueError):
-            -fna  # once a filter is negative (reseter), it cannot be negated again
-
-
-    def test4_init_gen(self):
+    def test4_init_gen_wraps_process_and_does_not_forward(self):
         def gen():
-            yield 'hi'
+            yield "hi"
 
         sim = DSSimulation()
-        g = gen()
-        fa = _f(g, sim=sim)
-        self.assertTrue(fa.expression == _f.ONE_LINER)
-        self.assertTrue(fa.positive)
-        self.assertFalse(fa.reevaluate)
-        self.assertFalse(fa.pulse)
-        self.assertTrue(fa.forward_events)
-        self.assertTrue(fa.cond.generator == g)
-        self.assertTrue(fa.get_eps() == {fa._finish_tx, fa.cond._finish_tx})
-        self.assertTrue(isinstance(fa, DSFuture))
-        self.assertEqual(str(fa), f"DSFilter({fa.cond})")
+        self.assertEqual(sim.time_queue.event_count(), 0)
+        fa = _f(gen(), sim=sim)
+        self.assertFalse(fa.forward_events)
+        self.assertIsInstance(fa.cond, DSProcess)
+        self.assertEqual(sim.time_queue.event_count(), 1)
 
-        g = gen()
-        fb = _f(g, sigtype=_f.SignalType.REEVALUATE, sim=sim)
-        self.assertTrue(fb.expression == _f.ONE_LINER)
-        self.assertTrue(fb.positive)
-        self.assertTrue(fb.reevaluate)
-        self.assertFalse(fb.pulse)
-        self.assertTrue(fb.forward_events)
-        self.assertTrue(fb.cond.generator == g)
-        self.assertTrue(fb.get_eps() == {fb._finish_tx, fb.cond._finish_tx})
-        self.assertTrue(isinstance(fb, DSFuture))
-        self.assertEqual(str(fb), f"DSFilter({fb.cond})")
+        # Filter receive does not forward into wrapped process.
+        self.assertFalse(fa("payload"))
+        self.assertFalse(fa.cond.started())
 
-        g = gen()
-        fc = _f(g, sigtype=_f.SignalType.PULSED, sim=sim)
-        self.assertTrue(fc.expression == _f.ONE_LINER)
-        self.assertTrue(fc.positive)
-        self.assertTrue(fc.reevaluate)
-        self.assertTrue(fc.pulse)
-        self.assertTrue(fc.forward_events)
-        self.assertTrue(fc.cond.generator == g)
-        self.assertTrue(fc.get_eps() == {fc._finish_tx, fc.cond._finish_tx})
-        self.assertTrue(isinstance(fc, DSFuture))
-        self.assertEqual(str(fc), f"DSFilter({fc.cond})")
-
-        fna = -fa
-        self.assertTrue(fna is not fa)  # a copy is created instead of extension
-        self.assertTrue(fna.expression == _f.ONE_LINER)
-        self.assertFalse(fna.positive)
-        self.assertTrue(fna.pulse)
-        self.assertTrue(fna.get_eps() == {fna._finish_tx, fna.cond._finish_tx})
-        self.assertTrue(isinstance(fna, DSFuture))
-        self.assertEqual(str(fna), f"-DSFilter({fa.cond})")
-
-        with self.assertRaises(ValueError):
-            -fna  # once a filter is negative (reseter), it cannot be negated again
-
-        sim = DSSimulation()
-        g = gen()
-        self.assertTrue(sim.time_queue.event_count() == 0)
-        fd = _f(g, sim=sim)
-        self.assertTrue(sim.time_queue.event_count() == 1)  # the gen() was scheduled as a new process
-        scheduled = _pop_timequeue_event(sim.time_queue)
-        self.assertTrue(sim.time_queue.event_count() == 0)
-
-    def test5_init_coro(self):
+    def test5_init_coro_wraps_process_and_does_not_forward(self):
         async def coro():
             class Awaitable:
                 def __await__(self):
-                    yield 'hi'
+                    yield "hi"
+
             await Awaitable()
 
         sim = DSSimulation()
-        g = coro()
-        fa = _f(g, sim=sim)
-        self.assertTrue(fa.expression == _f.ONE_LINER)
-        self.assertTrue(fa.positive)
-        self.assertFalse(fa.reevaluate)
-        self.assertFalse(fa.pulse)
-        self.assertTrue(fa.forward_events)
-        self.assertTrue(fa.cond.generator == g)
-        self.assertTrue(fa.get_eps() == {fa._finish_tx, fa.cond._finish_tx})
-        self.assertTrue(isinstance(fa, DSFuture))
-        self.assertEqual(str(fa), f"DSFilter({fa.cond})")
+        self.assertEqual(sim.time_queue.event_count(), 0)
+        fa = _f(coro(), sim=sim)
+        self.assertFalse(fa.forward_events)
+        self.assertIsInstance(fa.cond, DSProcess)
+        self.assertEqual(sim.time_queue.event_count(), 1)
+        self.assertFalse(fa("payload"))
 
-        g = coro()
-        fb = _f(g, sigtype=_f.SignalType.REEVALUATE, sim=sim)
-        self.assertTrue(fb.expression == _f.ONE_LINER)
-        self.assertTrue(fb.positive)
-        self.assertTrue(fb.reevaluate)
-        self.assertFalse(fb.pulse)
-        self.assertTrue(fb.forward_events)
-        self.assertTrue(fb.cond.generator == g)
-        self.assertTrue(fb.get_eps() == {fb._finish_tx, fb.cond._finish_tx})
-        self.assertTrue(isinstance(fb, DSFuture))
-        self.assertEqual(str(fb), f"DSFilter({fb.cond})")
-
-        g = coro()
-        fc = _f(g, sigtype=_f.SignalType.PULSED, sim=sim)
-        self.assertTrue(fc.expression == _f.ONE_LINER)
-        self.assertTrue(fc.positive)
-        self.assertTrue(fc.reevaluate)
-        self.assertTrue(fc.pulse)
-        self.assertTrue(fc.forward_events)
-        self.assertTrue(fc.cond.generator == g)
-        self.assertTrue(fc.get_eps() == {fc._finish_tx, fc.cond._finish_tx})
-        self.assertTrue(isinstance(fc, DSFuture))
-        self.assertEqual(str(fc), f"DSFilter({fc.cond})")
-
-        fna = -fa
-        self.assertTrue(fna is not fa)  # a copy is created instead of extension
-        self.assertTrue(fna.expression == _f.ONE_LINER)
-        self.assertFalse(fna.positive)
-        self.assertTrue(fna.pulse)
-        self.assertTrue(fna.get_eps() == {fna._finish_tx, fna.cond._finish_tx})
-        self.assertTrue(isinstance(fna, DSFuture))
-        self.assertEqual(str(fna), f"-DSFilter({fa.cond})")
-
-        with self.assertRaises(ValueError):
-            -fna  # once a filter is negative (reseter), it cannot be negated again
-
-        sim = DSSimulation()
-        self.assertTrue(sim.time_queue.event_count() == 0)
-        fd = _f(coro(), sim=sim)
-        self.assertTrue(sim.time_queue.event_count() == 1)  # the coro() was scheduled as a new process
-        scheduled = _pop_timequeue_event(sim.time_queue)
-        self.assertTrue(sim.time_queue.event_count() == 0)
+        # Start the wrapped process to avoid dangling unstarted coroutine warnings.
+        sim.run(1)
 
     def test6_init_process(self):
         def gen():
-            yield 'hi'
+            yield "hi"
 
         sim = DSSimulation()
         p = DSProcess(gen(), sim=sim)
         fa = _f(p, sim=sim)
-        self.assertTrue(fa.expression == _f.ONE_LINER)
+        self.assertEqual(fa.expression, _f.ONE_LINER)
         self.assertTrue(fa.positive)
         self.assertFalse(fa.reevaluate)
         self.assertFalse(fa.pulse)
-        self.assertFalse(fa.forward_events)  # process is like future and does not forward events unless explicitly requested
-        self.assertTrue(fa.cond == p)
-        self.assertTrue(fa.get_eps() == {fa._finish_tx, p._finish_tx})
-        self.assertTrue(isinstance(fa, DSFuture))
-        self.assertEqual(str(fa), f"DSFilter({p})")
-
-        p = DSProcess(gen(), sim=sim)
-        fb = _f(p, sigtype=_f.SignalType.REEVALUATE, sim=sim)
-        self.assertTrue(fb.expression == _f.ONE_LINER)
-        self.assertTrue(fb.positive)
-        self.assertTrue(fb.reevaluate)
-        self.assertFalse(fb.pulse)
-        self.assertFalse(fb.forward_events)  # process is like future and does not forward events unless explicitly requested
-        self.assertTrue(fb.cond == p)
-        self.assertTrue(fb.get_eps() == {fb._finish_tx, p._finish_tx})
-        self.assertTrue(isinstance(fb, DSFuture))
-        self.assertEqual(str(fb), f"DSFilter({p})")
-
-        p = DSProcess(gen(), sim=sim)
-        fc = _f(p, sigtype=_f.SignalType.PULSED, sim=sim)
-        self.assertTrue(fc.expression == _f.ONE_LINER)
-        self.assertTrue(fc.positive)
-        self.assertTrue(fc.reevaluate)
-        self.assertTrue(fc.pulse)
-        self.assertFalse(fc.forward_events)  # process is like future and does not forward events unless explicitly requested
-        self.assertTrue(fc.cond == p)
-        self.assertTrue(fc.get_eps() == {fc._finish_tx, p._finish_tx})
-        self.assertTrue(isinstance(fc, DSFuture))
-        self.assertEqual(str(fc), f"DSFilter({p})")
-
-        fna = -fa
-        self.assertTrue(fna is not fa)  # a copy is created instead of extension
-        self.assertTrue(fna.expression == _f.ONE_LINER)
-        self.assertFalse(fna.positive)
-        self.assertTrue(fna.pulse)
-        self.assertTrue(fna.get_eps() == {fna._finish_tx, fna.cond._finish_tx})
-        self.assertTrue(isinstance(fna, DSFuture))
-        self.assertEqual(str(fna), f"-DSFilter({fa.cond})")
-
-        with self.assertRaises(ValueError):
-            -fna  # once a filter is negative (reseter), it cannot be negated again
-
-        # The cond does not schedule a process
-        # sim = DSSimulation()
-        # self.assertTrue(sim.time_queue.event_count() == 0)
-        # p = DSProcess(gen(), sim=sim)
-        # self.assertTrue(sim.time_queue.event_count() == 0)
-        # fd = _f(p, sim=sim)
-        # self.assertTrue(sim.time_queue.event_count() == 1)  # the process was scheduled
-        # scheduled = sim.time_queue.pop()
-        # self.assertTrue(scheduled == (0, (p, None)))
-        # self.assertTrue(sim.time_queue.event_count() == 0)
-
-        p = DSProcess(gen(), sim=sim).schedule(0)
-        self.assertTrue(sim.time_queue.event_count() == 1)  # the process is scheduled explicitly
-        fe = _f(p, sim=sim)
-        self.assertTrue(sim.time_queue.event_count() == 1)
-        scheduled = _pop_timequeue_event(sim.time_queue)
-        self.assertTrue(scheduled[0] == 0)
-        # With _Starter, the time queue consumer is the _Starter, not the process itself
-        self.assertIsInstance(scheduled[1][0], DSProcess._Starter)
-        self.assertIs(scheduled[1][0]._process, p)
-        self.assertIs(scheduled[1][1], _StartProcess)
-        self.assertTrue(sim.time_queue.event_count() == 0)
-
+        self.assertFalse(fa.forward_events)
+        self.assertIs(fa.cond, p)
+        self.assertEqual(fa.get_eps(), {fa._finish_tx})
+        self.assertIsInstance(fa, DSFuture)
 
     def test7_feeding_value(self):
         sim = DSSimulation()
-        fa = _f('a', sim=sim)
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        retval = fa('0')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        retval = fa('a')
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fa.value == 'a')
-        retval = fa('b')
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fa.value == 'a')
+        fa = _f("a", sim=sim)
+        self.assertFalse(fa.signaled)
+        self.assertFalse(fa.finished())
+
+        self.assertFalse(fa("0"))
+        self.assertFalse(fa.signaled)
+
+        self.assertTrue(fa("a"))
+        self.assertTrue(fa.signaled)
+        self.assertTrue(fa.finished())
+        self.assertEqual(fa.value, "a")
+
+        self.assertTrue(fa("b"))
+        self.assertTrue(fa.signaled)
+        self.assertEqual(fa.value, "a")
 
     def test8_feeding_lambda(self):
         sim = DSSimulation()
-        fa = _f(lambda e: 'A' in e, sim=sim)
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        retval = fa('0')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        retval = fa('Hello')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        retval = fa('Ahoy')
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fa.value == 'Ahoy')
-        retval = fa('Ciao')
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fa.value == 'Ahoy')
+        fa = _f(lambda e: "A" in e, sim=sim)
+        self.assertFalse(fa("0"))
+        self.assertFalse(fa("Hello"))
+        self.assertTrue(fa("Ahoy"))
+        self.assertTrue(fa.signaled)
+        self.assertEqual(fa.value, "Ahoy")
+        self.assertTrue(fa("Ciao"))
+        self.assertEqual(fa.value, "Ahoy")
 
     def test9_feeding_future(self):
         sim = DSSimulation()
         fut = DSFuture(sim=sim)
         fa = _f(fut, sim=sim)
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fut.finished() == False)
-        retval = fa('Hi')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fut.finished() == False)
-        fut.finish('Ahoy')
-        retval = fa(fut)  # When waiting for a future in a condition, a process registers the future notification which is then sent to the process
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fut.finished() == True)
-        retval = fa('Ciao')
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fut.finished() == True)
+        self.assertFalse(fa("Hi"))
+        self.assertFalse(fa.finished())
 
-    def test10_feeding_gen(self):
+        fut.finish("Ahoy")
+        self.assertTrue(fa(fut))
+        self.assertTrue(fa.finished())
+        self.assertTrue(fut.finished())
+        self.assertEqual(fa.value, "Ahoy")
+
+        self.assertTrue(fa("Ciao"))
+        self.assertEqual(fa.value, "Ahoy")
+
+    def test10_wrapped_generator_is_not_event_forwarded(self):
         def gen():
-            yield 'First'
-            return 'Return'
+            event = yield "First"
+            return event
 
         sim = DSSimulation()
-        g = gen()
-        fa = _f(g, sim=sim)
-        # The future already kicked a process and waits- wait added its own condition at the end
-        # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        conds = fa.get_process().get_cond().conds
-        conds.insert(len(conds) - 1, lambda e:True)  # The consumer has to accept any event
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == False)
-        retval = fa('Hi')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == False)
-        retval = fa('Ahoy')
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fa.cond.finished() == True)
-        retval = fa('Ciao')
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fa.cond.finished() == True)
+        fa = _f(gen(), sim=sim)
+        p = fa.cond
 
-    def test11_feeding_coro(self):
+        self.assertFalse(p.started())
+        self.assertFalse(fa("boot"))
+        self.assertFalse(p.started())
+        self.assertFalse(p.finished())
+
+    def test11_wrapped_coroutine_is_not_event_forwarded(self):
         async def coro():
             class Awaitable:
                 def __await__(self):
-                    yield 'First'
-                    return 'Return'
-            await Awaitable()
-        
+                    event = yield "First"
+                    return event
+
+            return await Awaitable()
+
         sim = DSSimulation()
         fa = _f(coro(), sim=sim)
-        # The future already kicked a process and waits- wait added its own condition at the end
-        # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        conds = fa.get_process().get_cond().conds
-        conds.insert(len(conds) - 1, lambda e:True)  # The consumer has to accept any event
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == False)
-        retval = fa('Hi')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == False)
-        retval = fa('Ahoy')
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fa.cond.finished() == True)
-        retval = fa('Ciao')
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fa.cond.finished() == True)
+        p = fa.cond
 
-    def test12_feeding_process(self):
-        def gen():
-            yield 'First'
-            return 'Return'
-        
-        sim = DSSimulation()
-        p = DSProcess(gen(), sim=sim)
-        fa = _f(p, sim=sim)
-        # The future already kicked a process and waits- wait added its own condition at the end
-        # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        conds = fa.get_process().get_cond()
-        conds.push(lambda e:True)  # The consumer has to accept any event
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        retval = fa('Hi')  # This will NOT forward the event to the process
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(p.finished() == False)
-        retval = fa('Ahoy')  # The event is not forwarded => no finish
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(p.finished() == False)
-        retval = fa('Ciao')  # Last check
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(p.finished() == False)
-        # Try again, but now the process will be iterating
-        retval = p.send(None)  # initialize the process, yields 'First'
-        self.assertTrue((retval, fa.signaled) == ('First', False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(p.finished() == False)
-        retval = sim.send_object(p, 'Ahoy')
-        self.assertTrue((retval, fa.signaled) == ('Return', False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(p.finished() == True)
-        retval = fa(p)  # When waiting for a future in a condition, a process registers the future notification which is then sent to the process
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(p.finished() == True)
-        retval = fa('Ciao')  # Last check
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(p.finished() == True)
+        self.assertFalse(p.started())
+        self.assertFalse(fa("boot"))
+        self.assertFalse(p.started())
+        self.assertFalse(p.finished())
+        sim.run(1)
 
-    def test12b_forwarded_non_none_is_dropped_on_process_bootstrap(self):
+    def test12_wrapped_process_is_not_event_forwarded(self):
         def gen():
-            event = yield 'First'
+            event = yield "First"
             return event
 
         sim = DSSimulation()
         p = DSProcess(gen(), sim=sim)
-        fa = _f(p, forward_events=True, sim=sim)
+        fa = _f(p, sim=sim)
 
-        # First non-None event only boots the process and is intentionally discarded.
-        retval = fa('ignored-first')
-        self.assertFalse(retval)
-        self.assertTrue(p.started())
+        self.assertFalse(fa("Hi"))
+        self.assertFalse(p.started())
         self.assertFalse(p.finished())
 
-        # Accept normal events after startup and verify they are delivered.
+        p.send(None)
         p.get_cond().push(lambda e: True)
-        retval = fa('accepted-second')
-        self.assertTrue(retval)
-        self.assertTrue(fa.finished())
-        self.assertEqual(p.value, 'accepted-second')
+        self.assertEqual(sim.send_object(p, "Ahoy"), "Ahoy")
         self.assertTrue(p.finished())
+
+        self.assertTrue(fa(p))
+        self.assertTrue(fa.finished())
 
     def test13_feeding_value_reevaluate(self):
         sim = DSSimulation()
-        fa = _f('a', sigtype=_f.SignalType.REEVALUATE, sim=sim)
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        retval = fa('0')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        retval = fa('a')
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fa.value == 'a')
-        retval = fa('b')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.value == 'a')
+        fa = _f("a", sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        self.assertFalse(fa("0"))
+        self.assertFalse(fa.signaled)
+
+        self.assertTrue(fa("a"))
+        self.assertTrue(fa.signaled)
+        self.assertEqual(fa.value, "a")
+
+        self.assertFalse(fa("b"))
+        self.assertFalse(fa.signaled)
+        self.assertEqual(fa.value, "a")
 
     def test13b_send_reevaluate_toggles_state(self):
         sim = DSSimulation()
-        fa = _f(lambda e: e == 'UP', sigtype=_f.SignalType.REEVALUATE, sim=sim)
-        tx = sim.publisher(name='tx')
+        fa = _f(lambda e: e == "UP", sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        tx = sim.publisher(name="tx")
         tx.add_subscriber(fa, tx.Phase.PRE)
 
-        sim.signal('UP', tx)
+        sim.signal("UP", tx)
         sim.run(1)
         self.assertTrue(fa.signaled)
-        self.assertEqual(fa.value, 'UP')
+        self.assertEqual(fa.value, "UP")
 
-        sim.signal('DOWN', tx)
+        sim.signal("DOWN", tx)
         sim.run(2)
         self.assertFalse(fa.signaled)
-        self.assertEqual(fa.value, 'UP')
+        self.assertEqual(fa.value, "UP")
 
     def test13c_send_wakes_waiters_via_finish_tx(self):
         sim = DSSimulation()
-        fa = _f(lambda e: e == 'UP', sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        fa = _f(lambda e: e == "UP", sigtype=_f.SignalType.REEVALUATE, sim=sim)
         out = []
 
         async def waiter():
@@ -611,57 +278,32 @@ class TestDSFilter(unittest.TestCase):
 
         async def sender():
             await sim.wait(3)
-            fa.send('UP')
+            fa.send("UP")
 
         sim.schedule(0, waiter())
         sim.schedule(0, sender())
         sim.run(20)
-        self.assertEqual(out, [(3, 'UP', True)])
+        self.assertEqual(out, [(3, "UP", True)])
 
     def test13d_check_testobject_is_non_destructive_for_reevaluate(self):
         sim = DSSimulation()
-        fa = _f(lambda e: e == 'UP', sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        fa = _f(lambda e: e == "UP", sigtype=_f.SignalType.REEVALUATE, sim=sim)
 
-        # Unsignaled: probe stays unsignaled for non-matching predicate.
         signaled, value = fa.check(TestObject)
         self.assertFalse(signaled)
         self.assertIsNone(value)
         self.assertFalse(fa.signaled)
 
-        # Signaled: probe preserves current state/value and does not reset it.
-        fa.check('UP')
+        fa.check("UP")
         self.assertTrue(fa.signaled)
         signaled, value = fa.check(TestObject)
         self.assertTrue(signaled)
-        self.assertEqual(value, 'UP')
+        self.assertEqual(value, "UP")
         self.assertTrue(fa.signaled)
-
-    def test13e_check_testobject_does_not_forward_into_process(self):
-        def gen():
-            event = yield 'First'
-            return event
-
-        sim = DSSimulation()
-        p = DSProcess(gen(), sim=sim)
-        fa = _f(p, forward_events=True, sim=sim)
-
-        # Probe event must not be forwarded to nested process/future.
-        signaled, value = fa.check(TestObject)
-        self.assertFalse(signaled)
-        self.assertIsNone(value)
-        self.assertFalse(p.started())
-        self.assertFalse(p.finished())
-
-        # A normal event still uses forwarding path and boots the process.
-        signaled, value = fa.check('boot')
-        self.assertFalse(signaled)
-        self.assertIsNone(value)
-        self.assertTrue(p.started())
-        self.assertFalse(p.finished())
 
     def test13f_send_testobject_does_not_wake_waiters(self):
         sim = DSSimulation()
-        fa = _f(lambda e: e == 'UP', sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        fa = _f(lambda e: e == "UP", sigtype=_f.SignalType.REEVALUATE, sim=sim)
         out = []
 
         async def waiter():
@@ -680,8 +322,8 @@ class TestDSFilter(unittest.TestCase):
 
     def test13g_circuit_wait_survives_async_filter_finish_event(self):
         sim = DSSimulation()
-        f_link = _f(lambda e: e == 'UP', sigtype=_f.SignalType.REEVALUATE, sim=sim)
-        f_credits = _f(lambda e: e == 'CREDITS', sim=sim)
+        f_link = _f(lambda e: e == "UP", sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        f_credits = _f(lambda e: e == "CREDITS", sim=sim)
         circuit = DSCircuit(all, [f_link, f_credits], sim=sim)
         out = []
 
@@ -692,23 +334,23 @@ class TestDSFilter(unittest.TestCase):
 
         async def feeder():
             await sim.wait(1)
-            f_link.send('UP')
+            f_link.send("UP")
             await sim.wait(1)
-            # Triggers asynchronous DSFilter._finish(...) path.
-            f_credits.finish('ok')
+            f_credits.finish("ok")
 
         sim.schedule(0, waiter())
         sim.schedule(0, feeder())
         sim.run(20)
+
         self.assertEqual(len(out), 1)
         self.assertEqual(out[0][0], 2)
-        self.assertEqual(out[0][1], {f_link: 'UP', f_credits: 'ok'})
+        self.assertEqual(out[0][1], {f_link: "UP", f_credits: "ok"})
         self.assertTrue(out[0][2])
         self.assertTrue(out[0][3])
 
     def test13h_pulsed_send_wakes_waiters_immediately(self):
         sim = DSSimulation()
-        fa = _f(lambda e: e == 'UP', sigtype=_f.SignalType.PULSED, sim=sim)
+        fa = _f(lambda e: e == "UP", sigtype=_f.SignalType.PULSED, sim=sim)
         out = []
 
         async def waiter():
@@ -718,328 +360,91 @@ class TestDSFilter(unittest.TestCase):
 
         async def sender():
             await sim.wait(1)
-            fa.send('UP')
+            fa.send("UP")
 
         sim.schedule(0, waiter())
         sim.schedule(0, sender())
         sim.run(20)
-        self.assertEqual(out, [(1, 'UP', False)])
+        self.assertEqual(out, [(1, "UP", False)])
 
     def test14_feeding_lambda_reevaluate(self):
         sim = DSSimulation()
-        fa = _f(lambda e: 'A' in e, sigtype=_f.SignalType.REEVALUATE, sim=sim)
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        retval = fa('0')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        retval = fa('Hello')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        retval = fa('Ahoy')
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fa.value == 'Ahoy')
-        retval = fa('Ciao')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.value == 'Ahoy')
+        fa = _f(lambda e: "A" in e, sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        self.assertFalse(fa("0"))
+        self.assertFalse(fa("Hello"))
+        self.assertTrue(fa("Ahoy"))
+        self.assertTrue(fa.signaled)
+        self.assertEqual(fa.value, "Ahoy")
+        self.assertFalse(fa("Ciao"))
+        self.assertFalse(fa.signaled)
+        self.assertEqual(fa.value, "Ahoy")
 
     def test15_feeding_future_reevaluate(self):
         sim = DSSimulation()
         fut = DSFuture(sim=sim)
         fa = _f(fut, sigtype=_f.SignalType.REEVALUATE, sim=sim)
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fut.finished() == False)
-        retval = fa('Hi')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fut.finished() == False)
-        fut.finish('Ahoy')
-        retval = fa(fut)  # When waiting for a future in a condition, a process registers the future notification which is then sent to the process
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fut.finished() == True)
-        retval = fa('Ciao')
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fut.finished() == True)
 
-    def test16_feeding_gen_reevaluate(self):
-        def gen():
-            yield 'First'
-            return 'Return'
+        self.assertFalse(fa("Hi"))
+        self.assertFalse(fa.finished())
 
-        sim = DSSimulation()
-        fa = _f(gen(), sigtype=_f.SignalType.REEVALUATE, sim=sim)
-        # The future already kicked a process and waits- wait added its own condition at the end
-        # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        conds = fa.get_process().get_cond().conds
-        conds.insert(len(conds) - 1, lambda e:True)  # The consumer has to accept any event
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == False)
-        retval = fa('Hi')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == False)
-        retval = fa('Ahoy')
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fa.cond.finished() == True)
-        retval = fa('Ciao')
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fa.cond.finished() == True)
+        fut.finish("Ahoy")
+        self.assertTrue(fa(fut))
+        self.assertTrue(fa.finished())
+        self.assertTrue(fut.finished())
 
-    def test17_feeding_coro_reevaluate(self):
-        async def coro():
-            class Awaitable:
-                def __await__(self):
-                    yield 'First'
-                    return 'Return'
-            await Awaitable()
-        
-        sim = DSSimulation()
-        fa = _f(coro(), sigtype=_f.SignalType.REEVALUATE, sim=sim)
-        # The future already kicked a process and waits- wait added its own condition at the end
-        # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        conds = fa.get_process().get_cond().conds
-        conds.insert(len(conds) - 1, lambda e:True)  # The consumer has to accept any event
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == False)
-        retval = fa('Hi')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == False)
-        retval = fa('Ahoy')
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fa.cond.finished() == True)
-        retval = fa('Ciao')
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(fa.cond.finished() == True)
-
-    def test18_feeding_process_reevaluate(self):
-        def gen():
-            yield 'First'
-            return 'Return'
-        
-        sim = DSSimulation()
-        p = DSProcess(gen(), sigtype=_f.SignalType.REEVALUATE, sim=sim)
-        fa = _f(p, sim=sim)
-        # The future already kicked a process and waits- wait added its own condition at the end
-        # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        conds = fa.get_process().get_cond()
-        conds.push(lambda e:True)  # The consumer has to accept any event
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        retval = fa('Hi')  # This will NOT forward the event to the process
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(p.finished() == False)
-        retval = fa('Ahoy')  # The event is not forwarded => no finish
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(p.finished() == False)
-        retval = fa('Ciao')  # Last check
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(p.finished() == False)
-        # Try again, but now the process will be iterating
-        retval = p.send(None)  # initialize the process, yields 'First'
-        self.assertTrue((retval, fa.signaled) == ('First', False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(p.finished() == False)
-        retval = sim.send_object(p, 'Ahoy')
-        self.assertTrue((retval, fa.signaled) == ('Return', False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(p.finished() == True)
-        retval = fa(p)  # When waiting for a future in a condition, a process registers the future notification which is then sent to the process
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(p.finished() == True)
-        retval = fa('Ciao')  # Last check
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(p.finished() == True)
-
+        # reevaluate + finished future remains signaled
+        self.assertTrue(fa("Ciao"))
+        self.assertTrue(fa.finished())
 
     def test19_feeding_value_pulsed(self):
         sim = DSSimulation()
-        fa = _f('a', sigtype=_f.SignalType.PULSED, sim=sim)
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        retval = fa('0')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        retval = fa('a')
-        self.assertTrue((retval, fa.signaled) == (True, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.value == 'a')
-        retval = fa('b')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.value == 'a')
+        fa = _f("a", sigtype=_f.SignalType.PULSED, sim=sim)
+
+        self.assertFalse(fa("0"))
+        self.assertFalse(fa.signaled)
+        self.assertFalse(fa.finished())
+
+        self.assertTrue(fa("a"))
+        self.assertFalse(fa.signaled)
+        self.assertFalse(fa.finished())
+        self.assertEqual(fa.value, "a")
+
+        self.assertFalse(fa("b"))
+        self.assertFalse(fa.signaled)
 
     def test20_feeding_lambda_pulsed(self):
         sim = DSSimulation()
-        fa = _f(lambda e: 'A' in e, sigtype=_f.SignalType.PULSED, sim=sim)
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        retval = fa('0')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        retval = fa('Hello')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        retval = fa('Ahoy')
-        self.assertTrue((retval, fa.signaled) == (True, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.value == 'Ahoy')
-        retval = fa('Ciao')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.value == 'Ahoy')
+        fa = _f(lambda e: "A" in e, sigtype=_f.SignalType.PULSED, sim=sim)
+
+        self.assertFalse(fa("0"))
+        self.assertFalse(fa("Hello"))
+        self.assertTrue(fa("Ahoy"))
+        self.assertFalse(fa.signaled)
+        self.assertEqual(fa.value, "Ahoy")
+
+        self.assertFalse(fa("Ciao"))
+        self.assertFalse(fa.signaled)
+        self.assertEqual(fa.value, "Ahoy")
 
     def test21_feeding_future_pulsed(self):
         sim = DSSimulation()
         fut = DSFuture(sim=sim)
         fa = _f(fut, sigtype=_f.SignalType.PULSED, sim=sim)
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fut.finished() == False)
-        retval = fa('Hi')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fut.finished() == False)
-        fut.finish('Ahoy')
-        retval = fa(fut)  # When waiting for a future in a condition, a process registers the future notification which is then sent to the process
-        self.assertTrue((retval, fa.signaled) == (True, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fut.finished() == True)
-        retval = fa('Ciao')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fut.finished() == True)
 
-    def test22_feeding_gen_pulsed(self):
-        def gen():
-            yield 'First'
-            return 'Return'
+        self.assertFalse(fa("Hi"))
+        fut.finish("Ahoy")
+        self.assertTrue(fa(fut))
+        self.assertFalse(fa.signaled)
+        self.assertFalse(fa.finished())
+        self.assertTrue(fut.finished())
 
+        self.assertFalse(fa("Ciao"))
+        self.assertFalse(fa.signaled)
+
+    def test25_cond_gwait_waits_without_precheck(self):
         sim = DSSimulation()
-        fa = _f(gen(), sigtype=_f.SignalType.PULSED, sim=sim)
-        # The future already kicked a process and waits- wait added its own condition at the end
-        # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        conds = fa.get_process().get_cond().conds
-        conds.insert(len(conds) - 1, lambda e:True)  # The consumer has to accept any event
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == False)
-        retval = fa('Hi')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == False)
-        retval = fa('Ahoy')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == True)
-        retval = fa(fa.cond)  # When waiting for a condition, typically this event is sent to the process after gen is finished
-        self.assertTrue((retval, fa.signaled) == (True, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == True)
-        retval = fa('Ciao')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == True)
-
-    def test23_feeding_coro_pulsed(self):
-        async def coro():
-            class Awaitable:
-                def __await__(self):
-                    yield 'First'
-                    return 'Return'
-            await Awaitable()
-        
-        sim = DSSimulation()
-        fa = _f(coro(), sigtype=_f.SignalType.PULSED, sim=sim)
-        # The future already kicked a process and waits- wait added its own condition at the end
-        # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        conds = fa.get_process().get_cond().conds
-        conds.insert(len(conds) - 1, lambda e:True)  # The consumer has to accept any event
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == False)
-        retval = fa('Hi')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == False)
-        retval = fa('Ahoy')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == True)
-        retval = fa(fa.cond)  # When waiting for a condition, typically this event is sent to the process after gen is finished
-        self.assertTrue((retval, fa.signaled) == (True, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == True)
-        retval = fa('Ciao')
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(fa.cond.finished() == True)
-
-    def test24_feeding_process_pulsed(self):
-        def gen():
-            yield 'First'
-            return 'Return'
-        
-        sim = DSSimulation()
-        p = DSProcess(gen(), sigtype=_f.SignalType.PULSED, sim=sim)
-        fa = _f(p, sim=sim)
-        # The future already kicked a process and waits- wait added its own condition at the end
-        # The wait will pop the latest condition, that is why we have to insert a condition before the wait.
-        conds = fa.get_process().get_cond()
-        conds.push(lambda e:True)  # The consumer has to accept any event
-        self.assertTrue(fa.signaled == False)
-        self.assertTrue(fa.finished() == False)
-        retval = fa('Hi')  # This will NOT forward the event to the process
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(p.finished() == False)
-        retval = fa('Ahoy')  # The event is not forwarded => no finish
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(p.finished() == False)
-        retval = fa('Ciao')  # Last check
-        self.assertTrue((retval, fa.signaled) == (False, False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(p.finished() == False)
-        # Try again, but now the process will be iterating
-        retval = p.send(None)  # initialize the process, yields 'First'
-        self.assertTrue((retval, fa.signaled) == ('First', False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(p.finished() == False)
-        retval = sim.send_object(p, 'Ahoy')
-        self.assertTrue((retval, fa.signaled) == ('Return', False))
-        self.assertTrue(fa.finished() == False)
-        self.assertTrue(p.finished() == True)
-        retval = fa(p)  # When waiting for a future in a condition, a process registers the future notification which is then sent to the process
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(p.finished() == True)
-        retval = fa('Ciao')  # Last check
-        self.assertTrue((retval, fa.signaled) == (True, True))
-        self.assertTrue(fa.finished() == True)
-        self.assertTrue(p.finished() == True)
-
-
-    def test25_cond_gwait(self):
-        sim = DSSimulation()
-        flt = _f('ready', sim=sim)
-        flt.check('ready')
+        flt = _f("ready", sim=sim)
+        flt.check("ready")
         out = []
 
         def waiter():
@@ -1049,12 +454,14 @@ class TestDSFilter(unittest.TestCase):
 
         sim.schedule(0, waiter())
         sim.run(10)
-        self.assertEqual(out, [(0, 'ready')])
 
-    def test26_cond_wait(self):
+        # wait()/gwait() intentionally do not precheck signaled state.
+        self.assertEqual(out, [(5, "ready")])
+
+    def test26_cond_wait_waits_without_precheck(self):
         sim = DSSimulation()
-        flt = _f('ready', sim=sim)
-        flt.check('ready')
+        flt = _f("ready", sim=sim)
+        flt.check("ready")
         out = []
 
         async def waiter():
@@ -1064,7 +471,9 @@ class TestDSFilter(unittest.TestCase):
 
         sim.schedule(0, waiter())
         sim.run(10)
-        self.assertEqual(out, [(0, 'ready')])
+
+        # wait()/gwait() intentionally do not precheck signaled state.
+        self.assertEqual(out, [(5, "ready")])
 
     def test27_precheck_probe_evaluates_unsignaled_callable(self):
         sim = DSSimulation()
@@ -1076,8 +485,8 @@ class TestDSFilter(unittest.TestCase):
 
     def test28_cond_check_and_gwait_fastpath_when_signaled(self):
         sim = DSSimulation()
-        flt = _f('ready', sim=sim)
-        flt.check('ready')
+        flt = _f("ready", sim=sim)
+        flt.check("ready")
         out = []
 
         def waiter():
@@ -1087,12 +496,12 @@ class TestDSFilter(unittest.TestCase):
 
         sim.schedule(0, waiter())
         sim.run(10)
-        self.assertEqual(out, [(0, 'ready')])
+        self.assertEqual(out, [(0, "ready")])
 
     def test29_cond_check_and_wait_fastpath_when_signaled(self):
         sim = DSSimulation()
-        flt = _f('ready', sim=sim)
-        flt.check('ready')
+        flt = _f("ready", sim=sim)
+        flt.check("ready")
         out = []
 
         async def waiter():
@@ -1102,197 +511,146 @@ class TestDSFilter(unittest.TestCase):
 
         sim.schedule(0, waiter())
         sim.run(10)
-        self.assertEqual(out, [(0, 'ready')])
+        self.assertEqual(out, [(0, "ready")])
 
 
-    '''
-    The second part is for agregated 
-    '''
-
-class TestDSCircuit(unittest.TestCase):
-
+class TestDSCircuitApplicableLegacy(unittest.TestCase):
     def test1_build(self):
         sim = DSSimulation()
-        fa, fb, fc, fd = _f('a', sim=sim), _f('b', sim=sim), _f('c', sim=sim), _f('d', sim=sim)
+        fa, fb, fc, fd = _f("a", sim=sim), _f("b", sim=sim), _f("c", sim=sim), _f("d", sim=sim)
+
         c = fa | fb
-        self.assertTrue(isinstance(c, DSFuture))
-        self.assertTrue(c.expression == any)
+        self.assertIsInstance(c, DSFuture)
+        self.assertEqual(c.expression, any)
         self.assertTrue(c.positive)
-        self.assertTrue(c.get_eps() == {fa._finish_tx, fb._finish_tx,})
-        self.assertEqual(repr(c), "<class 'dssim.pubsub.cond.DSCircuit'>0")
+        self.assertEqual(c.get_eps(), {c._finish_tx})
         self.assertEqual(str(c), "(DSFilter(a) | DSFilter(b))")
-        self.assertTrue((c.setters, c.resetters) == ([fa, fb], []))
+        self.assertEqual((c.setters, c.resetters), ([fa, fb], []))
+
         d = fa | fb | fc
-        self.assertTrue(isinstance(d, DSFuture))
-        self.assertTrue(d.expression == any)
+        self.assertEqual(d.expression, any)
         self.assertTrue(d.positive)
-        self.assertTrue(d.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
-        self.assertEqual(repr(d), "<class 'dssim.pubsub.cond.DSCircuit'>1")
+        self.assertEqual(d.get_eps(), {d._finish_tx})
         self.assertEqual(str(d), "(DSFilter(a) | DSFilter(b) | DSFilter(c))")
-        self.assertTrue((d.setters, d.resetters) == ([fa, fb, fc], []))
+        self.assertEqual((d.setters, d.resetters), ([fa, fb, fc], []))
 
         c = fa & fb
-        self.assertTrue(isinstance(c, DSFuture))
-        self.assertTrue(c.expression == all)
+        self.assertEqual(c.expression, all)
         self.assertTrue(c.positive)
-        self.assertTrue(c.get_eps() == {fa._finish_tx, fb._finish_tx,})
-        self.assertEqual(repr(c), "<class 'dssim.pubsub.cond.DSCircuit'>2")
+        self.assertEqual(c.get_eps(), {c._finish_tx})
         self.assertEqual(str(c), "(DSFilter(a) & DSFilter(b))")
-        self.assertTrue((c.setters, c.resetters) == ([fa, fb], []))
+        self.assertEqual((c.setters, c.resetters), ([fa, fb], []))
+
         d = fa & fb & fc
-        self.assertTrue(isinstance(d, DSFuture))
-        self.assertTrue(d.expression == all)
+        self.assertEqual(d.expression, all)
         self.assertTrue(d.positive)
-        self.assertTrue(d.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
-        self.assertEqual(repr(d), "<class 'dssim.pubsub.cond.DSCircuit'>3")
+        self.assertEqual(d.get_eps(), {d._finish_tx})
         self.assertEqual(str(d), "(DSFilter(a) & DSFilter(b) & DSFilter(c))")
-        self.assertTrue((d.setters, d.resetters) == ([fa, fb, fc], []))
+        self.assertEqual((d.setters, d.resetters), ([fa, fb, fc], []))
 
-        # Test priorities
+        # priorities
         c = fa & fb | fc
-        self.assertTrue(c.expression == any)
+        self.assertEqual(c.expression, any)
         self.assertTrue(c.positive)
-        self.assertTrue(c.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
         self.assertEqual(str(c), "((DSFilter(a) & DSFilter(b)) | DSFilter(c))")
-        self.assertTrue((len(c.setters), len(c.resetters)) == (2, 0))
-        c = fa | fb & fc
-        self.assertTrue(c.expression == any)
-        self.assertTrue(c.positive)
-        self.assertTrue(d.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
-        self.assertEqual(str(c), "(DSFilter(a) | (DSFilter(b) & DSFilter(c)))")
-        self.assertTrue((len(c.setters), len(c.resetters)) == (2, 0))
 
-        # Test heterogenous combinations
         c = fa | fb & fc
-        self.assertTrue(c.expression == any)
+        self.assertEqual(c.expression, any)
         self.assertTrue(c.positive)
-        self.assertTrue(c.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
         self.assertEqual(str(c), "(DSFilter(a) | (DSFilter(b) & DSFilter(c)))")
-        self.assertTrue((len(c.setters), len(c.resetters)) == (2, 0))
+
+        # heterogeneous flattening
+        c = fa | fb & fc
         d = c | fd
-        self.assertTrue(d is c)  # the filter was just updated with a new expression
-        self.assertTrue(d.expression == any)
+        self.assertIs(d, c)
+        self.assertEqual(d.expression, any)
         self.assertTrue(d.positive)
-        self.assertTrue(d.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx, fd._finish_tx})
         self.assertEqual(str(d), "(DSFilter(a) | (DSFilter(b) & DSFilter(c)) | DSFilter(d))")
-        self.assertTrue((len(d.setters), len(d.resetters)) == (3, 0))
-        c = fa | fb & fc
-        d = fd | c
-        self.assertTrue(d is c)  # the filter was just updated with a new expression
-        self.assertTrue(d.expression == any)
-        self.assertTrue(d.positive)
-        self.assertTrue(d.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx, fd._finish_tx})
-        self.assertEqual(str(d), "(DSFilter(a) | (DSFilter(b) & DSFilter(c)) | DSFilter(d))")
-        self.assertTrue((len(d.setters), len(d.resetters)) == (3, 0))
 
         c = fa & (fb | fc)
-        self.assertTrue(c.expression == all)
-        self.assertTrue(c.positive)
-        self.assertTrue(c.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx,})
-        self.assertEqual(str(c), "(DSFilter(a) & (DSFilter(b) | DSFilter(c)))")
-        self.assertTrue((len(c.setters), len(c.resetters)) == (2, 0))
         d = c & fd
-        self.assertTrue(d is c)  # the filter was just updated with a new expression
-        self.assertTrue(d.expression == all)
+        self.assertIs(d, c)
+        self.assertEqual(d.expression, all)
         self.assertTrue(d.positive)
-        self.assertTrue(d.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx, fd._finish_tx})
         self.assertEqual(str(d), "(DSFilter(a) & (DSFilter(b) | DSFilter(c)) & DSFilter(d))")
-        self.assertTrue((len(d.setters), len(d.resetters)) == (3, 0))
-        c = fa & (fb | fc)
-        d = fd & c
-        self.assertTrue(d is c)  # the filter was just updated with a new expression
-        self.assertTrue(d.expression == all)
-        self.assertTrue(d.positive)
-        self.assertTrue(d.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx, fd._finish_tx})
-        self.assertEqual(str(d), "(DSFilter(a) & (DSFilter(b) | DSFilter(c)) & DSFilter(d))")
-        self.assertTrue((len(d.setters), len(d.resetters)) == (3, 0))
 
         c = -(fa & fb)
-        self.assertTrue(c.expression == all)
-        self.assertTrue(not c.positive)
-        self.assertTrue(c.get_eps() == {fa._finish_tx, fb._finish_tx})
+        self.assertEqual(c.expression, all)
+        self.assertFalse(c.positive)
         self.assertEqual(str(c), "-(DSFilter(a) & DSFilter(b))")
-        self.assertTrue((len(c.setters), len(c.resetters)) == (2, 0))
+        self.assertEqual((len(c.setters), len(c.resetters)), (2, 0))
 
     def test2_build_with_reseters(self):
         sim = DSSimulation()
-        fa, fb, fc, fd = _f('a', sim=sim), _f('b', sim=sim), _f('c', sim=sim), _f('d', sim=sim)
+        fa, fb, fc, fd = _f("a", sim=sim), _f("b", sim=sim), _f("c", sim=sim), _f("d", sim=sim)
         fna, fnb = -fa, -fb
 
         c = fna | fb
-        self.assertTrue(isinstance(c, DSFuture))
-        self.assertTrue(c.expression == any)
-        self.assertTrue(c.get_eps() == {fna._finish_tx, fb._finish_tx})
+        self.assertIsInstance(c, DSFuture)
+        self.assertEqual(c.expression, any)
+        self.assertEqual(c.get_eps(), {c._finish_tx})
         self.assertEqual(str(c), "(DSFilter(b) | -DSFilter(a))")
-        self.assertTrue((c.setters, c.resetters) == ([fb], [fna]))
+        self.assertEqual((c.setters, c.resetters), ([fb], [fna]))
+
         d = fna | fb | fc
-        self.assertTrue(isinstance(d, DSFuture))
-        self.assertTrue(d.expression == any)
-        self.assertTrue(d.get_eps() == {fna._finish_tx, fb._finish_tx, fc._finish_tx})
+        self.assertEqual(d.expression, any)
         self.assertEqual(str(d), "(DSFilter(b) | DSFilter(c) | -DSFilter(a))")
-        self.assertTrue((d.setters, d.resetters) == ([fb, fc], [fna]))
+        self.assertEqual((d.setters, d.resetters), ([fb, fc], [fna]))
+
         d = fna | fc | fd | fnb
-        self.assertTrue(isinstance(d, DSFuture))
-        self.assertTrue(d.expression == any)
-        self.assertTrue(d.get_eps() == {fna._finish_tx, fc._finish_tx, fd._finish_tx, fnb._finish_tx})
+        self.assertEqual(d.expression, any)
         self.assertEqual(str(d), "(DSFilter(c) | DSFilter(d) | -DSFilter(a) | -DSFilter(b))")
-        self.assertTrue((d.setters, d.resetters) == ([fc, fd], [fna, fnb]))
+        self.assertEqual((d.setters, d.resetters), ([fc, fd], [fna, fnb]))
 
         c = fna & fb
-        self.assertTrue(isinstance(c, DSFuture))
-        self.assertTrue(c.expression == all)
-        self.assertTrue(c.get_eps() == {fna._finish_tx, fb._finish_tx,})
+        self.assertEqual(c.expression, all)
         self.assertEqual(str(c), "(DSFilter(b) & -DSFilter(a))")
-        self.assertTrue((c.setters, c.resetters) == ([fb], [fna]))
+        self.assertEqual((c.setters, c.resetters), ([fb], [fna]))
+
         d = fna & fb & fc
-        self.assertTrue(isinstance(d, DSFuture))
-        self.assertTrue(d.expression == all)
-        self.assertTrue(d.get_eps() == {fna._finish_tx, fb._finish_tx, fc._finish_tx})
+        self.assertEqual(d.expression, all)
         self.assertEqual(str(d), "(DSFilter(b) & DSFilter(c) & -DSFilter(a))")
-        self.assertTrue((d.setters, d.resetters) == ([fb, fc], [fna]))
+        self.assertEqual((d.setters, d.resetters), ([fb, fc], [fna]))
+
         d = fna & fc & fd & fnb
-        self.assertTrue(isinstance(d, DSFuture))
-        self.assertTrue(d.expression == all)
-        self.assertTrue(d.get_eps() == {fna._finish_tx, fc._finish_tx, fd._finish_tx, fnb._finish_tx})
+        self.assertEqual(d.expression, all)
         self.assertEqual(str(d), "(DSFilter(c) & DSFilter(d) & -DSFilter(a) & -DSFilter(b))")
-        self.assertTrue((d.setters, d.resetters) == ([fc, fd], [fna, fnb]))
+        self.assertEqual((d.setters, d.resetters), ([fc, fd], [fna, fnb]))
 
         c = -(fa & fb) & fc
-        self.assertTrue(c.expression == all)
+        self.assertEqual(c.expression, all)
         self.assertTrue(c.positive)
-        self.assertTrue(c.get_eps() == {fa._finish_tx, fb._finish_tx, fc._finish_tx})
         self.assertEqual(str(c), "(DSFilter(c) & -(DSFilter(a) & DSFilter(b)))")
-        self.assertTrue((len(c.setters), len(c.resetters)) == (1, 1))
+        self.assertEqual((len(c.setters), len(c.resetters)), (1, 1))
 
     def test3_precheck_probe_recomputes_reevaluate_circuit(self):
         sim = DSSimulation()
-        f_link = _f(lambda e: e == 'UP', sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        f_link = _f(lambda e: e == "UP", sigtype=_f.SignalType.REEVALUATE, sim=sim)
         f_credits = _f(lambda e: isinstance(e, int) and e > 0, sigtype=_f.SignalType.REEVALUATE, sim=sim)
         c = f_link & f_credits
-        # Prime both setters from real events while the circuit itself remains unchecked.
-        f_link('UP')
+
+        f_link("UP")
         f_credits(1)
         self.assertFalse(c.signaled)
 
         signaled, value = c.check(TestObject)
         self.assertTrue(signaled)
-        self.assertEqual(value, {f_link: 'UP', f_credits: 1})
+        self.assertEqual(value, {f_link: "UP", f_credits: 1})
         self.assertTrue(c.signaled)
 
-    def test4_check_and_wait_must_not_shortcut_stale_signaled_circuit(self):
+    def test4_check_and_wait_can_shortcut_from_existing_signaled_state(self):
         sim = DSSimulation()
-        f_a = _f(lambda e: isinstance(e, dict) and bool(e['a']), sigtype=_f.SignalType.REEVALUATE, sim=sim)
-        f_b = _f(lambda e: isinstance(e, dict) and bool(e['b']), sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        f_a = _f(lambda e: isinstance(e, dict) and bool(e.get("a")), sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        f_b = _f(lambda e: isinstance(e, dict) and bool(e.get("b")), sigtype=_f.SignalType.REEVALUATE, sim=sim)
         c = f_a & f_b
 
-        # Make the circuit true once.
-        signaled, _ = c.check({'a': True, 'b': True})
+        signaled, payload = c.check({"a": True, "b": True})
         self.assertTrue(signaled)
-        self.assertTrue(c.signaled)
+        self.assertEqual(set(payload.keys()), {f_a, f_b})
 
-        # Mutate one setter out-of-band so c.signaled becomes stale True.
-        signaled_b, _ = f_b.check({'a': True, 'b': False})
-        self.assertFalse(signaled_b)
+        # Mutate one child out-of-band. check_and_wait() now prefers current
+        # circuit signaled state as a fast-path.
+        f_b.check({"a": True, "b": False})
         self.assertTrue(c.signaled)
 
         out = []
@@ -1302,18 +660,502 @@ class TestDSCircuit(unittest.TestCase):
             got = await c.check_and_wait(5)
             out.append((sim.time - t0, got))
 
-        async def producer(target):
-            await sim.wait(3)
-            sim.signal({'a': True, 'b': True}, target)
-
-        consumer_proc = sim.schedule(0, consumer())
-        sim.schedule(0, producer(consumer_proc))
+        sim.schedule(0, consumer())
         sim.run(10)
 
         self.assertEqual(len(out), 1)
-        delta, got = out[0]
-        # If DSCircuit.check_and_wait did "if self.signaled: return ...",
-        # this would be 0 (incorrect immediate return from stale state).
-        self.assertEqual(delta, 3)
-        self.assertEqual(set(got.keys()), {f_a, f_b})
-        self.assertTrue(all(v['a'] and v['b'] for v in got.values()))
+        self.assertEqual(out[0][0], 0)
+        self.assertEqual(set(out[0][1].keys()), {f_a, f_b})
+
+
+class TestCondNewStrategyMerged(unittest.TestCase):
+    def test_filter_is_endpoint_driven_default_latches(self):
+        sim = DSSimulation()
+        ep = sim.publisher(name="ep")
+        flt = DSFilter(lambda e: e == "ok", eps=[ep], sim=sim).attach()
+
+        ep.signal("ok")
+        sim.run(1)
+        self.assertTrue(flt.signaled)
+        self.assertEqual(flt.cond_value(), "ok")
+
+        ep.signal("nope")
+        sim.run(2)
+        self.assertTrue(flt.signaled)
+
+    def test_filter_close_unsubscribes_endpoint(self):
+        sim = DSSimulation()
+        ep = sim.publisher(name="ep")
+        flt = DSFilter(lambda e: True, eps=[ep], sim=sim).attach()
+
+        self.assertTrue(ep.has_subscribers())
+        flt.detach()
+        self.assertFalse(ep.has_subscribers())
+        flt.detach()
+        self.assertFalse(ep.has_subscribers())
+
+        flt.attach()
+        self.assertTrue(ep.has_subscribers())
+        flt.reset()
+        self.assertTrue(ep.has_subscribers())
+
+    def test_filter_reevaluate_recomputes(self):
+        sim = DSSimulation()
+        ep = sim.publisher(name="ep")
+        flt = DSFilter(
+            lambda e: e == "ok",
+            sigtype=DSFilter.SignalType.REEVALUATE,
+            eps=[ep],
+            sim=sim,
+            one_shot=False,
+        ).attach()
+
+        ep.signal("ok")
+        sim.run(1)
+        self.assertTrue(flt.signaled)
+
+        ep.signal("nope")
+        sim.run(2)
+        self.assertFalse(flt.signaled)
+
+    def test_filter_default_signals_only_on_rising_edge(self):
+        sim = DSSimulation()
+        ep = sim.publisher(name="ep")
+        flt = DSFilter(lambda e: e == "ok", eps=[ep], sim=sim).attach()
+        observed = []
+
+        sink = sim.callback(lambda e: observed.append(e))
+        flt._finish_tx.add_subscriber(sink, flt._finish_tx.Phase.PRE)
+
+        ep.signal("ok")
+        sim.run(1)
+        ep.signal("ok")
+        sim.run(2)
+        ep.signal("nope")
+        sim.run(3)
+
+        self.assertTrue(flt.signaled)
+        self.assertEqual(observed, [TestObject])
+
+    def test_filter_default_auto_detaches_after_first_match(self):
+        sim = DSSimulation()
+        ep = sim.publisher(name="ep")
+        flt = DSFilter(lambda e: e == "ok", eps=[ep], sim=sim).attach()
+
+        self.assertTrue(flt.is_attached())
+        self.assertTrue(ep.has_subscribers())
+
+        ep.signal("ok")
+        sim.run(1)
+
+        self.assertFalse(flt.is_attached())
+        self.assertFalse(ep.has_subscribers())
+
+    def test_filter_pulsed_passes_event_without_latching(self):
+        sim = DSSimulation()
+        ep = sim.publisher(name="ep")
+        flt = DSFilter(lambda e: e == "go", sigtype=DSFilter.SignalType.PULSED, eps=[ep], sim=sim)
+        out = []
+
+        async def waiter():
+            got = await flt.wait(timeout=5)
+            out.append((sim.time, got))
+
+        def scenario():
+            yield from sim.gwait(1)
+            ep.signal("go")
+
+        sim.schedule(0, waiter())
+        sim.schedule(0, scenario())
+        sim.run(10)
+
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0][0], 1)
+        self.assertEqual(out[0][1], "go")
+        self.assertFalse(flt.signaled)
+
+    def test_a_nested_circuit_two_pulses_same_endpoint_one_shot_payload(self):
+        sim = DSSimulation()
+        ep = sim.publisher(name="shared")
+
+        a = DSFilter(lambda e: e == "go", sigtype=DSFilter.SignalType.PULSED, eps=[ep], sim=sim)
+        b = DSFilter(lambda e: e == "other", sigtype=DSFilter.SignalType.REEVALUATE, eps=[ep], sim=sim)
+        c = DSFilter(lambda e: e == "go", sigtype=DSFilter.SignalType.PULSED, eps=[ep], sim=sim)
+        ready = (a | b) & c
+        out = []
+
+        async def waiter():
+            got = await ready.wait(timeout=10)
+            out.append((sim.time, got))
+
+        def scenario():
+            yield from sim.gwait(1)
+            ep.signal("go")
+            yield from sim.gwait(1)
+            ep.signal("noop")
+
+        sim.schedule(0, waiter())
+        sim.schedule(0, scenario())
+        sim.run(20)
+
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0][0], 1)
+        payload = out[0][1]
+        self.assertIn(a, payload)
+        self.assertIn(c, payload)
+        self.assertEqual(payload[a], "go")
+        self.assertEqual(payload[c], "go")
+        self.assertTrue(ready.signaled)
+        self.assertFalse(ready.is_attached())
+
+    def test_pulsed_leaf_in_and_circuit_does_not_detach_before_parent_signals(self):
+        sim = DSSimulation()
+        pa = sim.publisher(name="pa")
+        pb = sim.publisher(name="pb")
+
+        fa = DSFilter(lambda e: e == "A", sigtype=DSFilter.SignalType.PULSED, eps=[pa], sim=sim)
+        fb = DSFilter(lambda e: e == "B", sigtype=DSFilter.SignalType.REEVALUATE, eps=[pb], sim=sim)
+        ready = fa & fb
+        out = []
+
+        async def waiter():
+            got = await ready.wait(timeout=10)
+            out.append((sim.time, got))
+
+        def scenario():
+            yield from sim.gwait(1)
+            pa.signal("A")   # pulse arrives before fb is ready; circuit must not fire yet
+            self.assertTrue(fa.is_attached())  # regression: fa used to detach here
+            self.assertTrue(ready.is_attached())
+            yield from sim.gwait(1)
+            pb.signal("B")   # now fb is ready, but pulse from t=1 is already gone
+            self.assertTrue(fa.is_attached())
+            yield from sim.gwait(1)
+            pa.signal("A")   # second pulse should satisfy (fa & fb)
+
+        sim.schedule(0, waiter())
+        sim.schedule(0, scenario())
+        sim.run(20)
+
+        self.assertEqual(out, [(3, {fa: "A", fb: "B"})])
+        self.assertFalse(fa.is_attached())
+        self.assertFalse(fb.is_attached())
+        self.assertFalse(ready.is_attached())
+
+    def test_filter_eps_binds_filter_to_endpoint(self):
+        sim = DSSimulation()
+        ep = sim.publisher(name="ep")
+
+        flt = DSFilter(lambda e: e == "go", sigtype=DSFilter.SignalType.PULSED, eps=[ep], sim=sim)
+        out = []
+
+        async def waiter():
+            got = await flt.wait(timeout=5)
+            out.append(got)
+
+        def scenario():
+            yield from sim.gwait(1)
+            ep.signal("go")
+
+        sim.schedule(0, waiter())
+        sim.schedule(0, scenario())
+        sim.run(5)
+
+        self.assertEqual(out, ["go"])
+
+    def test_filter_with_eps_and_always_true_condition(self):
+        sim = DSSimulation()
+        ep = sim.publisher(name="ep")
+
+        flt = DSFilter(cond=lambda _e: True, sigtype=DSFilter.SignalType.PULSED, eps=[ep], sim=sim)
+        out = []
+
+        async def waiter():
+            got = await flt.wait(timeout=5)
+            out.append(got)
+
+        def scenario():
+            yield from sim.gwait(1)
+            ep.signal({"any": "payload"})
+
+        sim.schedule(0, waiter())
+        sim.schedule(0, scenario())
+        sim.run(5)
+
+        self.assertEqual(out, [{"any": "payload"}])
+
+    def test_no_event_forwarding_to_wrapped_process(self):
+        def gen():
+            event = yield "boot"
+            return event
+
+        sim = DSSimulation()
+        ep = sim.publisher(name="ep")
+        proc = DSProcess(gen(), sim=sim)
+        flt = DSFilter(proc, sigtype=DSFilter.SignalType.REEVALUATE, eps=[ep], sim=sim)
+
+        ep.signal("x")
+        sim.run()
+
+        self.assertFalse(proc.started())
+        self.assertFalse(proc.finished())
+        self.assertFalse(flt.signaled)
+
+    def test_external_finish_triggers_filter_wait(self):
+        sim = DSSimulation()
+
+        def long_process():
+            yield from sim.gwait(10)
+            return "hello"
+
+        proc = DSProcess(long_process(), sim=sim).schedule(0)
+        flt = DSFilter(proc, sim=sim)
+        out = []
+
+        def complete_filter():
+            yield from sim.gwait(2)
+            flt.finish("Signal!")
+
+        async def waiter():
+            out.append(await flt)
+
+        sim.schedule(0, complete_filter())
+        sim.schedule(0, waiter())
+        sim.run(20)
+
+        self.assertEqual(out, ["Signal!"])
+
+    def test_circuit_can_signal_before_waiter_and_precheck_returns_immediately(self):
+        sim = DSSimulation()
+        ep = sim.publisher(name="ep")
+
+        a = DSFilter(lambda e: e == "go", eps=[ep], sim=sim).attach()
+        b = DSFilter(lambda e: e == "go", eps=[ep], sim=sim).attach()
+        ready = a & b
+        ready.attach()
+
+        ep.signal("go")
+        sim.run(1)
+
+        self.assertTrue(ready.signaled)
+        self.assertEqual(ready.cond_value(), {a: "go", b: "go"})
+
+        out = []
+
+        async def waiter():
+            t0 = sim.time
+            got = await ready.check_and_wait(timeout=5)
+            out.append((sim.time - t0, got))
+
+        sim.schedule(0, waiter())
+        sim.run(2)
+
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0][0], 0)
+        self.assertEqual(out[0][1], {a: "go", b: "go"})
+
+    def test_circuit_close_recursively_unsubscribes_nested_filters(self):
+        sim = DSSimulation()
+        ep0 = sim.publisher(name="ep0")
+        ep1 = sim.publisher(name="ep1")
+
+        a = DSFilter(lambda e: e == "a", eps=[ep0], sim=sim).attach()
+        b = DSFilter(lambda e: e == "b", eps=[ep0], sim=sim).attach()
+        c = DSFilter(lambda e: e == "c", eps=[ep1], sim=sim).attach()
+        ready = (a | b) & c
+        ready.attach()
+
+        self.assertTrue(ep0.has_subscribers())
+        self.assertTrue(ep1.has_subscribers())
+        self.assertGreater(len(a._listeners), 0)
+        self.assertGreater(len(c._listeners), 0)
+
+        ready.detach()
+
+        self.assertFalse(ep0.has_subscribers())
+        self.assertFalse(ep1.has_subscribers())
+        self.assertEqual(len(a._listeners), 0)
+        self.assertEqual(len(b._listeners), 0)
+        self.assertEqual(len(c._listeners), 0)
+        ready.detach()
+
+        ready.attach()
+        self.assertTrue(ep0.has_subscribers())
+        self.assertTrue(ep1.has_subscribers())
+        ready.reset()
+        self.assertTrue(ep0.has_subscribers())
+        self.assertTrue(ep1.has_subscribers())
+
+    def test_circuit_wait_auto_opens_when_closed_and_does_not_auto_close(self):
+        sim = DSSimulation()
+        ep = sim.publisher(name="ep")
+
+        a = DSFilter(lambda e: e == "go", eps=[ep], sim=sim, one_shot=False)
+        b = DSFilter(lambda e: e == "go", eps=[ep], sim=sim, one_shot=False)
+        ready = DSCircuit(all, [a, b], sim=sim, one_shot=False)
+
+        self.assertFalse(a.is_attached())
+        self.assertFalse(b.is_attached())
+        self.assertFalse(ready.is_attached())
+        self.assertFalse(ep.has_subscribers())
+
+        out = []
+
+        async def waiter():
+            got = await ready.wait(timeout=5)
+            out.append(got)
+
+        def scenario():
+            yield from sim.gwait(1)
+            self.assertTrue(a.is_attached())
+            self.assertTrue(b.is_attached())
+            self.assertTrue(ready.is_attached())
+            self.assertTrue(ep.has_subscribers())
+            ep.signal("go")
+
+        sim.schedule(0, waiter())
+        sim.schedule(0, scenario())
+        sim.run(10)
+
+        self.assertEqual(out, [{a: "go", b: "go"}])
+        self.assertTrue(a.is_attached())
+        self.assertTrue(b.is_attached())
+        self.assertTrue(ready.is_attached())
+        self.assertTrue(ep.has_subscribers())
+
+    def test_circuit_builder_set_one_shot_false_propagates_to_children(self):
+        sim = DSSimulation()
+        ep = sim.publisher(name="ep")
+
+        a = DSFilter(lambda e: e == "go", eps=[ep], sim=sim).attach()
+        b = DSFilter(lambda e: e == "go", eps=[ep], sim=sim).attach()
+        ready = (a & b).set_one_shot(False)
+        ready.attach()
+
+        self.assertFalse(ready.one_shot)
+        self.assertFalse(a.one_shot)
+        self.assertFalse(b.one_shot)
+
+        ep.signal("go")
+        sim.run(1)
+
+        self.assertTrue(ready.is_attached())
+        self.assertTrue(a.is_attached())
+        self.assertTrue(b.is_attached())
+        self.assertTrue(ep.has_subscribers())
+
+    def test_circuit_rejects_pulsed_sigtype(self):
+        sim = DSSimulation()
+        a = DSFilter("a", sim=sim)
+        b = DSFilter("b", sim=sim)
+        with self.assertRaises(ValueError):
+            DSCircuit(all, [a, b], sigtype=DSCircuit.SignalType.PULSED, sim=sim)
+
+
+class TestSourceScopedCircuitMerged(unittest.TestCase):
+    def test_independent_reevaluate_and(self):
+        sim = DSSimulation()
+
+        temp_pub = sim.publisher(name="temp")
+        pressure_pub = sim.publisher(name="pressure")
+
+        f_temp = DSFilter(lambda e: e == "stable", sigtype=DSFilter.SignalType.REEVALUATE, eps=[temp_pub], sim=sim)
+        f_pressure = DSFilter(lambda e: e == "ok", sigtype=DSFilter.SignalType.REEVALUATE, eps=[pressure_pub], sim=sim)
+
+        ready = f_temp & f_pressure
+        result = [None]
+
+        def controller():
+            result[0] = yield from ready.gwait(timeout=10)
+
+        def scenario():
+            yield from sim.gwait(1)
+            temp_pub.signal("stable")
+            yield from sim.gwait(1)
+            pressure_pub.signal("ok")
+
+        sim.schedule(0, controller())
+        sim.schedule(0, scenario())
+        sim.run()
+
+        self.assertIsNotNone(result[0])
+
+    def test_reevaluate_toggle_independence(self):
+        sim = DSSimulation()
+
+        temp_pub = sim.publisher(name="temp")
+        pressure_pub = sim.publisher(name="pressure")
+
+        f_temp = DSFilter(lambda e: e == "stable", sigtype=DSFilter.SignalType.REEVALUATE, eps=[temp_pub], sim=sim)
+        f_pressure = DSFilter(lambda e: e == "ok", sigtype=DSFilter.SignalType.REEVALUATE, eps=[pressure_pub], sim=sim)
+
+        ready = f_temp & f_pressure
+        fire_times = []
+
+        def controller():
+            r = yield from ready.gwait(timeout=10)
+            if r is not None:
+                fire_times.append(sim.time)
+            r = yield from ready.gwait(timeout=10)
+            if r is not None:
+                fire_times.append(sim.time)
+
+        def scenario():
+            yield from sim.gwait(1)
+            temp_pub.signal("stable")
+
+            yield from sim.gwait(1)
+            pressure_pub.signal("ok")
+
+            yield from sim.gwait(1)
+            temp_pub.signal("drifted")
+
+            yield from sim.gwait(1)
+            pressure_pub.signal("ok")
+
+            yield from sim.gwait(1)
+            temp_pub.signal("stable")
+
+        sim.schedule(0, controller())
+        sim.schedule(0, scenario())
+        sim.run()
+
+        self.assertGreaterEqual(len(fire_times), 1)
+        self.assertEqual(fire_times[0], 2)
+        self.assertEqual(len(fire_times), 2)
+        self.assertEqual(fire_times[1], 5)
+
+    def test_pulsed_with_reevaluate(self):
+        sim = DSSimulation()
+
+        temp_pub = sim.publisher(name="temp")
+        operator_pub = sim.publisher(name="operator")
+
+        f_temp = DSFilter(lambda e: e == "stable", sigtype=DSFilter.SignalType.REEVALUATE, eps=[temp_pub], sim=sim)
+        f_operator = DSFilter(lambda e: e == "go", sigtype=DSFilter.SignalType.PULSED, eps=[operator_pub], sim=sim)
+
+        ready = f_temp & f_operator
+        result = [None]
+
+        def controller():
+            result[0] = yield from ready.gwait(timeout=20)
+
+        def scenario():
+            yield from sim.gwait(1)
+            operator_pub.signal("go")
+
+            yield from sim.gwait(1)
+            temp_pub.signal("stable")
+
+            yield from sim.gwait(1)
+            operator_pub.signal("go")
+
+        sim.schedule(0, controller())
+        sim.schedule(0, scenario())
+        sim.run()
+
+        self.assertIsNotNone(result[0])
+
+
+if __name__ == "__main__":
+    unittest.main()

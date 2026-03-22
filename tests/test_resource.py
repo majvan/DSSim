@@ -667,7 +667,9 @@ class TestResourceGetCond(unittest.TestCase):
         self.sim.run(30)
 
         self.assertEqual(out[0][0], 5)
-        self.assertEqual(set(out[0][1].values()), {r0.tx_nempty, r1.tx_nempty})
+        payload = out[0][1]
+        self.assertEqual(len(payload), 2)
+        self.assertTrue(all(v == 1 for v in payload.values()))
         self.assertEqual(r0.amount, 0)
         self.assertEqual(r1.amount, 0)
 
@@ -723,7 +725,7 @@ class TestResourceGetCond(unittest.TestCase):
         self.sim.schedule(0, producer())
         self.sim.run(30)
 
-        self.assertEqual(out, [(4, {filters['f1']: r1.tx_nempty})])
+        self.assertEqual(out, [(4, {filters['f1']: 1})])
         self.assertEqual(r0.amount, 0)
         self.assertEqual(r1.amount, 0)
 

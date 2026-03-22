@@ -456,7 +456,8 @@ class TestQueueCondHelpers(unittest.TestCase):
         self.sim.run(30)
 
         self.assertEqual(out[0][0], 5)
-        self.assertEqual(set(out[0][1].values()), {q0.tx_nempty, q1.tx_nempty})
+        # Circuits now propagate matched event payloads from filters.
+        self.assertEqual(set(out[0][1].values()), {'x', 'y'})
         self.assertEqual(len(q0), 0)
         self.assertEqual(len(q1), 0)
 

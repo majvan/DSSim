@@ -13,7 +13,6 @@ For a nested ownership/preemption example, see priority_resources_nested.py.
 '''
 
 from dssim import DSSimulation, DSResourcePreempted
-from dssim.pubsub.base import TestObject
 
 
 def main() -> None:
@@ -54,8 +53,7 @@ def main() -> None:
         wait_or = sim.time - t0
 
         assert wait_or == 0, f'OR wait expected 0, got {wait_or}'
-        assert got_or == {f_cpu: TestObject}, f'Unexpected OR result: {got_or}'
-        assert got_or[f_cpu] is TestObject
+        assert got_or == {f_cpu: 1}, f'Unexpected OR result: {got_or}'
         resource_or = f_cpu.cond.resource
         assert resource_or is cpu
         assert resource_or.held_amount(sim.pid) == 1
@@ -72,7 +70,7 @@ def main() -> None:
         assert wait_and == 3, f'AND wait expected 3, got {wait_and}'
         assert preempted_at['time'] is not None, 'Expected low holder to be preempted.'
         assert preempted_at['time'] == 1, f'Expected preemption at t=1, got {preempted_at["time"]}'
-        assert got_and == {f_cpu: TestObject, f_io: io.tx_nempty}, f'Unexpected AND result: {got_and}'
+        assert got_and == {f_cpu: 1, f_io: 1}, f'Unexpected AND result: {got_and}'
         resources_and = {flt.cond.resource for flt in got_and.keys()}
         assert resources_and == {cpu, io}
         assert cpu.held_amount(sim.pid) == 1
@@ -112,7 +110,7 @@ def main() -> None:
         wait_or_blocked = sim.time - t2
 
         assert wait_or_blocked == 2, f'Blocked OR wait expected 2, got {wait_or_blocked}'
-        assert got_or_blocked == {f_io: io.tx_nempty}, f'Unexpected blocked OR result: {got_or_blocked}'
+        assert got_or_blocked == {f_io: 1}, f'Unexpected blocked OR result: {got_or_blocked}'
         resource_blocked = f_io.cond.resource
         assert resource_blocked is io
         assert resource_blocked.held_amount(sim.pid) == 1
