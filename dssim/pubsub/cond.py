@@ -163,14 +163,11 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
             # Wrapping is still supported for convenience, but no event forwarding is performed.
             self.cond = self.sim.process(self.cond).schedule(0)
         self._refresh_cond_traits()
-
-        source_eps = list(eps)
-        if len(source_eps) == 0:
+        self._base_eps = set(eps)
+        if len(self._base_eps) == 0:
             get_eps = getattr(self.cond, 'get_eps', None)
             if callable(get_eps):
-                source_eps = list(get_eps())
-        for ep in source_eps:
-            self.add_ep(ep)
+                self._base_eps = set(get_eps())
 
     def _refresh_cond_traits(self) -> None:
         """Cache condition traits used in the hot check()/_match_event() path."""
@@ -183,24 +180,6 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
         self.meta = SubscriberMetadata()
         self.meta.cond.push(lambda _e: True)
         return self.meta
-
-    def add_ep(self, ep: "DSPub") -> None:
-        """Attach this filter to an endpoint PRE phase."""
-        self._base_eps.add(ep)
-        if not self._is_attached:
-            return
-        if ep in self._eps:
-            return
-        self._eps.add(ep)
-        ep.add_subscriber(self, ep.Phase.PRE)
-
-    def remove_ep(self, ep: "DSPub") -> None:
-        """Detach this filter from an endpoint and forget it from base endpoints."""
-        self._base_eps.discard(ep)
-        if ep not in self._eps:
-            return
-        ep.remove_subscriber(self, ep.Phase.PRE)
-        self._eps.remove(ep)
 
     def register_listener(self, circuit: "DSCircuit") -> None:
         """Register a parent circuit that should be notified on signal changes."""
@@ -345,7 +324,7 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
             cond=self.cond,
             sigtype=self.SignalType.PULSED,
             signal_timeout=self.signal_timeout,
-            eps=self._eps,
+            eps=self._base_eps,
             signal_to_endpoint=self.signal_to_endpoint,
             one_shot=self.one_shot,
             sim=self.sim,
