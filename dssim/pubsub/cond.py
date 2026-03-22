@@ -219,6 +219,12 @@ class DSFilter(_ConditionWaitMixin, DSFuture, ICondition, ISourceScoped, Callabl
             retval = '-' + retval
         return retval
 
+    def get_process(self) -> Optional[DSProcess]:
+        '''Return wrapped process when this filter condition is process-based.'''
+        if isinstance(self.cond, DSProcess):
+            return self.cond
+        return None
+
     def finished(self) -> bool:
         return self.signaled
 
@@ -370,6 +376,8 @@ class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixi
         return self
 
     def cond_value(self) -> Dict[Union[DSFilter, "DSCircuit"], EventType]:
+        if self.signaled and isinstance(self.value, dict):
+            return self.value
         retval: Dict[Union[DSFilter, "DSCircuit"], EventType] = {}
         for el in self.setters:
             if not el.finished():
@@ -381,6 +389,21 @@ class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixi
                 retval[el] = el.cond_value()
             else:
                 retval[el] = el.value
+        return retval
+
+    @staticmethod
+    def _collect_value_from_states(states: List[Tuple[SignalType, bool, EventType]]) -> Dict[Union[DSFilter, "DSCircuit"], EventType]:
+        retval: Dict[Union[DSFilter, "DSCircuit"], EventType] = {}
+        for signal, signaled, value in states:
+            if not signaled:
+                continue
+            if isinstance(signal, DSCircuit):
+                if isinstance(value, dict):
+                    retval.update(value)
+                else:
+                    retval[signal] = value
+            else:
+                retval[signal] = value
         return retval
     
     def __str__(self) -> str:
@@ -410,6 +433,24 @@ class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixi
             retval.append(signaled)
         return retval
 
+    def _gather_states(
+        self, event: EventType, futures: SignalList, source: Optional[object] = None
+    ) -> List[Tuple[SignalType, bool, EventType]]:
+        retval: List[Tuple[SignalType, bool, EventType]] = []
+        for fut in futures:
+            if isinstance(fut, ICondition) and self._is_relevant_source(fut, source):
+                signaled, value = fut.check(event, source)
+            else:
+                signaled = fut.finished()
+                if signaled and hasattr(fut, 'cond_value'):
+                    value = fut.cond_value()
+                elif signaled:
+                    value = fut.value
+                else:
+                    value = None
+            retval.append((fut, signaled, value))
+        return retval
+
     def get_eps(self) -> Set["DSPub"]:
         retval = set()
         # Including self._finish_tx would create loop dependency when waiting on self (i.e. await self):
@@ -426,6 +467,7 @@ class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixi
         if source is None:
             source = scoped_source
         signaled = False
+        states: List[Tuple[SignalType, bool, EventType]] = []
         # In the following, we have to send the event to the whole circuit. The reason is that
         # once some gate is signaled, it could be reset later; however if the signal stops event
         # to be spread to other gates; the other gates could be activated as well with the same
@@ -453,12 +495,14 @@ class DSCircuit(_ConditionWaitMixin, DSFuture, ICondition, CallableConditionMixi
                 signaled = False
             else:
                 if len(self.setters) > 0:
-                    results = self._gather_results(event, self.setters, source)
-                    signaled = self.expression(results)
+                    states = self._gather_states(event, self.setters, source)
+                    signaled = self.expression([state[1] for state in states])
             self.signaled = signaled
             if signaled:
-                self.finish(self.cond_value())
+                self.finish(self._collect_value_from_states(states))
         if signaled:
+            if self.positive:
+                return True, self.value
             return True, self.cond_value()
         return False, None
     

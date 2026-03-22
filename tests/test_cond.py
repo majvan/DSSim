@@ -1152,6 +1152,43 @@ class TestDSFilter(unittest.TestCase):
         sim.run(10)
         self.assertEqual(out, [(0, 'ready')])
 
+    def test30_get_process_compatibility(self):
+        def gen():
+            yield 'First'
+            return 'Return'
+
+        async def coro():
+            class Awaitable:
+                def __await__(self):
+                    yield 'First'
+                    return 'Return'
+            await Awaitable()
+
+        sim = DSSimulation()
+
+        f_val = _f('ready', sim=sim)
+        self.assertIsNone(f_val.get_process())
+
+        p = DSProcess(gen(), sim=sim)
+        f_proc = _f(p, sim=sim)
+        self.assertIs(f_proc.get_process(), p)
+
+        f_gen = _f(gen(), sim=sim)
+        p_gen = f_gen.get_process()
+        self.assertTrue(isinstance(p_gen, DSProcess))
+        self.assertIs(p_gen, f_gen.cond)
+        p_gen.get_cond().push(lambda e: True)
+        sim.send_object(p_gen, None)
+        sim.send_object(p_gen, 'done')
+
+        f_coro = _f(coro(), sim=sim)
+        p_coro = f_coro.get_process()
+        self.assertTrue(isinstance(p_coro, DSProcess))
+        self.assertIs(p_coro, f_coro.cond)
+        p_coro.get_cond().push(lambda e: True)
+        sim.send_object(p_coro, None)
+        sim.send_object(p_coro, 'done')
+
 
     '''
     The second part is for agregated 
@@ -1465,3 +1502,41 @@ class TestDSCircuit(unittest.TestCase):
         sim.run()
 
         self.assertEqual(results, [2, 4])
+
+    def test8_nested_two_pulsed_same_endpoint_one_shot(self):
+        sim = DSSimulation()
+        shared_pub = sim.publisher(name='shared')
+
+        cond_a = sim.eps_cond(lambda e: e == 'go', [shared_pub])
+        cond_b = sim.eps_cond(lambda e: e == 'other', [shared_pub])
+        cond_c = sim.eps_cond(lambda e: e == 'go', [shared_pub])
+
+        f_a = _f(cond_a, sigtype=_f.SignalType.PULSED, sim=sim)
+        f_b = _f(cond_b, sigtype=_f.SignalType.REEVALUATE, sim=sim)
+        f_c = _f(cond_c, sigtype=_f.SignalType.PULSED, sim=sim)
+
+        ready = (f_a | f_b) & f_c
+
+        out = []
+
+        def controller():
+            r = yield from ready.gwait(timeout=10)
+            out.append((sim.time, r))
+
+        def scenario():
+            yield from sim.gwait(1)
+            # One shared event must trigger both pulsed filters in the same evaluation step.
+            shared_pub.signal('go')
+
+        sim.schedule(0, controller())
+        sim.schedule(0, scenario())
+        sim.run()
+
+        self.assertEqual(len(out), 1)
+        t_fire, payload = out[0]
+        self.assertEqual(t_fire, 1)
+        self.assertIsNotNone(payload)
+        self.assertIn(f_a, payload)
+        self.assertIn(f_c, payload)
+        self.assertEqual(payload[f_a], 'go')
+        self.assertEqual(payload[f_c], 'go')
