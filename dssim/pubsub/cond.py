@@ -15,7 +15,8 @@
 This file implements advanced logic - with overloading operators
 to be able create advanced expressions for conditions.
 '''
-from typing import List, Set, Any, Dict, Tuple, Union, Optional, Callable, Iterable, Generator, TYPE_CHECKING
+from typing import List, Set, Any, Dict, Tuple, Union, Optional, Callable, Iterable, Generator, Mapping, TYPE_CHECKING
+from types import MappingProxyType
 import inspect
 from enum import Enum
 from dssim.base import TimeType, EventType, EventRetType
@@ -128,7 +129,7 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
         cond: CondType = AlwaysTrue,
         sigtype: SignalType = SignalType.LATCH,
         signal_timeout: bool = False,
-        eps: Iterable["DSPub"] = (),
+        eps: Union[Iterable["DSPub"], Mapping["DSPub", Any]] = (),
         signal_to_endpoint: bool = True,
         one_shot: bool = True,
         *args: Any,
@@ -153,8 +154,8 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
         self.reevaluate = sigtype in (self.SignalType.REEVALUATE, self.SignalType.PULSED)
         self.forward_events = False  # intentionally unsupported in the new endpoint-driven design
         self._is_attached = False
-        self._base_eps: Set["DSPub"] = set()
-        self._eps: Set["DSPub"] = set()
+        self._base_eps: Mapping["DSPub", Any] = MappingProxyType({})
+        self._eps: Dict["DSPub", Any] = {}
         self._listeners: Set["DSCircuit"] = set()
         self._pulse_token = -1
         self._pulse_value: EventType = None
@@ -163,11 +164,17 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
             # Wrapping is still supported for convenience, but no event forwarding is performed.
             self.cond = self.sim.process(self.cond).schedule(0)
         self._refresh_cond_traits()
-        self._base_eps = set(eps)
-        if len(self._base_eps) == 0:
+        source_eps = self._normalize_base_eps(eps)
+        if len(source_eps) == 0:
             get_eps = getattr(self.cond, 'get_eps', None)
             if callable(get_eps):
-                self._base_eps = set(get_eps())
+                source_eps = {ep: ep.Phase.PRE for ep in get_eps()}
+        self._base_eps = MappingProxyType(source_eps)
+
+    def _normalize_base_eps(self, eps: Union[Iterable["DSPub"], Mapping["DSPub", Any]]) -> Dict["DSPub", Any]:
+        if isinstance(eps, Mapping):
+            return {ep: phase for ep, phase in eps.items()}
+        return {ep: ep.Phase.PRE for ep in eps}
 
     def _refresh_cond_traits(self) -> None:
         """Cache condition traits used in the hot check()/_match_event() path."""
@@ -214,11 +221,11 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
             return
         visited.add(obj_id)
         self._is_attached = True
-        for ep in tuple(self._base_eps):
+        for ep, phase in tuple(self._base_eps.items()):
             if ep in self._eps:
                 continue
-            self._eps.add(ep)
-            ep.add_subscriber(self, ep.Phase.PRE)
+            self._eps[ep] = phase
+            ep.add_subscriber(self, phase)
 
     def detach(self) -> None:
         """Disconnect endpoint subscriptions and listener links."""
@@ -233,9 +240,9 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
         self._is_attached = False
         for circuit in tuple(self._listeners):
             self.unregister_listener(circuit)
-        for ep in tuple(self._eps):
-            ep.remove_subscriber(self, ep.Phase.PRE)
-            self._eps.remove(ep)
+        for ep, phase in tuple(self._eps.items()):
+            ep.remove_subscriber(self, phase)
+        self._eps.clear()
 
     def _match_event(self, event: EventType) -> Tuple[bool, EventType]:
         """Evaluate condition against event and normalize matched value payload."""
