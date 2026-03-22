@@ -17,6 +17,7 @@ Tests for DSQueue component.
 import unittest
 from dssim import DSSimulation, DSQueue
 from dssim.base_components import DSBaseOrder, DSLifoOrder, DSKeyOrder
+from dssim.pubsub.cond import DSFilter
 
 # ---------------------------------------------------------------------------
 # SimQueueMixin factory
@@ -395,10 +396,11 @@ class TestQueueCondHelpers(unittest.TestCase):
         q = DSQueue(sim=self.sim)
         out = []
         seen = []
+        cond = q.policy_for_get()
+        self.assertIs(cond['sigtype'], DSFilter.SignalType.LATCH)
 
         def consumer():
-            cond = q.get_cond()
-            got = yield from cond.gwait(10)
+            got = yield from cond['cond'].gwait(10)
             out.append((self.sim.time, got))
 
         def watcher():
@@ -424,8 +426,8 @@ class TestQueueCondHelpers(unittest.TestCase):
         out = []
 
         def consumer():
-            cond = q.get_cond(amount=2)
-            got = yield from self.sim.check_and_gwait(10, cond=cond)
+            cond = q.policy_for_get(amount=2)
+            got = yield from self.sim.check_and_gwait(10, cond=cond['cond'])
             out.append((self.sim.time, got))
 
         self.sim.schedule(0, consumer())
@@ -440,8 +442,8 @@ class TestQueueCondHelpers(unittest.TestCase):
         out = []
 
         def consumer():
-            f0 = self.sim.filter(q0.get_cond())
-            f1 = self.sim.filter(q1.get_cond())
+            f0 = self.sim.filter(q0.policy_for_get())
+            f1 = self.sim.filter(q1.policy_for_get())
             got = yield from (f0 & f1).check_and_gwait(20)
             out.append((self.sim.time, got))
 
@@ -464,10 +466,10 @@ class TestQueueCondHelpers(unittest.TestCase):
     def test4_get_cond_conditional_head_uses_tx_changed(self):
         q = DSQueue(sim=self.sim)
         out = []
-        cond = q.get_cond(cond=lambda e: e == 'wanted')
+        cond = q.policy_for_get(cond=lambda e: e == 'wanted')
 
         def consumer():
-            got = yield from cond.check_and_gwait(20)
+            got = yield from cond['cond'].check_and_gwait(20)
             out.append((self.sim.time, got))
 
         def producer():
@@ -490,10 +492,11 @@ class TestQueueCondHelpers(unittest.TestCase):
         q.put_nowait('first')
         out = []
         seen = []
+        cond = q.policy_for_put('second')
+        self.assertIs(cond['sigtype'], DSFilter.SignalType.LATCH)
 
         def putter():
-            cond = q.put_cond('second')
-            got = yield from cond.gwait(10)
+            got = yield from cond['cond'].gwait(10)
             out.append((self.sim.time, got))
 
         def watcher():
@@ -518,8 +521,8 @@ class TestQueueCondHelpers(unittest.TestCase):
         out = []
 
         def putter():
-            cond = q.put_cond('x')
-            got = yield from self.sim.check_and_gwait(10, cond=cond)
+            cond = q.policy_for_put('x')
+            got = yield from self.sim.check_and_gwait(10, cond=cond['cond'])
             out.append((self.sim.time, got))
 
         self.sim.schedule(0, putter())
@@ -531,10 +534,11 @@ class TestQueueCondHelpers(unittest.TestCase):
     def test7_change_cond_checks_queue_state_on_tx_changed(self):
         q = DSQueue(sim=self.sim)
         out = []
-        cond = q.change_cond(cond=lambda qq: len(qq) >= 2)
+        cond = q.policy_for_observe(cond=lambda qq: len(qq) >= 2)
+        self.assertIs(cond['sigtype'], DSFilter.SignalType.LATCH)
 
         def watcher():
-            got = yield from cond.check_and_gwait(20)
+            got = yield from cond['cond'].check_and_gwait(20)
             out.append((self.sim.time, got))
 
         def producer():
@@ -549,6 +553,64 @@ class TestQueueCondHelpers(unittest.TestCase):
 
         self.assertEqual(out, [(3, q.tx_changed)])
         self.assertEqual(list(q), ['a', 'b'])
+
+    def test8_circuit_queue_filter_consumes_event_before_parallel_queue_get(self):
+        q = DSQueue(sim=self.sim)
+        done = {}
+        blocker_ep = self.sim.publisher(name='blocker_ep')
+
+        def circuit_waiter():
+            f_queue = self.sim.filter(q.policy_for_get())
+            f_blocker = self.sim.filter(lambda _e: False, eps=[blocker_ep])
+            _ = yield from (f_queue | f_blocker).check_and_gwait(20)
+            done['circuit'] = self.sim.time
+
+        def plain_getter():
+            got = yield from q.gget(timeout=20)
+            done['plain'] = (self.sim.time, got)
+
+        def producer():
+            yield from self.sim.gwait(3)
+            q.put_nowait('A')
+            yield from self.sim.gwait(2)
+            q.put_nowait('B')
+
+        self.sim.schedule(0, circuit_waiter())
+        self.sim.schedule(0, plain_getter())
+        self.sim.schedule(0, producer())
+        self.sim.run(30)
+
+        self.assertEqual(done['circuit'], 3)
+        self.assertEqual(done['plain'], (5, 'B'))
+        self.assertEqual(len(q), 0)
+
+    def test9_and_circuit_latch_takes_at_most_one_queue_item_before_other_branch_signals(self):
+        q = DSQueue(sim=self.sim)
+        gate_ep = self.sim.publisher(name='gate_ep')
+        done = {}
+
+        def and_waiter():
+            f_queue = self.sim.filter(q.policy_for_get())
+            f_gate = self.sim.filter(lambda e: e == 'go', eps=[gate_ep])
+            got = yield from (f_queue & f_gate).check_and_gwait(20)
+            done['wait'] = (self.sim.time, got)
+
+        def producer():
+            yield from self.sim.gwait(1)
+            q.put_nowait('first')
+            yield from self.sim.gwait(1)
+            q.put_nowait('second')
+            yield from self.sim.gwait(1)
+            gate_ep.signal('go')
+
+        self.sim.schedule(0, and_waiter())
+        self.sim.schedule(0, producer())
+        self.sim.run(30)
+
+        self.assertEqual(done['wait'][0], 3)
+        self.assertEqual(set(done['wait'][1].values()), {'first', 'go'})
+        self.assertEqual(len(q), 1)
+        self.assertEqual(q.get_nowait(), 'second')
 
 
 # ---------------------------------------------------------------------------

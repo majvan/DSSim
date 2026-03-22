@@ -19,6 +19,7 @@ in the pool, just an abstract pool level information (e.g. amount of water in a 
 from typing import Any, Generator, TYPE_CHECKING, Optional
 from dssim.base import NumericType, TimeType, EventType, DSComponentSingleton
 from dssim.base_components import _ResourceBookkeeper, DSBasePriorityResource, DSPriorityPreemption
+from dssim.pubsub.cond import DSFilter
 from dssim.pubsub.components.base import DSStatefulComponent
 from dssim.pubsub.components.resource_probes import ResourceProbeMixin
 from dssim.pubsub.pubsub import DSPub, NotifierPriority, NotifierRoundRobin
@@ -71,11 +72,11 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
             return self.value
 
         def get_eps(self):
-            # Waiting on get_cond should wake on "resource became non-empty".
+            # Waiting on policy_for_get should wake on "resource became non-empty".
             return {self.resource.tx_nempty}
 
         def __str__(self) -> str:
-            return f'{self.resource}.get_cond(amount={self.amount}, policy={self.policy_params})'
+            return f'{self.resource}.policy_for_get(amount={self.amount}, policy={self.policy_params})'
 
     def __init__(
         self,
@@ -138,14 +139,20 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
     # Nowait operations
     # ------------------------------------------------------------------
 
-    def get_cond(self, amount: NumericType = 1, **policy_params: Any) -> "_GetCond":
-        '''Return condition object that tries to acquire during condition checks.
+    def policy_for_get(self, amount: NumericType = 1, **policy_params: Any) -> dict[str, Any]:
+        '''Return DSFilter policy dict for acquire-on-check behavior.
 
         Typical usage:
-            f = sim.filter(resource.get_cond(amount=1, priority=prio, preempt=True))
+            f = sim.filter(resource.policy_for_get(amount=1, priority=prio, preempt=True))
             got = yield from f.check_and_gwait(10)
         '''
-        return self._GetCond(self, amount, owner=self.sim.pid, **policy_params)
+        cond_obj = self._GetCond(self, amount, owner=self.sim.pid, **policy_params)
+        return {
+            'cond': cond_obj,
+            'sigtype': DSFilter.SignalType.LATCH,
+            'eps': {self.tx_nempty: self.tx_nempty.Phase.CONSUME},
+            'one_shot': True,
+        }
 
     def put_nowait(self) -> NumericType:
         ''' Put 1 unit into the resource pool immediately. '''

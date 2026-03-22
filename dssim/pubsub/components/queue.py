@@ -14,9 +14,10 @@
 '''
 The file implements the DSQueue simulation component.
 '''
-from typing import Any, List, Iterator, Optional, Generator, TYPE_CHECKING, Callable
+from typing import Any, List, Iterator, Optional, Generator, TYPE_CHECKING, Callable, Dict
 from dssim.base import NumericType, TimeType, EventType, EventRetType, SignalMixin
 from dssim.pubsub.base import CondType, DSAbortException, AlwaysTrue, ICondition, CallableConditionMixin, TestObject
+from dssim.pubsub.cond import DSFilter
 from dssim.pubsub.components.base import DSStatefulComponent
 from dssim.pubsub.components.queue_probes import QueueProbeMixin
 from dssim.pubsub.pubsub import DSPub
@@ -119,7 +120,7 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
             return {self.queue._get_tx_endpoint(self.cond)}
 
         def __str__(self) -> str:
-            return f'{self.queue}.get_cond(amount={self.amount}, cond={self.cond})'
+            return f'{self.queue}.policy_for_get(amount={self.amount}, cond={self.cond})'
 
         def gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
             with self.queue.sim.consume(*self.get_eps(), **policy_params):
@@ -165,7 +166,7 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
             return {self.queue.tx_nfull}
 
         def __str__(self) -> str:
-            return f'{self.queue}.put_cond(obj={self.obj})'
+            return f'{self.queue}.policy_for_put(obj={self.obj})'
 
         def gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
             with self.queue.sim.consume(*self.get_eps(), **policy_params):
@@ -210,7 +211,7 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
             return {self.queue.tx_changed}
 
         def __str__(self) -> str:
-            return f'{self.queue}.change_cond(cond={self.cond})'
+            return f'{self.queue}.policy_for_observe(cond={self.cond})'
 
         def gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
             with self.queue.sim.observe_pre(*self.get_eps(), **policy_params):
@@ -236,26 +237,40 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
 
     # ---- put side ----------------------------------------------------------
 
-    def get_cond(self, amount: int = 1, cond: CondType = AlwaysTrue) -> "_GetCond":
-        '''Return condition object that tries to dequeue during condition checks.
-
-        Typical usage:
-            getc = queue.get_cond(cond=lambda e: e.type == 'DATA')
-            got = yield from getc.check_and_gwait(10)
-        '''
+    def policy_for_get(self, amount: int = 1, cond: CondType = AlwaysTrue) -> Dict[str, Any]:
+        '''Return DSFilter policy dict for dequeue-on-check behavior.'''
         if amount < 1:
-            raise ValueError('get_cond amount must be >= 1.')
-        return self._GetCond(self, amount=amount, cond=cond)
+            raise ValueError('policy_for_get amount must be >= 1.')
+        cond_obj = self._GetCond(self, amount=amount, cond=cond)
+        tx = self._get_tx_endpoint(cond)
+        return {
+            'cond': cond_obj,
+            'sigtype': DSFilter.SignalType.LATCH,
+            'eps': {tx: tx.Phase.CONSUME},
+            'one_shot': True,
+        }
 
-    def put_cond(self, *obj: EventType) -> "_PutCond":
-        '''Return condition object that tries to enqueue during condition checks.'''
+    def policy_for_put(self, *obj: EventType) -> Dict[str, Any]:
+        '''Return DSFilter policy dict for enqueue-on-check behavior.'''
         if len(obj) == 0:
-            raise ValueError('put_cond requires at least one object.')
-        return self._PutCond(self, obj=obj)
+            raise ValueError('policy_for_put requires at least one object.')
+        cond_obj = self._PutCond(self, obj=obj)
+        return {
+            'cond': cond_obj,
+            'sigtype': DSFilter.SignalType.LATCH,
+            'eps': {self.tx_nfull: self.tx_nfull.Phase.CONSUME},
+            'one_shot': True,
+        }
 
-    def change_cond(self, cond: Callable[["DSQueue"], bool] = lambda _q: True) -> "_ChangeCond":
-        '''Return condition object that observes tx_changed and checks queue state.'''
-        return self._ChangeCond(self, cond=cond)
+    def policy_for_observe(self, cond: Callable[["DSQueue"], bool] = lambda _q: True) -> Dict[str, Any]:
+        '''Return DSFilter policy dict for tx_changed queue-state checks.'''
+        cond_obj = self._ChangeCond(self, cond=cond)
+        return {
+            'cond': cond_obj,
+            'sigtype': DSFilter.SignalType.LATCH,
+            'eps': {self.tx_changed: self.tx_changed.Phase.PRE},
+            'one_shot': True,
+        }
 
     def put_nowait(self, *obj: EventType) -> Optional[tuple]:
         '''Put item(s) into buffer immediately. Returns the obj tuple on success, None if full.'''

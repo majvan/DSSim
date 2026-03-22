@@ -16,6 +16,7 @@ Tests for DSResource, DSMutex, and ResourceMixin components.
 '''
 import unittest
 from dssim import DSSimulation
+from dssim.pubsub.cond import DSFilter
 from dssim.pubsub.components.resource import DSResource, DSUnitResource, DSPriorityResource, DSResourcePreempted, DSMutex, ResourceMixin
 
 
@@ -612,11 +613,12 @@ class TestResourceGetCond(unittest.TestCase):
     def test1_get_cond_acquires_on_nempty_signal(self):
         r = DSResource(amount=0, capacity=1, sim=self.sim)
         out = []
+        cond = r.policy_for_get()
+        self.assertIs(cond['sigtype'], DSFilter.SignalType.LATCH)
 
         def consumer():
-            cond = r.get_cond()
             with self.sim.consume(r.tx_nempty):
-                got = yield from self.sim.gwait(10, cond=cond)
+                got = yield from self.sim.gwait(10, cond=cond['cond'])
             out.append((self.sim.time, got))
 
         def producer():
@@ -635,8 +637,8 @@ class TestResourceGetCond(unittest.TestCase):
         out = []
 
         def consumer():
-            cond = r.get_cond(amount=2)
-            got = yield from self.sim.check_and_gwait(10, cond=cond)
+            cond = r.policy_for_get(amount=2)
+            got = yield from self.sim.check_and_gwait(10, cond=cond['cond'])
             out.append((self.sim.time, got))
 
         self.sim.schedule(0, consumer())
@@ -651,8 +653,8 @@ class TestResourceGetCond(unittest.TestCase):
         out = []
 
         def consumer():
-            f0 = self.sim.filter(r0.get_cond())
-            f1 = self.sim.filter(r1.get_cond())
+            f0 = self.sim.filter(r0.policy_for_get())
+            f1 = self.sim.filter(r1.policy_for_get())
             got = yield from (f0 & f1).check_and_gwait(20)
             out.append((self.sim.time, got))
 
@@ -688,9 +690,9 @@ class TestResourceGetCond(unittest.TestCase):
 
         def high():
             yield from self.sim.gwait(3)
-            cond = r.get_cond(priority=1, preempt=True)
+            cond = r.policy_for_get(priority=1, preempt=True)
             with self.sim.consume(r.tx_nempty):
-                got = yield from self.sim.check_and_gwait(5, cond=cond)
+                got = yield from self.sim.check_and_gwait(5, cond=cond['cond'])
             out.append(('high_got', self.sim.time, got))
             r.put_nowait()
 
@@ -712,8 +714,8 @@ class TestResourceGetCond(unittest.TestCase):
         filters = {}
 
         async def consumer():
-            filters['f0'] = self.sim.filter(r0.get_cond())
-            filters['f1'] = self.sim.filter(r1.get_cond())
+            filters['f0'] = self.sim.filter(r0.policy_for_get())
+            filters['f1'] = self.sim.filter(r1.policy_for_get())
             got = await (filters['f0'] | filters['f1']).check_and_wait(20)
             out.append((self.sim.time, got))
 
@@ -728,6 +730,64 @@ class TestResourceGetCond(unittest.TestCase):
         self.assertEqual(out, [(4, {filters['f1']: 1})])
         self.assertEqual(r0.amount, 0)
         self.assertEqual(r1.amount, 0)
+
+    def test6_circuit_resource_filter_consumes_event_before_parallel_resource_get(self):
+        r = DSResource(amount=0, capacity=2, sim=self.sim)
+        done = {}
+        blocker_ep = self.sim.publisher(name='blocker_ep')
+
+        def circuit_waiter():
+            f_resource = self.sim.filter(r.policy_for_get())
+            f_blocker = self.sim.filter(lambda _e: False, eps=[blocker_ep])
+            _ = yield from (f_resource | f_blocker).check_and_gwait(20)
+            done['circuit'] = self.sim.time
+
+        def plain_getter():
+            got = yield from r.gget(timeout=20)
+            done['plain'] = (self.sim.time, got)
+
+        def producer():
+            yield from self.sim.gwait(3)
+            r.put_nowait()
+            yield from self.sim.gwait(2)
+            r.put_nowait()
+
+        self.sim.schedule(0, circuit_waiter())
+        self.sim.schedule(0, plain_getter())
+        self.sim.schedule(0, producer())
+        self.sim.run(30)
+
+        self.assertEqual(done['circuit'], 3)
+        self.assertEqual(done['plain'], (5, 1))
+        self.assertEqual(r.amount, 0)
+
+    def test7_and_circuit_latch_takes_at_most_one_resource_unit_before_other_branch_signals(self):
+        r = DSResource(amount=0, capacity=2, sim=self.sim)
+        gate_ep = self.sim.publisher(name='gate_ep')
+        done = {}
+
+        def and_waiter():
+            f_resource = self.sim.filter(r.policy_for_get())
+            f_gate = self.sim.filter(lambda e: e == 'go', eps=[gate_ep])
+            got = yield from (f_resource & f_gate).check_and_gwait(20)
+            done['wait'] = (self.sim.time, got)
+
+        def producer():
+            yield from self.sim.gwait(1)
+            r.put_nowait()
+            yield from self.sim.gwait(1)
+            r.put_nowait()
+            yield from self.sim.gwait(1)
+            gate_ep.signal('go')
+
+        self.sim.schedule(0, and_waiter())
+        self.sim.schedule(0, producer())
+        self.sim.run(30)
+
+        self.assertEqual(done['wait'][0], 3)
+        self.assertEqual(set(done['wait'][1].values()), {1, 'go'})
+        self.assertEqual(r.amount, 1)
+        self.assertEqual(r.get_nowait(), 1)
 
 
 # ---------------------------------------------------------------------------

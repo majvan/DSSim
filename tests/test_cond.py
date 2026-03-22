@@ -20,7 +20,7 @@ includes the new-strategy coverage in the same consolidated suite.
 import unittest
 
 from dssim import DSFuture, DSProcess, DSSimulation
-from dssim.pubsub.base import TestObject
+from dssim.pubsub.base import TestObject, AlwaysTrue
 from dssim.pubsub.cond import DSCircuit, DSFilter
 
 
@@ -667,6 +667,152 @@ class TestDSCircuitApplicableLegacy(unittest.TestCase):
         self.assertEqual(out[0][0], 0)
         self.assertEqual(set(out[0][1].keys()), {f_a, f_b})
 
+    def test5_reevaluate_circuit_updates_payload_between_loop_cycles(self):
+        sim = DSSimulation()
+        pa = sim.publisher(name="pa")
+        pb = sim.publisher(name="pb")
+        p_other = sim.publisher(name="p_other")
+        f_a = DSFilter(
+            lambda e: isinstance(e, dict) and e.get("kind") == "A",
+            sigtype=DSFilter.SignalType.REEVALUATE,
+            eps=[pa],
+            sim=sim,
+        )
+        f_b = DSFilter(
+            lambda e: isinstance(e, dict) and e.get("kind") == "B",
+            sigtype=DSFilter.SignalType.REEVALUATE,
+            eps=[pb],
+            sim=sim,
+        )
+        f_other = DSFilter(
+            lambda e: e == "tick",
+            sigtype=DSFilter.SignalType.REEVALUATE,
+            eps=[p_other],
+            sim=sim,
+        )
+        ready = DSCircuit(
+            all,
+            [f_a, f_b],
+            sigtype=DSCircuit.SignalType.REEVALUATE,
+            one_shot=False,
+            sim=sim,
+        )
+
+        out = []
+
+        async def worker():
+            for cycle in range(2):
+                got = await ready.check_and_wait(20)
+                seqs = sorted(v["seq"] for v in got.values())
+                out.append(("ready", cycle, sim.time, seqs))
+                # Use wait() (not check_and_wait()) so this second await always
+                # blocks for a new tick event in each cycle.
+                _ = await f_other.wait(20)
+                out.append(("other", cycle, sim.time))
+
+        async def scenario():
+            # First cycle signal
+            await sim.wait(1)
+            pa.signal({"kind": "A", "seq": 1})
+            await sim.wait(1)
+            pb.signal({"kind": "B", "seq": 1})
+
+            # Re-signal while worker is blocked on the second await
+            await sim.wait(1)
+            pa.signal({"kind": "A", "seq": 2})
+            await sim.wait(1)
+            pb.signal({"kind": "B", "seq": 2})
+
+            # Release the "other" await in both cycles
+            await sim.wait(1)
+            p_other.signal("tick")
+            await sim.wait(1)
+            p_other.signal("tick")
+
+        sim.schedule(0, worker())
+        sim.schedule(0, scenario())
+        sim.run(30)
+
+        self.assertEqual(out[0], ("ready", 0, 2, [1, 1]))
+        self.assertEqual(out[1], ("other", 0, 5))
+        # No third signal: cycle-2 first wait should return immediately at t=5,
+        # and with the updated payload from the re-signal.
+        self.assertEqual(out[2], ("ready", 1, 5, [2, 2]))
+        self.assertEqual(out[3], ("other", 1, 6))
+
+    def test6_latch_circuit_keeps_first_payload_between_loop_cycles(self):
+        sim = DSSimulation()
+        pa = sim.publisher(name="pa_latch")
+        pb = sim.publisher(name="pb_latch")
+        p_other = sim.publisher(name="p_other_latch")
+        f_a = DSFilter(
+            lambda e: isinstance(e, dict) and e.get("kind") == "A",
+            sigtype=DSFilter.SignalType.LATCH,
+            eps=[pa],
+            sim=sim,
+        )
+        f_b = DSFilter(
+            lambda e: isinstance(e, dict) and e.get("kind") == "B",
+            sigtype=DSFilter.SignalType.LATCH,
+            eps=[pb],
+            sim=sim,
+        )
+        f_other = DSFilter(
+            lambda e: e == "tick",
+            sigtype=DSFilter.SignalType.LATCH,
+            eps=[p_other],
+            sim=sim,
+        )
+        ready = DSCircuit(
+            all,
+            [f_a, f_b],
+            sigtype=DSCircuit.SignalType.LATCH,
+            one_shot=False,
+            sim=sim,
+        )
+
+        out = []
+
+        async def worker():
+            for cycle in range(2):
+                got = await ready.check_and_wait(20)
+                seqs = sorted(v["seq"] for v in got.values())
+                out.append(("ready", cycle, sim.time, seqs))
+                _ = await f_other.wait(20)
+                out.append(("other", cycle, sim.time))
+
+        async def scenario():
+            # First cycle signal
+            await sim.wait(1)
+            pa.signal({"kind": "A", "seq": 1})
+            await sim.wait(1)
+            pb.signal({"kind": "B", "seq": 1})
+
+            # Re-signal while worker is blocked on the second await
+            await sim.wait(1)
+            pa.signal({"kind": "A", "seq": 2})
+            await sim.wait(1)
+            pb.signal({"kind": "B", "seq": 2})
+
+            # Release the "other" await in both cycles
+            await sim.wait(1)
+            p_other.signal("tick")
+            await sim.wait(1)
+            p_other.signal("tick")
+
+        sim.schedule(0, worker())
+        sim.schedule(0, scenario())
+        sim.run(30)
+
+        self.assertEqual(out[0], ("ready", 0, 2, [1, 1]))
+        self.assertEqual(out[1], ("other", 0, 5))
+        # LATCH+continuous returns immediately in cycle 2 as already signaled,
+        # but payload remains the first latched values (no refresh to seq=2).
+        self.assertEqual(out[2], ("ready", 1, 5, [1, 1]))
+        # f_other is LATCH too: once signaled, later sends do not emit again
+        # while it stays signaled, so wait() in cycle 2 times out.
+        self.assertEqual(out[3], ("other", 1, 25))
+
 
 class TestCondNewStrategyMerged(unittest.TestCase):
     def test_filter_is_endpoint_driven_default_latches(self):
@@ -1155,6 +1301,33 @@ class TestSourceScopedCircuitMerged(unittest.TestCase):
         sim.run()
 
         self.assertIsNotNone(result[0])
+
+
+class TestFilterPolicy(unittest.TestCase):
+    def test_filter_init_from_policy(self):
+        sim = DSSimulation()
+        ep = sim.publisher(name='ep')
+        policy = {
+            'cond': lambda e: e == 'ok',
+            'sigtype': DSFilter.SignalType.PULSED,
+            'eps': [ep],
+            'one_shot': False,
+        }
+        f = DSFilter(policy=policy, sim=sim)
+        self.assertIs(f._base_eps[ep], ep.Phase.PRE)
+        self.assertTrue(f.pulse)
+        self.assertTrue(f.reevaluate)
+        self.assertFalse(f.one_shot)
+
+    def test_policy_overrides_explicit_args(self):
+        sim = DSSimulation()
+        f = DSFilter(one_shot=False, policy={'one_shot': True}, sim=sim)
+        self.assertTrue(f.one_shot)
+
+    def test_policy_unknown_key_is_ignored(self):
+        sim = DSSimulation()
+        f = DSFilter(policy={'unknown': 1}, sim=sim)
+        self.assertIs(f.cond, AlwaysTrue)
 
 
 if __name__ == "__main__":

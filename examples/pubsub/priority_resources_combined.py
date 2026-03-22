@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2026- majvan (majvan@gmail.com)
 '''
-Preemptive get_cond example with two resources.
+Preemptive policy_for_get example with two resources.
 
 This demonstrates two phases using check_and_wait + filter circuits:
 1) OR filtering: immediate acquire (waiting time == 0)
@@ -42,8 +42,8 @@ def main() -> None:
 
     async def requester():
         await sim.wait(1)
-        f_cpu = sim.filter(cpu.get_cond(priority=1, preempt=True))
-        f_io = sim.filter(io.get_cond(priority=1, preempt=True))
+        f_cpu = sim.filter(cpu.policy_for_get(priority=1, preempt=True))
+        f_io = sim.filter(io.policy_for_get(priority=1, preempt=True))
 
         # ------------------------------------------------------------------
         # Phase 1: OR filtering; should be immediate (0 wait)
@@ -103,8 +103,8 @@ def main() -> None:
         got_ready1 = await ready.get()
         assert {got_ready0, got_ready1} == {'cpu', 'io'}
 
-        f_cpu = sim.filter(cpu.get_cond(priority=1, preempt=True))
-        f_io = sim.filter(io.get_cond(priority=1, preempt=True))
+        f_cpu = sim.filter(cpu.policy_for_get(priority=1, preempt=True))
+        f_io = sim.filter(io.policy_for_get(priority=1, preempt=True))
         t2 = sim.time
         got_or_blocked = await (f_cpu | f_io).check_and_wait(10)
         wait_or_blocked = sim.time - t2

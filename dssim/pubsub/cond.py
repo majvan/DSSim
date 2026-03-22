@@ -132,6 +132,7 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
         eps: Union[Iterable["DSPub"], Mapping["DSPub", Any]] = (),
         signal_to_endpoint: bool = True,
         one_shot: bool = True,
+        policy: Optional[Mapping[str, Any]] = None,
         *args: Any,
         **kwargs: Any,
     ):
@@ -140,18 +141,40 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
         The filter subscribes to source endpoints and maintains local signal state
         according to selected signal type (LATCH/REEVALUATE/PULSED).
         """
+        resolved_cond = cond
+        resolved_sigtype = sigtype
+        resolved_signal_timeout = signal_timeout
+        resolved_eps = eps
+        resolved_signal_to_endpoint = signal_to_endpoint
+        resolved_one_shot = one_shot
+        resolved_policy = policy
+
+        if resolved_policy is None and isinstance(cond, Mapping):
+            policy_keys = ('cond', 'sigtype', 'signal_timeout', 'eps', 'signal_to_endpoint', 'one_shot')
+            if any((k in cond) for k in policy_keys):
+                resolved_policy = cond
+                resolved_cond = AlwaysTrue
+
+        if resolved_policy is not None:
+            resolved_cond = resolved_policy.get('cond', resolved_cond)
+            resolved_sigtype = resolved_policy.get('sigtype', resolved_sigtype)
+            resolved_signal_timeout = resolved_policy.get('signal_timeout', resolved_signal_timeout)
+            resolved_eps = resolved_policy.get('eps', resolved_eps)
+            resolved_signal_to_endpoint = resolved_policy.get('signal_to_endpoint', resolved_signal_to_endpoint)
+            resolved_one_shot = resolved_policy.get('one_shot', resolved_one_shot)
+
         super().__init__(*args, **kwargs)
         self.expression: Optional[FilterExpression] = self.ONE_LINER
         self.signals: SignalList = [self]
         self.positive = True
         self.signaled = False
         self.value: EventType = None
-        self.cond = cond
-        self.signal_timeout = signal_timeout
-        self.signal_to_endpoint = signal_to_endpoint
-        self.one_shot = one_shot
-        self.pulse = sigtype in (self.SignalType.PULSED,)
-        self.reevaluate = sigtype in (self.SignalType.REEVALUATE, self.SignalType.PULSED)
+        self.cond = resolved_cond
+        self.signal_timeout = resolved_signal_timeout
+        self.signal_to_endpoint = resolved_signal_to_endpoint
+        self.one_shot = resolved_one_shot
+        self.pulse = resolved_sigtype in (self.SignalType.PULSED,)
+        self.reevaluate = resolved_sigtype in (self.SignalType.REEVALUATE, self.SignalType.PULSED)
         self.forward_events = False  # intentionally unsupported in the new endpoint-driven design
         self._is_attached = False
         self._base_eps: Mapping["DSPub", Any] = MappingProxyType({})
@@ -164,7 +187,7 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
             # Wrapping is still supported for convenience, but no event forwarding is performed.
             self.cond = self.sim.process(self.cond).schedule(0)
         self._refresh_cond_traits()
-        source_eps = self._normalize_base_eps(eps)
+        source_eps = self._normalize_base_eps(resolved_eps)
         if len(source_eps) == 0:
             get_eps = getattr(self.cond, 'get_eps', None)
             if callable(get_eps):
