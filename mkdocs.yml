@@ -75,9 +75,11 @@ nav:
       - Install: getting-started/install.md
       - First Simulation: getting-started/first-sim.md
       - Designing a Larger System: getting-started/design-approach.md
-      - 'Case Study: Traffic Lights': getting-started/case-study.md
-      - 'Case Study: CPU Memory Hierarchy': getting-started/case-study-cpu-cache.md
-      - 'Case Study: Network Packet Switch': getting-started/case-study-network-switch.md
+  - Case Studies:
+      - 'Traffic Lights': case-studies/traffic-lights.md
+      - 'CPU Memory Hierarchy': case-studies/cpu-cache.md
+      - 'Network Packet Switch': case-studies/network-switch.md
+      - 'Chemical Reactor': case-studies/chemical-reactor.md
   - Parity:
       - SimPy: parity/simpy.md
       - Salabim: parity/salabim.md

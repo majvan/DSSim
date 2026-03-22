@@ -670,3 +670,11 @@ D_w            2.57       19      492
 ```
 
 Intermediate crossroads now accumulate meaningful queues again because vehicles arrive during red phases. The model makes it straightforward to sweep over travel times and find the `ns_offset` values that minimise total queuing across the grid.
+
+### Green-wave offset sweep
+
+Sweeping the offset multiplier from 0 to 2.5 (where 1.0 = perfect alignment with travel times) shows the effect on downstream queues:
+
+![Green-wave offset sweep](../assets/images/crossroad_offset_sweep.svg)
+
+At multiplier 1.0 the downstream queues (B west, D north, C north, C west) collapse to near zero — the green wave carries traffic through without stopping.  Moving away from 1.0 in either direction causes queue build-up as vehicles arrive during red phases.

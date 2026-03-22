@@ -614,6 +614,12 @@ avg = L1_CYCLES + miss_rate_L1 × (L2_CYCLES + miss_rate_L2 × MEM_CYCLES)
     = 4 + 0.621 × (12 + 0.373 × 200)  =  57.8 cycles
 ```
 
+The following chart visualises the six patterns side by side — left panel
+shows where accesses are served (L1 / L2 / RAM), right panel shows the
+resulting average latency:
+
+![Access pattern comparison](../assets/images/cpu_cache_patterns.svg)
+
 ---
 
 ## Multi-Core: Shared L2 Contention
@@ -702,6 +708,14 @@ def run(n_cores=4, n_accesses=200_000, seed=42):
   cores sleep for `L1_CYCLES * CYCLE` simultaneously after each access. This
   is the event-scheduling pattern where DSSim's `TQBinTree` time queue (which
   groups events by timestamp into FIFO buckets) is most efficient.
+
+Sweeping from 1 to 16 cores shows how L2 port contention dominates latency:
+
+![Multi-core scaling](../assets/images/cpu_cache_scaling.svg)
+
+With a single-ported L2, average latency grows roughly linearly with core
+count as cores queue for the shared port.  The L2 hit rate stays stable
+because each core's workload has the same locality profile.
 
 !!! tip "Try it"
     Set `n_ports=4` (or `float('inf')`) to remove the L2 bottleneck and
