@@ -36,7 +36,7 @@ The base class for all named simulation objects. Requires `name` and `sim` const
 
 A reusable, composable condition object wrapping a predicate. Supports three signal types:
 
-- `DEFAULT` (monostable) — once triggered, stays triggered
+- `LATCH` (monostable) — once triggered, stays triggered
 - `REEVALUATE` — re-evaluates on every event; signal state can toggle
 - `PULSED` — triggers momentarily but never latches
 
