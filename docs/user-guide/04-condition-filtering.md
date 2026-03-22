@@ -4,6 +4,7 @@
     Everything in this chapter is specific to PubSubLayer2. LiteLayer2 has no condition evaluation machinery — subscriber wake-ups are driven entirely by queue/resource sentinel signals.
 
 Condition filtering is the mechanism that prevents spurious wakeups. When a process or subscriber specifies a `cond`, the scheduler evaluates it against every incoming event _before_ resuming the caller. The caller only wakes when the condition passes — or when the timeout expires and `None` is returned.
+The same principle applies as in the rest of DSSim: keep simulation usage simple while retaining rich flexibility in how components and conditions are composed.
 
 There are two fundamentally different ways a process can wait for a
 condition.  The first uses `sim.wait()` directly — the process itself must
@@ -196,17 +197,29 @@ The condition is evaluated against each event that is *delivered to the process*
 | `resource.get_n(timeout)` | Yes | CONSUME | `resource.tx_nempty` |
 | `resource.put_n(timeout)` | Yes | CONSUME | `resource.tx_nfull` |
 | `stateful.wait(timeout)` | Yes | CONSUME | `component.tx_changed` |
-| `queue.get_cond(...).check_and_wait(timeout)` | Yes | CONSUME | `queue.tx_nempty` or `queue.tx_changed` |
-| `queue.put_cond(...).check_and_wait(timeout)` | Yes | CONSUME | `queue.tx_nfull` |
-| `queue.change_cond(...).check_and_wait(timeout)` | Yes | PRE | `queue.tx_changed` |
-| `sim.filter(queue.get_cond(...)).check_and_wait(timeout)` | Yes | PRE | `queue.tx_nempty` or `queue.tx_changed` |
-| `sim.filter(queue.put_cond(...)).check_and_wait(timeout)` | Yes | PRE | `queue.tx_nfull` |
-| `sim.filter(queue.change_cond(...)).check_and_wait(timeout)` | Yes | PRE | `queue.tx_changed` |
-| `sim.filter(resource.get_cond(...)).check_and_wait(timeout)` | Yes | PRE | `resource.tx_nempty` |
+| `sim.filter(policy=queue.policy_for_put(...)).check_and_wait(timeout)` | Yes | CONSUME | `queue.tx_nempty` or `queue.tx_changed` |
+| `sim.filter(policy=queue.policy_for_get(...)).check_and_wait(timeout)` | Yes | CONSUME | `queue.tx_nfull` |
+| `sim.filter(policy=queue.policy_for_observe(...)).check_and_wait(timeout)` | Yes | PRE | `queue.tx_changed` |
+| `sim.filter(policy=resource.policy_for_get(...)).check_and_wait(timeout)` | Yes | CONSUME | `resource.tx_nempty` |
 | `sim.wait(cond=task)` | Yes — special case: process auto-subscribes when `cond` is a `DSFuture` | PRE | `task._finish_tx` |
 | `sim.wait(cond=lambda …)` | **No** — you must subscribe manually | — | — |
 | `sim.wait(cond=value)` | **No** — you must subscribe manually | — | — |
 | `agent.wait(timeout, cond=…)` | **No** — delegates to `sim.wait` | — | — |
+
+Queue/resource claim policies are one-shot latch policies. If you reuse the same
+policy-based filter in a loop, reset it between cycles (or build a fresh filter):
+
+```python
+f_q = sim.filter(policy=q.policy_for_put())
+f_r = sim.filter(policy=r.policy_for_get())
+
+for _ in range(2):
+    _ = await f_q.check_and_wait(10)
+    _ = await f_r.check_and_wait(10)
+    await do_something_else()
+    f_q.reset()
+    f_r.reset()
+```
 
 **Lambdas are opaque.** Even when you wrap a condition inside a `DSFilter`, the filter only sees a callable — it has no way to know that the lambda references `task1` or `task2` internally, so it still cannot subscribe to their publishers automatically. This is equally broken:
 
@@ -416,6 +429,34 @@ result = await (f_temp & f_pres & f_op).wait(timeout=10)
 Each value is the actual event that satisfied the corresponding filter —
 the raw sensor reading, not just True/False.  For nested circuits, the
 dict is flattened: all leaf filters appear at the top level.
+
+### Circuit Mode vs Leaf Mode (Loop Semantics)
+
+For a common loop pattern:
+
+```python
+for cycle in range(2):
+    payload = await circuit.check_and_wait(timeout=20)  # first await
+    await something_else.wait(timeout=20)               # second await
+    # circuit may be signaled again while blocked in the second await
+```
+
+the next loop-cycle `check_and_wait(...)` behaves as follows:
+
+| Circuit `sigtype` | Leaf `sigtype` | Circuit `one_shot` | Next-cycle first `check_and_wait` | Payload returned | Need third signal? |
+|---|---|---|---|---|---|
+| `REEVALUATE` | `REEVALUATE` | `False` | Immediate (already true) | **Updated** to latest leaf values | No |
+| `REEVALUATE` | `LATCH` | `False` | Immediate | **Stale** (leaf values remain latched) | No |
+| `LATCH` | `REEVALUATE` | `False` | Immediate | **Stale** (circuit value is latched) | No |
+| `LATCH` | `LATCH` | `False` | Immediate | **Stale** (fully latched) | No |
+| `REEVALUATE` or `LATCH` | any | `True` | Often immediate from previously latched/signaled state; circuit detached after first hit so re-signal during step 2 is typically not tracked | Usually **stale** (first-hit payload) | Usually No (but this is typically not the intended loop semantics) |
+
+`one_shot=True` is optimized for one-time waits. For looped multi-cycle waits,
+prefer `one_shot=False`; otherwise reset/rebuild between cycles.
+
+If you need per-cycle fresh payloads, use `REEVALUATE` leaves +
+`REEVALUATE` circuit with `one_shot=False`, or call `reset()` between cycles
+(or rebuild fresh filters/circuit).
 
 ---
 

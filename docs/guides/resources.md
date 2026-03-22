@@ -21,23 +21,23 @@ if got:
     res.put_nowait()
 ```
 
-## Condition Helper: get_cond
+## Condition Helper: policy_for_get
 
-`DSResource` and `DSPriorityResource` expose `get_cond()` for use with `sim.filter()`:
+`DSResource` and `DSPriorityResource` expose `policy_for_get()` for use with `sim.filter()`:
 
 ```python
-cond = r.get_cond(amount=1)           # or get_cond(priority=1, preempt=True)
-f = sim.filter(cond)
+policy = r.policy_for_get(amount=1)           # or policy_for_get(priority=1, preempt=True)
+f = sim.filter(policy=policy)
 result = yield from f.check_and_gwait(timeout=10)
 amount = f.cond.cond_value()          # amount actually acquired
 ```
 
-`get_cond` subscribes to `r.tx_nempty`. On each check it attempts immediate acquisition (with preemption if requested). Use it to compose multi-resource waits:
+`policy_for_get` subscribes to `r.tx_nempty`. On each check it attempts immediate acquisition (with preemption if requested). Use it to compose multi-resource waits:
 
 ```python
 # wait until both resources are acquired
-f0 = sim.filter(r0.get_cond())
-f1 = sim.filter(r1.get_cond())
+f0 = sim.filter(policy=r0.policy_for_get())
+f1 = sim.filter(policy=r1.policy_for_get())
 result = yield from (f0 & f1).check_and_gwait(timeout=20)
 ```
 

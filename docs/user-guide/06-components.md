@@ -3,6 +3,7 @@
 ## 6.1 Overview
 
 DSSim ships three stateful simulation components that model the most common coordination patterns:
+The design goal is simple simulation code at call sites while still providing rich flexibility in component behavior and composition.
 
 | Component | What it holds | Blocks when... |
 |---|---|---|
@@ -120,54 +121,80 @@ With `NotifierRoundRobin`, each new event starts notifying from the subscriber t
 
 For priority ordering, pass `NotifierPriority` and specify a `priority` on each `add_subscriber` call.
 
-### 6.2.8 Condition helpers
+### 6.2.8 Filter policies
 
-`DSQueue` provides three condition helper factories:
+`DSQueue` provides three policy factories that return **DSFilter policy
+dicts**.  A policy dict bundles `cond`, `eps`, and `one_shot` so that
+`sim.filter()` can be configured in one call:
 
-| Factory | Default wait tier | Subscribes to | On successful check |
+| Factory | Wait tier | Subscribes to | On successful check |
 |---|---|---|---|
-| `q.get_cond(amount=1, cond=AlwaysTrue)` | CONSUME | `q.tx_nempty` (or `q.tx_changed` if `cond` given) | Dequeues the item(s) |
-| `q.put_cond(*items)` | CONSUME | `q.tx_nfull` | Enqueues the items |
-| `q.change_cond(cond=lambda q: True)` | PRE | `q.tx_changed` | Observes; no dequeue |
+| `q.policy_for_put(amount=1, cond=AlwaysTrue)` | CONSUME | `q.tx_nempty` (or `q.tx_changed` if `cond` given) | Dequeues the item(s) |
+| `q.policy_for_get(*items)` | CONSUME | `q.tx_nfull` | Enqueues the items |
+| `q.policy_for_observe(cond=lambda q: True)` | PRE | `q.tx_changed` | Observes; no dequeue |
 
-Each returns an `ICondition` object with helper waits (`wait`, `gwait`, `check_and_wait`, `check_and_gwait`).
-
-Direct usage (recommended for queue claiming semantics):
+Pass the policy dict to `sim.filter()` via the `policy` parameter:
 
 ```python
-# wait for a specific item and consume it
-getc = q.get_cond(cond=lambda item: item.type == "DATA")
-item = yield from getc.check_and_gwait(timeout=10)
+# wait for a specific head item and consume it (cond checks head only — see §6.2.4)
+f = sim.filter(policy=q.policy_for_put(cond=lambda item: item.type == "DATA"))
+item = yield from f.check_and_gwait(timeout=10)
 
 # wait until space opens and enqueue
-putc = q.put_cond("ACK")
-result = yield from putc.check_and_gwait(timeout=10)  # ('ACK',)
+f = sim.filter(policy=q.policy_for_get("ACK"))
+result = yield from f.check_and_gwait(timeout=10)  # ('ACK',)
 
 # non-consuming queue-state watch
-chg = q.change_cond(cond=lambda qq: len(qq) >= 3)
-event = yield from chg.check_and_gwait(timeout=10)
+f = sim.filter(policy=q.policy_for_observe(cond=lambda qq: len(qq) >= 3))
+event = yield from f.check_and_gwait(timeout=10)
 ```
 
-Filter wrapping is for composition (`|` / `&`) and runs in PRE tier:
+Composing policies with `|` / `&` — the filter inherits the tier from the
+policy:
 
 ```python
-# compose: wake when either of two queues has an item
-f0 = sim.filter(q0.get_cond())
-f1 = sim.filter(q1.get_cond())
+# wake when either of two queues has an item
+f0 = sim.filter(policy=q0.policy_for_put())
+f1 = sim.filter(policy=q1.policy_for_put())
 result = yield from (f0 | f1).check_and_gwait(20)
 ```
 
-If you need full manual control, you can still use the low-level form:
+**`policy_for_put` vs `policy_for_observe`:** `policy_for_put` *consumes* (dequeues) on success. `policy_for_observe` only *observes* — it does not remove items.
+
+**`cond` parameter types differ:** `policy_for_put(cond=...)` takes an *item predicate* (`cond(item) -> bool`). `policy_for_observe(cond=...)` takes a *queue predicate* (`cond(queue) -> bool`).
+
+### 6.2.9 Looping with `policy_for_get` / `policy_for_put`
+
+Queue claim policies are intentionally configured as one-shot latch filters
+(`one_shot=True`, `sigtype=LATCH`) because each successful claim should consume
+at most one queue state transition in composed waits.
+
+So this statement is correct:
+
+- If you reuse the **same** filter created from `sim.filter(policy=q.policy_for_get(...))`
+  (or `policy_for_put`) in a loop, you should reset it before the next cycle.
+
+Practical options:
+
+1. Build a fresh filter each loop iteration (recommended for clarity).
+2. Reuse a filter but call `f.reset()` between cycles.
+3. For simple non-composed queue operations, use `q.put()/q.gput()` or
+   `q.get()/q.gget()` directly instead of policy+filter composition.
+
+`one_shot=False` on the same latch policy filter is usually **not** a drop-in
+replacement for cycle-by-cycle claims: the filter stays signaled and can return
+latched values rather than forcing a fresh claim transition.
+
+Example (queue claim filter reused in a loop):
 
 ```python
-cond = q.get_cond()
-with sim.consume(q.tx_nempty):
-    item = yield from sim.gwait(timeout=10, cond=cond)
+f = sim.filter(policy=q.policy_for_put())  # one-shot latch policy
+
+for _ in range(2):
+    item = await f.check_and_wait(10)      # cycle 1 consumes one item
+    await do_something_else()
+    f.reset()                              # required before next cycle
 ```
-
-**`get_cond` vs `change_cond`:** `get_cond` *consumes* (dequeues) on success. `change_cond` only *observes* — it does not remove items.
-
-**`cond` parameter types differ:** `get_cond(cond=...)` takes an *item predicate* (`cond(item) -> bool`). `change_cond(cond=...)` takes a *queue predicate* (`cond(queue) -> bool`).
 
 ---
 
@@ -246,25 +273,41 @@ Generator variants exist for all: `gput`, `gput_n`, `gget`, `gget_n`.
 | `r.tx_nfull` | pool transitions from capacity to below capacity |
 | `r.tx_changed` | any change |
 
-### 6.4.3 Condition helper: get_cond
+### 6.4.3 Filter policies
 
-`DSResource` (and `DSPriorityResource`) expose a `get_cond()` factory for use with `sim.filter()`:
+`DSResource` (and `DSPriorityResource`) expose a `policy_for_get()` factory
+that returns a **DSFilter policy dict**.  Pass the policy to `sim.filter()` via the `policy` parameter:
 
 ```python
-cond = r.get_cond(amount=2)   # or get_cond(amount=1, priority=1, preempt=True)
-f = sim.filter(cond)
+f = sim.filter(policy=r.policy_for_get(amount=2))
+# or: sim.filter(policy=r.policy_for_get(amount=1, priority=1, preempt=True))
 result = yield from f.check_and_gwait(timeout=10)
 amount = f.cond.cond_value()   # amount actually acquired
 ```
 
-`get_cond` subscribes to `r.tx_nempty`. On each condition check it attempts immediate acquisition; for `DSPriorityResource` this also handles preemption. The returned amount is available via `cond_value()`.
+The policy dict bundles `cond`, `eps`, and `one_shot` so that `sim.filter()`
+is configured in one call.  `policy_for_get` subscribes to `r.tx_nempty`.
+On each condition check it attempts immediate acquisition; for
+`DSPriorityResource` this also handles preemption.  The returned amount is
+available via `cond_value()`.
 
 Combining two resources in a circuit (wait for both):
 
 ```python
-f0 = sim.filter(r0.get_cond())
-f1 = sim.filter(r1.get_cond())
+f0 = sim.filter(policy=r0.policy_for_get())
+f1 = sim.filter(policy=r1.policy_for_get())
 result = yield from (f0 & f1).check_and_gwait(timeout=20)
+```
+
+When reusing the same claim filter in a loop, reset between cycles:
+
+```python
+f = sim.filter(policy=r.policy_for_get(amount=1))  # one-shot latch policy
+
+for _ in range(2):
+    got = await f.check_and_wait(10)               # acquires one unit
+    await do_something_else()
+    f.reset()                                      # required before next cycle
 ```
 
 ### 6.4.4 PriorityResource
@@ -403,6 +446,6 @@ Use `DSLiteQueue` when you do not need monitoring endpoints, conditional gets, o
 - `DSQueue` supports FIFO, LIFO, and priority ordering via the `policy` parameter.
 - Publisher endpoints (`tx_nempty`, `tx_nfull`, `tx_changed`) can be subscribed to for monitoring without interfering with blocking semantics.
 - `NotifierRoundRobin` on the `nempty_ep` distributes wake-ups fairly across multiple waiters.
-- **Condition helpers** (`get_cond`, `put_cond`, `change_cond` on queues; `get_cond` on resources) wrap acquisition logic in `ICondition` objects for use with `sim.filter()` — enabling composable OR/AND waits across multiple components without manual `with sim.consume(...)` blocks.
+- **Policy helpers** (`policy_for_put`, `policy_for_get`, `policy_for_observe` on queues; `policy_for_get` on resources) return DSFilter policy dicts for composable OR/AND waits across multiple components without manual `with sim.consume(...)` blocks.
 - `DSAgent` provides ergonomic wrappers for queue and resource operations inside agent processes.
 - Use `DSLiteQueue` / `DSLiteResource` when throughput matters more than event routing expressiveness.
