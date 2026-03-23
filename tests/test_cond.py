@@ -1310,14 +1310,25 @@ class TestFilterPolicy(unittest.TestCase):
         policy = {
             'cond': lambda e: e == 'ok',
             'sigtype': DSFilter.SignalType.PULSED,
-            'eps': [ep],
+            'eps': {ep: {'tier': ep.Phase.PRE, 'params': {'priority': 3}}},
             'one_shot': False,
         }
         f = DSFilter(policy=policy, sim=sim)
-        self.assertIs(f._base_eps[ep], ep.Phase.PRE)
+        self.assertIs(f._base_eps[ep]['tier'], ep.Phase.PRE)
+        self.assertEqual(f._base_eps[ep]['params'], {'priority': 3})
         self.assertTrue(f.pulse)
         self.assertTrue(f.reevaluate)
         self.assertFalse(f.one_shot)
+
+    def test_filter_init_from_policy_rejects_legacy_eps_mapping(self):
+        sim = DSSimulation()
+        ep = sim.publisher(name='ep')
+        policy = {
+            'cond': lambda e: e == 'ok',
+            'eps': {ep: ep.Phase.PRE},
+        }
+        with self.assertRaises(TypeError):
+            DSFilter(policy=policy, sim=sim)
 
     def test_policy_overrides_explicit_args(self):
         sim = DSSimulation()

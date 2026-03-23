@@ -150,7 +150,7 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
         return {
             'cond': cond_obj,
             'sigtype': DSFilter.SignalType.LATCH,
-            'eps': {self.tx_nempty: self.tx_nempty.Phase.CONSUME},
+            'eps': {self.tx_nempty: {'tier': self.tx_nempty.Phase.CONSUME, 'params': dict(policy_params)}},
             'one_shot': True,
         }
 

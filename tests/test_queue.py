@@ -15,7 +15,7 @@
 Tests for DSQueue component.
 '''
 import unittest
-from dssim import DSSimulation, DSQueue
+from dssim import DSSimulation, DSQueue, NotifierPriority
 from dssim.base_components import DSBaseOrder, DSLifoOrder, DSKeyOrder
 from dssim.pubsub.cond import DSFilter
 
@@ -553,6 +553,36 @@ class TestQueueCondHelpers(unittest.TestCase):
 
         self.assertEqual(out, [(3, q.tx_changed)])
         self.assertEqual(list(q), ['a', 'b'])
+
+    def test7_filter_policy_for_get_check_and_gwait_accepts_priority_in_eps_params(self):
+        q = DSQueue(nempty_ep=self.sim.publisher(notifier=NotifierPriority), sim=self.sim)
+        out = []
+
+        def high_priority_getter():
+            policy = q.policy_for_get(priority=0)
+            f = self.sim.filter(policy)
+            got = yield from f.check_and_gwait(timeout=20)
+            out.append(('high', self.sim.time, got))
+
+        def low_priority_getter():
+            policy = q.policy_for_get(priority=5)
+            f = self.sim.filter(policy)
+            got = yield from f.check_and_gwait(timeout=20)
+            out.append(('low', self.sim.time, got))
+
+        def producer():
+            yield from self.sim.gwait(4)
+            q.put_nowait('first')
+            yield from self.sim.gwait(1)
+            q.put_nowait('second')
+
+        self.sim.schedule(0, low_priority_getter())
+        self.sim.schedule(0, high_priority_getter())
+        self.sim.schedule(0, producer())
+        self.sim.run(20)
+
+        self.assertEqual(out, [('high', 4, 'first'), ('low', 5, 'second')])
+        self.assertFalse(q.tx_nempty.has_subscribers())
 
     def test8_circuit_queue_filter_consumes_event_before_parallel_queue_get(self):
         q = DSQueue(sim=self.sim)

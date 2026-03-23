@@ -237,7 +237,7 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
 
     # ---- put side ----------------------------------------------------------
 
-    def policy_for_get(self, amount: int = 1, cond: CondType = AlwaysTrue) -> Dict[str, Any]:
+    def policy_for_get(self, amount: int = 1, cond: CondType = AlwaysTrue, **policy_params: Any) -> Dict[str, Any]:
         '''Return DSFilter policy dict for dequeue-on-check behavior.'''
         if amount < 1:
             raise ValueError('policy_for_get amount must be >= 1.')
@@ -246,7 +246,7 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
         return {
             'cond': cond_obj,
             'sigtype': DSFilter.SignalType.LATCH,
-            'eps': {tx: tx.Phase.CONSUME},
+            'eps': {tx: {'tier': tx.Phase.CONSUME, 'params': dict(policy_params)}},
             'one_shot': True,
         }
 
@@ -258,7 +258,7 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
         return {
             'cond': cond_obj,
             'sigtype': DSFilter.SignalType.LATCH,
-            'eps': {self.tx_nfull: self.tx_nfull.Phase.CONSUME},
+            'eps': {self.tx_nfull: {'tier': self.tx_nfull.Phase.CONSUME, 'params': {}}},
             'one_shot': True,
         }
 
@@ -268,7 +268,7 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
         return {
             'cond': cond_obj,
             'sigtype': DSFilter.SignalType.LATCH,
-            'eps': {self.tx_changed: self.tx_changed.Phase.PRE},
+            'eps': {self.tx_changed: {'tier': self.tx_changed.Phase.PRE, 'params': {}}},
             'one_shot': True,
         }
 

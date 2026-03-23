@@ -33,6 +33,8 @@ if TYPE_CHECKING:
 FilterExpression = Callable[[Iterable[object]], bool]
 SignalType = Union["DSFilter", "DSCircuit"]
 SignalList = List[SignalType]
+EPSpecType = Dict[str, Any]
+EPMapType = Dict["DSPub", EPSpecType]
 
 
 class _ConditionProxy(ICondition, CallableConditionMixin):
@@ -177,8 +179,8 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
         self.reevaluate = resolved_sigtype in (self.SignalType.REEVALUATE, self.SignalType.PULSED)
         self.forward_events = False  # intentionally unsupported in the new endpoint-driven design
         self._is_attached = False
-        self._base_eps: Mapping["DSPub", Any] = MappingProxyType({})
-        self._eps: Dict["DSPub", Any] = {}
+        self._base_eps: Mapping["DSPub", EPSpecType] = MappingProxyType({})
+        self._eps: EPMapType = {}
         self._listeners: Set["DSCircuit"] = set()
         self._pulse_token = -1
         self._pulse_value: EventType = None
@@ -191,13 +193,22 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
         if len(source_eps) == 0:
             get_eps = getattr(self.cond, 'get_eps', None)
             if callable(get_eps):
-                source_eps = {ep: ep.Phase.PRE for ep in get_eps()}
+                source_eps = {ep: {'tier': ep.Phase.PRE, 'params': {}} for ep in get_eps()}
         self._base_eps = MappingProxyType(source_eps)
 
-    def _normalize_base_eps(self, eps: Union[Iterable["DSPub"], Mapping["DSPub", Any]]) -> Dict["DSPub", Any]:
+    def _normalize_base_eps(self, eps: Union[Iterable["DSPub"], Mapping["DSPub", Any]]) -> EPMapType:
         if isinstance(eps, Mapping):
-            return {ep: phase for ep, phase in eps.items()}
-        return {ep: ep.Phase.PRE for ep in eps}
+            normalized: EPMapType = {}
+            for ep, cfg in eps.items():
+                if not isinstance(cfg, Mapping):
+                    raise TypeError('Filter eps mapping values must be dicts with keys "tier" and optional "params".')
+                if 'tier' not in cfg:
+                    raise ValueError('Filter eps mapping entry is missing required key "tier".')
+                tier = cfg['tier']
+                params = dict(cfg.get('params', {}))
+                normalized[ep] = {'tier': tier, 'params': params}
+            return normalized
+        return {ep: {'tier': ep.Phase.PRE, 'params': {}} for ep in eps}
 
     def _refresh_cond_traits(self) -> None:
         """Cache condition traits used in the hot check()/_match_event() path."""
@@ -244,11 +255,13 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
             return
         visited.add(obj_id)
         self._is_attached = True
-        for ep, phase in tuple(self._base_eps.items()):
+        for ep, cfg in tuple(self._base_eps.items()):
             if ep in self._eps:
                 continue
-            self._eps[ep] = phase
-            ep.add_subscriber(self, phase)
+            tier = cfg['tier']
+            params = dict(cfg.get('params', {}))
+            self._eps[ep] = {'tier': tier, 'params': params}
+            ep.add_subscriber(self, tier, **params)
 
     def detach(self) -> None:
         """Disconnect endpoint subscriptions and listener links."""
@@ -263,8 +276,8 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
         self._is_attached = False
         for circuit in tuple(self._listeners):
             self.unregister_listener(circuit)
-        for ep, phase in tuple(self._eps.items()):
-            ep.remove_subscriber(self, phase)
+        for ep, cfg in tuple(self._eps.items()):
+            ep.remove_subscriber(self, cfg['tier'], **cfg.get('params', {}))
         self._eps.clear()
 
     def _match_event(self, event: EventType) -> Tuple[bool, EventType]:
