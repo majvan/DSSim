@@ -41,6 +41,12 @@ f1 = sim.filter(policy=r1.policy_for_get())
 result = yield from (f0 & f1).check_and_gwait(timeout=20)
 ```
 
+Policy dict endpoint metadata uses:
+
+```python
+{ep: {"tier": ep.Phase.CONSUME, "params": {"priority": 1, "preempt": True}}}
+```
+
 ## Example Pointers
 
 - `examples/pubsub/priority_resource.py`

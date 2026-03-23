@@ -129,19 +129,19 @@ dicts**.  A policy dict bundles `cond`, `eps`, and `one_shot` so that
 
 | Factory | Wait tier | Subscribes to | On successful check |
 |---|---|---|---|
-| `q.policy_for_put(amount=1, cond=AlwaysTrue)` | CONSUME | `q.tx_nempty` (or `q.tx_changed` if `cond` given) | Dequeues the item(s) |
-| `q.policy_for_get(*items)` | CONSUME | `q.tx_nfull` | Enqueues the items |
+| `q.policy_for_get(amount=1, cond=AlwaysTrue, **policy_params)` | CONSUME | `q.tx_nempty` (or `q.tx_changed` if `cond` given) | Dequeues the item(s) |
+| `q.policy_for_put(*items)` | CONSUME | `q.tx_nfull` | Enqueues the items |
 | `q.policy_for_observe(cond=lambda q: True)` | PRE | `q.tx_changed` | Observes; no dequeue |
 
 Pass the policy dict to `sim.filter()` via the `policy` parameter:
 
 ```python
 # wait for a specific head item and consume it (cond checks head only — see §6.2.4)
-f = sim.filter(policy=q.policy_for_put(cond=lambda item: item.type == "DATA"))
+f = sim.filter(policy=q.policy_for_get(cond=lambda item: item.type == "DATA"))
 item = yield from f.check_and_gwait(timeout=10)
 
 # wait until space opens and enqueue
-f = sim.filter(policy=q.policy_for_get("ACK"))
+f = sim.filter(policy=q.policy_for_put("ACK"))
 result = yield from f.check_and_gwait(timeout=10)  # ('ACK',)
 
 # non-consuming queue-state watch
@@ -154,14 +154,27 @@ policy:
 
 ```python
 # wake when either of two queues has an item
-f0 = sim.filter(policy=q0.policy_for_put())
-f1 = sim.filter(policy=q1.policy_for_put())
+f0 = sim.filter(policy=q0.policy_for_get())
+f1 = sim.filter(policy=q1.policy_for_get())
 result = yield from (f0 | f1).check_and_gwait(20)
 ```
 
-**`policy_for_put` vs `policy_for_observe`:** `policy_for_put` *consumes* (dequeues) on success. `policy_for_observe` only *observes* — it does not remove items.
+**`policy_for_get` vs `policy_for_observe`:** `policy_for_get` *consumes* (dequeues) on success. `policy_for_observe` only *observes* — it does not remove items.
 
-**`cond` parameter types differ:** `policy_for_put(cond=...)` takes an *item predicate* (`cond(item) -> bool`). `policy_for_observe(cond=...)` takes a *queue predicate* (`cond(queue) -> bool`).
+**`cond` parameter types differ:** `policy_for_get(cond=...)` takes an *item predicate* (`cond(item) -> bool`). `policy_for_observe(cond=...)` takes a *queue predicate* (`cond(queue) -> bool`).
+
+Policy dict `eps` format is:
+
+```python
+{
+    endpoint: {
+        "tier": endpoint.Phase.CONSUME,  # or PRE/POST_*
+        "params": {...},                 # notifier policy params (e.g. priority)
+    }
+}
+```
+
+For queue claim policies, pass waiter policy params via `policy_for_get(..., **policy_params)`.
 
 ### 6.2.9 Looping with `policy_for_get` / `policy_for_put`
 
@@ -290,6 +303,12 @@ is configured in one call.  `policy_for_get` subscribes to `r.tx_nempty`.
 On each condition check it attempts immediate acquisition; for
 `DSPriorityResource` this also handles preemption.  The returned amount is
 available via `cond_value()`.
+
+`eps` entries carry endpoint tier and params:
+
+```python
+{ep: {"tier": ep.Phase.CONSUME, "params": {"priority": 1, "preempt": True}}}
+```
 
 Combining two resources in a circuit (wait for both):
 

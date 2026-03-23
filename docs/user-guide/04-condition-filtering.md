@@ -197,8 +197,8 @@ The condition is evaluated against each event that is *delivered to the process*
 | `resource.get_n(timeout)` | Yes | CONSUME | `resource.tx_nempty` |
 | `resource.put_n(timeout)` | Yes | CONSUME | `resource.tx_nfull` |
 | `stateful.wait(timeout)` | Yes | CONSUME | `component.tx_changed` |
-| `sim.filter(policy=queue.policy_for_put(...)).check_and_wait(timeout)` | Yes | CONSUME | `queue.tx_nempty` or `queue.tx_changed` |
-| `sim.filter(policy=queue.policy_for_get(...)).check_and_wait(timeout)` | Yes | CONSUME | `queue.tx_nfull` |
+| `sim.filter(policy=queue.policy_for_get(...)).check_and_wait(timeout)` | Yes | CONSUME | `queue.tx_nempty` or `queue.tx_changed` |
+| `sim.filter(policy=queue.policy_for_put(...)).check_and_wait(timeout)` | Yes | CONSUME | `queue.tx_nfull` |
 | `sim.filter(policy=queue.policy_for_observe(...)).check_and_wait(timeout)` | Yes | PRE | `queue.tx_changed` |
 | `sim.filter(policy=resource.policy_for_get(...)).check_and_wait(timeout)` | Yes | CONSUME | `resource.tx_nempty` |
 | `sim.wait(cond=task)` | Yes — special case: process auto-subscribes when `cond` is a `DSFuture` | PRE | `task._finish_tx` |
