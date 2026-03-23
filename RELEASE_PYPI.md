@@ -1,6 +1,6 @@
 # PyPI Release Guide
 
-This project is now configured for PyPI publishing with version `1.2.1`.
+This project is now configured for PyPI publishing with version `1.2.2`.
 
 ## 1) Prepare release commit
 
@@ -9,8 +9,8 @@ This project is now configured for PyPI publishing with version `1.2.1`.
 3. Create and push a tag:
 
 ```bash
-git tag v1.2.1
-git push origin v1.2.1
+git tag v1.2.2
+git push origin v1.2.2
 ```
 
 ## 2) Build distributions
@@ -24,14 +24,14 @@ python -m twine check dist/*
 
 Expected artifacts:
 
-- `dist/dssim-1.2.1.tar.gz`
-- `dist/dssim-1.2.1-py3-none-any.whl`
+- `dist/dssim-1.2.2.tar.gz`
+- `dist/dssim-1.2.2-py3-none-any.whl`
 
 ## 3) Publish to TestPyPI (recommended first)
 
 ```bash
 python -m twine upload --repository testpypi dist/*
-python -m pip install --index-url https://test.pypi.org/simple/ dssim==1.2.1
+python -m pip install --index-url https://test.pypi.org/simple/ dssim==1.2.2
 ```
 
 ## 4) Publish to PyPI
@@ -43,6 +43,6 @@ python -m twine upload dist/*
 ## 5) Verify install from PyPI
 
 ```bash
-python -m pip install -U dssim==1.2.1
+python -m pip install -U dssim==1.2.2
 python -c "import dssim; print(dssim.__version__)"
 ```

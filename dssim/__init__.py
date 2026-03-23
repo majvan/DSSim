@@ -14,7 +14,7 @@
 '''
 The aggregation of class interfaces needed for developing a dssim application.
 '''
-__version__ = '1.2.1'
+__version__ = '1.2.2'
 
 from dssim.base import DSComponent
 from dssim.pubsub.base import DSAbortException
