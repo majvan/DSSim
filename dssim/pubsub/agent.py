@@ -22,6 +22,7 @@ from dssim.base import EventType, TimeType, DSComponent, NumericType
 from dssim.pubsub.base import CondType, DSAbortException, AlwaysTrue
 from dssim.pubsub.process import DSProcess
 from dssim.pubsub.pubsub import DSPub
+from dssim.pubsub.agent_probes import AgentProbeMixin
 from dssim.simulation import DSSchedulable
 from dssim.pubsub.components.container import DSContainer
 from dssim.pubsub.components.resource import DSResource
@@ -146,7 +147,7 @@ class AgentResourceMixin:
         return retval
 
 
-class DSAgent(DSComponent, AgentContainerMixin, AgentResourceMixin):
+class DSAgent(DSComponent, AgentProbeMixin, AgentContainerMixin, AgentResourceMixin):
     _dscomponent_instances: int = 0
 
     def __init__(self, *args: Any, name: Optional[str] = None, change_ep: Optional[DSPub] = None, **kwargs: Any) -> None:

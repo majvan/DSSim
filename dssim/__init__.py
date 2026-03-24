@@ -26,6 +26,7 @@ from dssim.simulation import DSSchedulable, LiteLayer2, PubSubLayer2
 from dssim.pubsub.process import DSInterruptibleContextError, DSTransferableCondition, DSTimeoutContextError
 from dssim.pubsub.cond import DSFilter
 from dssim.pubsub.agent import DSAgent, DSProcessComponent, PCGenerator
+from dssim.pubsub.agent_probes import AgentHistoryProbe, AgentStatsProbe
 from dssim.simulation import DSSimulation
 from dssim.timequeue import ITimeQueue, TQBinTree, TQBisect, NowQueue
 

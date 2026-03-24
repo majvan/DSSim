@@ -27,3 +27,4 @@ from dssim.pubsub.pubsub import (
     TrackEvent,
 )
 from dssim.pubsub.cond import DSFilter, DSCircuit
+from dssim.pubsub.agent_probes import AgentHistoryProbe, AgentStatsProbe, AgentProbeMixin
