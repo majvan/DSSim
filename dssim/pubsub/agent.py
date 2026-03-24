@@ -130,6 +130,28 @@ class DSAgent(DSComponent, AgentContainerMixin, AgentResourceMixin):
     def signal(self, event: EventType) -> None:
         self._scheduled_process.signal(event)
 
+    def hold(self, timeout: TimeType = float('inf'), val: EventType = True) -> Generator[EventType, EventType, EventType]:
+        '''Pause this agent for a duration (maps to gsleep).'''
+        try:
+            retval = yield from self.sim.gsleep(timeout=timeout, val=val)
+        except DSAbortException:
+            self._scheduled_process.abort()
+            raise
+        return retval
+
+    def passivate(self, timeout: TimeType = float('inf'), val: EventType = True) -> Generator[EventType, EventType, EventType]:
+        '''Wait until this agent receives any event (or timeout).'''
+        try:
+            retval = yield from self.sim.gwait(timeout=timeout, cond=AlwaysTrue, val=val)
+        except DSAbortException:
+            self._scheduled_process.abort()
+            raise
+        return retval
+
+    def activate(self, event: EventType = True) -> None:
+        '''Activate this agent by sending an event to itself.'''
+        self.signal(event)
+
     async def wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue) -> EventType:
         try:
             retval = await self.sim.wait(timeout, cond=cond)

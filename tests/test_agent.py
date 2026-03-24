@@ -48,6 +48,61 @@ class TestDSAgentLifecycle(unittest.TestCase):
         self.assertIs(DSProcessComponent, DSAgent)
 
 
+class TestDSAgentSalabimStyleHelpers(unittest.TestCase):
+    def test1_hold_maps_to_gsleep(self):
+        sim = DSSimulation()
+        log = []
+
+        class Agent(DSAgent):
+            def process(self):
+                log.append(('before', sim.time))
+                yield from self.hold(3)
+                log.append(('after', sim.time))
+
+        Agent(sim=sim)
+        sim.run(10)
+        self.assertEqual(log, [('before', 0), ('after', 3)])
+
+    def test2_passivate_waits_until_activate_event(self):
+        sim = DSSimulation()
+        log = []
+
+        class Agent(DSAgent):
+            def process(self):
+                log.append(('start', sim.time))
+                event = yield from self.passivate()
+                log.append(('event', event, sim.time))
+
+        agent = Agent(sim=sim)
+
+        def kicker():
+            yield from sim.gwait(2)
+            agent.activate('wake')
+
+        sim.schedule(0, kicker())
+        sim.run(10)
+        self.assertEqual(log, [('start', 0), ('event', 'wake', 2)])
+
+    def test3_activate_default_event_is_true(self):
+        sim = DSSimulation()
+        log = []
+
+        class Agent(DSAgent):
+            def process(self):
+                event = yield from self.passivate()
+                log.append((event, sim.time))
+
+        agent = Agent(sim=sim)
+
+        def kicker():
+            yield from sim.gwait(1)
+            agent.activate()
+
+        sim.schedule(0, kicker())
+        sim.run(10)
+        self.assertEqual(log, [(True, 1)])
+
+
 class TestDSAgentContainerHelpers(unittest.TestCase):
     def test1_enter_and_gpop(self):
         sim = DSSimulation()
