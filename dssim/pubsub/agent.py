@@ -28,122 +28,118 @@ from dssim.pubsub.components.container import DSContainer
 from dssim.pubsub.components.resource import DSResource
 
 
-def _emit_agent_action(agent: Any, action: str, **details: Any) -> None:
-    emitter = getattr(agent, '_emit_action', None)
-    if callable(emitter):
-        emitter(action, **details)
-
-
 class AgentContainerMixin:
     async def enter(self: Any, container: DSContainer, timeout: TimeType = float('inf'), **policy_params: Any) -> EventType:
         try:
             retval = await container.put(timeout, self, **policy_params)
         except DSAbortException:
-            _emit_agent_action(self, 'enter_abort', container=container, timeout=timeout)
+            self.tx_changed.has_subscribers() and self._fire_changed('enter_abort', container=container, timeout=timeout)
             self._scheduled_process.abort()
             raise
-        _emit_agent_action(self, 'enter', container=container, timeout=timeout, success=(retval is not None), result=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('enter', container=container, timeout=timeout, success=(retval is not None), result=retval)
         return retval
 
     def genter(self: Any, container: DSContainer, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         try:
             retval = yield from container.gput(timeout, self, **policy_params)
         except DSAbortException:
-            _emit_agent_action(self, 'genter_abort', container=container, timeout=timeout)
+            self.tx_changed.has_subscribers() and self._fire_changed('genter_abort', container=container, timeout=timeout)
             self._scheduled_process.abort()
             raise
-        _emit_agent_action(self, 'genter', container=container, timeout=timeout, success=(retval is not None), result=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('genter', container=container, timeout=timeout, success=(retval is not None), result=retval)
         return retval
 
     def enter_nowait(self: Any, container: DSContainer) -> Optional[EventType]:
         retval = container.put_nowait(self)
-        _emit_agent_action(self, 'enter_nowait', container=container, success=(retval is not None), result=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('enter_nowait', container=container, success=(retval is not None), result=retval)
         return retval
 
     def leave(self: Any, container: DSContainer) -> None:
-        size_before = len(container) if hasattr(container, '__len__') else None
+        should_fire = self.tx_changed.has_subscribers()
+        size_before = len(container) if should_fire and hasattr(container, '__len__') else None
         container.remove(self)
-        if size_before is None:
-            success = True
-        else:
-            success = len(container) < size_before
-        _emit_agent_action(self, 'leave', container=container, success=success)
+        if should_fire:
+            if size_before is None:
+                success = True
+            else:
+                success = len(container) < size_before
+            self._fire_changed('leave', container=container, success=success)
 
     async def pop(self: Any, container: DSContainer, timeout: TimeType = float('inf'), **policy_params: Any) -> Optional[EventType]:
         try:
             retval = await container.get(timeout, **policy_params)
         except DSAbortException:
-            _emit_agent_action(self, 'pop_abort', container=container, timeout=timeout)
+            self.tx_changed.has_subscribers() and self._fire_changed('pop_abort', container=container, timeout=timeout)
             self._scheduled_process.abort()
             raise
-        _emit_agent_action(self, 'pop', container=container, timeout=timeout, success=(retval is not None), result=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('pop', container=container, timeout=timeout, success=(retval is not None), result=retval)
         return retval
 
     def gpop(self: Any, container: DSContainer, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         try:
             retval = yield from container.gget(timeout, **policy_params)
         except DSAbortException:
-            _emit_agent_action(self, 'gpop_abort', container=container, timeout=timeout)
+            self.tx_changed.has_subscribers() and self._fire_changed('gpop_abort', container=container, timeout=timeout)
             self._scheduled_process.abort()
             raise
-        _emit_agent_action(self, 'gpop', container=container, timeout=timeout, success=(retval is not None), result=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('gpop', container=container, timeout=timeout, success=(retval is not None), result=retval)
         return retval
 
     def pop_nowait(self: Any, container: DSContainer) -> Optional[EventType]:
         retval = container.get_nowait()
-        _emit_agent_action(self, 'pop_nowait', container=container, success=(retval is not None), result=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('pop_nowait', container=container, success=(retval is not None), result=retval)
         return retval
 
 
 class AgentResourceMixin:
     async def get(self: Any, resource: DSResource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
         retval = await resource.get(timeout, **policy_params)
-        _emit_agent_action(self, 'get', resource=resource, timeout=timeout, success=bool(retval), amount=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('get', resource=resource, timeout=timeout, success=bool(retval), amount=retval)
         return retval
 
     def gget(self: Any, resource: DSResource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
         retval = yield from resource.gget(timeout, **policy_params)
-        _emit_agent_action(self, 'gget', resource=resource, timeout=timeout, success=bool(retval), amount=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('gget', resource=resource, timeout=timeout, success=bool(retval), amount=retval)
         return retval
 
     async def get_n(self: Any, resource: DSResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
         retval = await resource.get_n(timeout, amount, **policy_params)
-        _emit_agent_action(self, 'get_n', resource=resource, timeout=timeout, requested=amount, success=bool(retval), amount=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('get_n', resource=resource, timeout=timeout, requested=amount, success=bool(retval), amount=retval)
         return retval
 
     def gget_n(self: Any, resource: DSResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
         retval = yield from resource.gget_n(timeout, amount, **policy_params)
-        _emit_agent_action(self, 'gget_n', resource=resource, timeout=timeout, requested=amount, success=bool(retval), amount=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('gget_n', resource=resource, timeout=timeout, requested=amount, success=bool(retval), amount=retval)
         return retval
 
     async def put(self: Any, resource: DSResource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
         retval = await resource.put(timeout, **policy_params)
-        _emit_agent_action(self, 'put', resource=resource, timeout=timeout, success=bool(retval), amount=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('put', resource=resource, timeout=timeout, success=bool(retval), amount=retval)
         return retval
 
     def gput(self: Any, resource: DSResource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
         retval = yield from resource.gput(timeout, **policy_params)
-        _emit_agent_action(self, 'gput', resource=resource, timeout=timeout, success=bool(retval), amount=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('gput', resource=resource, timeout=timeout, success=bool(retval), amount=retval)
         return retval
 
     async def put_n(self: Any, resource: DSResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
         retval = await resource.put_n(timeout, amount, **policy_params)
-        _emit_agent_action(self, 'put_n', resource=resource, timeout=timeout, requested=amount, success=bool(retval), amount=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('put_n', resource=resource, timeout=timeout, requested=amount, success=bool(retval), amount=retval)
         return retval
 
     def gput_n(self: Any, resource: DSResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
         retval = yield from resource.gput_n(timeout, amount, **policy_params)
-        _emit_agent_action(self, 'gput_n', resource=resource, timeout=timeout, requested=amount, success=bool(retval), amount=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('gput_n', resource=resource, timeout=timeout, requested=amount, success=bool(retval), amount=retval)
         return retval
 
     def put_nowait(self: Any, resource: DSResource) -> NumericType:
         retval = resource.put_nowait()
-        _emit_agent_action(self, 'put_nowait', resource=resource, success=bool(retval), amount=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('put_nowait', resource=resource, success=bool(retval), amount=retval)
         return retval
 
     def put_n_nowait(self: Any, resource: DSResource, amount: NumericType = 1) -> NumericType:
         retval = resource.put_n_nowait(amount)
-        _emit_agent_action(self, 'put_n_nowait', resource=resource, requested=amount, success=bool(retval), amount=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('put_n_nowait', resource=resource, requested=amount, success=bool(retval), amount=retval)
         return retval
 
 
@@ -174,12 +170,14 @@ class DSAgent(DSComponent, AgentProbeMixin, AgentContainerMixin, AgentResourceMi
         if prev_state == state:
             return False
         self.state = state
-        self._emit_change(reason=reason, change_type='state', prev_state=prev_state, details=details)
+        self._fire_changed(reason=reason, change_type='state', prev_state=prev_state, **details)
         return True
 
-    def _emit_change(self, reason: str, change_type: str, prev_state: str, details: Optional[dict[str, Any]] = None) -> None:
+    def _fire_changed(self, reason: str, change_type: str = 'action', prev_state: Optional[str] = None, **details: Any) -> None:
         if not self.tx_changed.has_subscribers():
             return
+        if prev_state is None:
+            prev_state = self.state
         event = {
             'kind': 'agent_state',
             'change_type': change_type,
@@ -192,9 +190,6 @@ class DSAgent(DSComponent, AgentProbeMixin, AgentContainerMixin, AgentResourceMi
         if details:
             event['details'] = details
         self.sim.signal(event, self.tx_changed)
-
-    def _emit_action(self, action: str, **details: Any) -> None:
-        self._emit_change(reason=action, change_type='action', prev_state=self.state, details=details)
 
     @property
     def instance_nr(self) -> int: return self._instance_nr
@@ -213,7 +208,7 @@ class DSAgent(DSComponent, AgentProbeMixin, AgentContainerMixin, AgentResourceMi
         except DSAbortException:
             self._scheduled_process.abort()
             raise
-        self._emit_action('hold', timeout=timeout, event=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('hold', timeout=timeout, event=retval)
         return retval
 
     def passivate(self, timeout: TimeType = float('inf'), val: EventType = True) -> Generator[EventType, EventType, EventType]:
@@ -223,12 +218,12 @@ class DSAgent(DSComponent, AgentProbeMixin, AgentContainerMixin, AgentResourceMi
         except DSAbortException:
             self._scheduled_process.abort()
             raise
-        self._emit_action('passivate', timeout=timeout, event=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('passivate', timeout=timeout, event=retval)
         return retval
 
     def activate(self, event: EventType = True) -> None:
         '''Activate this agent by sending an event to itself.'''
-        self._emit_action('activate', event=event)
+        self.tx_changed.has_subscribers() and self._fire_changed('activate', event=event)
         self.signal(event)
 
     async def wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue) -> EventType:
@@ -237,7 +232,7 @@ class DSAgent(DSComponent, AgentProbeMixin, AgentContainerMixin, AgentResourceMi
         except DSAbortException:
             self._scheduled_process.abort()
             raise
-        self._emit_action('wait', timeout=timeout, event=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('wait', timeout=timeout, event=retval)
         return retval
 
     def gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue) -> Generator[EventType, EventType, EventType]:
@@ -246,7 +241,7 @@ class DSAgent(DSComponent, AgentProbeMixin, AgentContainerMixin, AgentResourceMi
         except DSAbortException:
             self._scheduled_process.abort()
             raise
-        self._emit_action('gwait', timeout=timeout, event=retval)
+        self.tx_changed.has_subscribers() and self._fire_changed('gwait', timeout=timeout, event=retval)
         return retval
 
 
