@@ -21,9 +21,16 @@ import inspect
 from dssim.base import EventType, TimeType, DSComponent, NumericType
 from dssim.pubsub.base import CondType, DSAbortException, AlwaysTrue
 from dssim.pubsub.process import DSProcess
+from dssim.pubsub.pubsub import DSPub
 from dssim.simulation import DSSchedulable
 from dssim.pubsub.components.container import DSContainer
 from dssim.pubsub.components.resource import DSResource
+
+
+def _emit_agent_action(agent: Any, action: str, **details: Any) -> None:
+    emitter = getattr(agent, '_emit_action', None)
+    if callable(emitter):
+        emitter(action, **details)
 
 
 class AgentContainerMixin:
@@ -31,83 +38,123 @@ class AgentContainerMixin:
         try:
             retval = await container.put(timeout, self, **policy_params)
         except DSAbortException:
+            _emit_agent_action(self, 'enter_abort', container=container, timeout=timeout)
             self._scheduled_process.abort()
             raise
+        _emit_agent_action(self, 'enter', container=container, timeout=timeout, success=(retval is not None), result=retval)
         return retval
 
     def genter(self: Any, container: DSContainer, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         try:
             retval = yield from container.gput(timeout, self, **policy_params)
         except DSAbortException:
+            _emit_agent_action(self, 'genter_abort', container=container, timeout=timeout)
             self._scheduled_process.abort()
             raise
+        _emit_agent_action(self, 'genter', container=container, timeout=timeout, success=(retval is not None), result=retval)
         return retval
 
     def enter_nowait(self: Any, container: DSContainer) -> Optional[EventType]:
-        return container.put_nowait(self)
+        retval = container.put_nowait(self)
+        _emit_agent_action(self, 'enter_nowait', container=container, success=(retval is not None), result=retval)
+        return retval
 
     def leave(self: Any, container: DSContainer) -> None:
+        size_before = len(container) if hasattr(container, '__len__') else None
         container.remove(self)
+        if size_before is None:
+            success = True
+        else:
+            success = len(container) < size_before
+        _emit_agent_action(self, 'leave', container=container, success=success)
 
     async def pop(self: Any, container: DSContainer, timeout: TimeType = float('inf'), **policy_params: Any) -> Optional[EventType]:
         try:
             retval = await container.get(timeout, **policy_params)
         except DSAbortException:
+            _emit_agent_action(self, 'pop_abort', container=container, timeout=timeout)
             self._scheduled_process.abort()
             raise
+        _emit_agent_action(self, 'pop', container=container, timeout=timeout, success=(retval is not None), result=retval)
         return retval
 
     def gpop(self: Any, container: DSContainer, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         try:
             retval = yield from container.gget(timeout, **policy_params)
         except DSAbortException:
+            _emit_agent_action(self, 'gpop_abort', container=container, timeout=timeout)
             self._scheduled_process.abort()
             raise
+        _emit_agent_action(self, 'gpop', container=container, timeout=timeout, success=(retval is not None), result=retval)
         return retval
 
     def pop_nowait(self: Any, container: DSContainer) -> Optional[EventType]:
-        return container.get_nowait()
+        retval = container.get_nowait()
+        _emit_agent_action(self, 'pop_nowait', container=container, success=(retval is not None), result=retval)
+        return retval
 
 
 class AgentResourceMixin:
     async def get(self: Any, resource: DSResource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
-        return await resource.get(timeout, **policy_params)
+        retval = await resource.get(timeout, **policy_params)
+        _emit_agent_action(self, 'get', resource=resource, timeout=timeout, success=bool(retval), amount=retval)
+        return retval
 
     def gget(self: Any, resource: DSResource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
-        return (yield from resource.gget(timeout, **policy_params))
+        retval = yield from resource.gget(timeout, **policy_params)
+        _emit_agent_action(self, 'gget', resource=resource, timeout=timeout, success=bool(retval), amount=retval)
+        return retval
 
     async def get_n(self: Any, resource: DSResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
-        return await resource.get_n(timeout, amount, **policy_params)
+        retval = await resource.get_n(timeout, amount, **policy_params)
+        _emit_agent_action(self, 'get_n', resource=resource, timeout=timeout, requested=amount, success=bool(retval), amount=retval)
+        return retval
 
     def gget_n(self: Any, resource: DSResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
-        return (yield from resource.gget_n(timeout, amount, **policy_params))
+        retval = yield from resource.gget_n(timeout, amount, **policy_params)
+        _emit_agent_action(self, 'gget_n', resource=resource, timeout=timeout, requested=amount, success=bool(retval), amount=retval)
+        return retval
 
     async def put(self: Any, resource: DSResource, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
-        return await resource.put(timeout, **policy_params)
+        retval = await resource.put(timeout, **policy_params)
+        _emit_agent_action(self, 'put', resource=resource, timeout=timeout, success=bool(retval), amount=retval)
+        return retval
 
     def gput(self: Any, resource: DSResource, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
-        return (yield from resource.gput(timeout, **policy_params))
+        retval = yield from resource.gput(timeout, **policy_params)
+        _emit_agent_action(self, 'gput', resource=resource, timeout=timeout, success=bool(retval), amount=retval)
+        return retval
 
     async def put_n(self: Any, resource: DSResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> NumericType:
-        return await resource.put_n(timeout, amount, **policy_params)
+        retval = await resource.put_n(timeout, amount, **policy_params)
+        _emit_agent_action(self, 'put_n', resource=resource, timeout=timeout, requested=amount, success=bool(retval), amount=retval)
+        return retval
 
     def gput_n(self: Any, resource: DSResource, amount: NumericType = 1, timeout: TimeType = float('inf'), **policy_params: Any) -> Generator[EventType, None, NumericType]:
-        return (yield from resource.gput_n(timeout, amount, **policy_params))
+        retval = yield from resource.gput_n(timeout, amount, **policy_params)
+        _emit_agent_action(self, 'gput_n', resource=resource, timeout=timeout, requested=amount, success=bool(retval), amount=retval)
+        return retval
 
     def put_nowait(self: Any, resource: DSResource) -> NumericType:
-        return resource.put_nowait()
+        retval = resource.put_nowait()
+        _emit_agent_action(self, 'put_nowait', resource=resource, success=bool(retval), amount=retval)
+        return retval
 
     def put_n_nowait(self: Any, resource: DSResource, amount: NumericType = 1) -> NumericType:
-        return resource.put_n_nowait(amount)
+        retval = resource.put_n_nowait(amount)
+        _emit_agent_action(self, 'put_n_nowait', resource=resource, requested=amount, success=bool(retval), amount=retval)
+        return retval
 
 
 class DSAgent(DSComponent, AgentContainerMixin, AgentResourceMixin):
     _dscomponent_instances: int = 0
 
-    def __init__(self, *args: Any, name: Optional[str] = None, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, name: Optional[str] = None, change_ep: Optional[DSPub] = None, **kwargs: Any) -> None:
         if name is None:
             name = type(self).__name__ + '.' + str(self._dscomponent_instances)
         super().__init__(name=name, *args, **kwargs)
+        self.tx_changed = change_ep if change_ep is not None else self.sim.publisher(name=self.name + '.tx')
+        self.state = 'created'
         kwargs.pop('name', None), kwargs.pop('sim', None)  # remove the two arguments
         process: DSProcess
         if inspect.isgeneratorfunction(self.process) or inspect.iscoroutinefunction(self.process):
@@ -119,6 +166,34 @@ class DSAgent(DSComponent, AgentContainerMixin, AgentResourceMixin):
         self._scheduled_process: _ComponentProcess = process.schedule(0)
         self._instance_nr = self.__class__._dscomponent_instances + 1
         self.__class__._dscomponent_instances = self.instance_nr
+        self._set_state('scheduled', reason='schedule')
+
+    def _set_state(self, state: str, reason: str = '', **details: Any) -> bool:
+        prev_state = self.state
+        if prev_state == state:
+            return False
+        self.state = state
+        self._emit_change(reason=reason, change_type='state', prev_state=prev_state, details=details)
+        return True
+
+    def _emit_change(self, reason: str, change_type: str, prev_state: str, details: Optional[dict[str, Any]] = None) -> None:
+        if not self.tx_changed.has_subscribers():
+            return
+        event = {
+            'kind': 'agent_state',
+            'change_type': change_type,
+            'agent': self,
+            'state': self.state,
+            'prev_state': prev_state,
+            'reason': reason,
+            'time': float(self.sim.time),
+        }
+        if details:
+            event['details'] = details
+        self.sim.signal(event, self.tx_changed)
+
+    def _emit_action(self, action: str, **details: Any) -> None:
+        self._emit_change(reason=action, change_type='action', prev_state=self.state, details=details)
 
     @property
     def instance_nr(self) -> int: return self._instance_nr
@@ -137,6 +212,7 @@ class DSAgent(DSComponent, AgentContainerMixin, AgentResourceMixin):
         except DSAbortException:
             self._scheduled_process.abort()
             raise
+        self._emit_action('hold', timeout=timeout, event=retval)
         return retval
 
     def passivate(self, timeout: TimeType = float('inf'), val: EventType = True) -> Generator[EventType, EventType, EventType]:
@@ -146,24 +222,30 @@ class DSAgent(DSComponent, AgentContainerMixin, AgentResourceMixin):
         except DSAbortException:
             self._scheduled_process.abort()
             raise
+        self._emit_action('passivate', timeout=timeout, event=retval)
         return retval
 
     def activate(self, event: EventType = True) -> None:
         '''Activate this agent by sending an event to itself.'''
+        self._emit_action('activate', event=event)
         self.signal(event)
 
     async def wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue) -> EventType:
         try:
             retval = await self.sim.wait(timeout, cond=cond)
-        except DSAbortException as exc:
+        except DSAbortException:
             self._scheduled_process.abort()
+            raise
+        self._emit_action('wait', timeout=timeout, event=retval)
         return retval
 
     def gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue) -> Generator[EventType, EventType, EventType]:
         try:
             retval = yield from self.sim.gwait(timeout, cond=cond)
-        except DSAbortException as exc:
+        except DSAbortException:
             self._scheduled_process.abort()
+            raise
+        self._emit_action('gwait', timeout=timeout, event=retval)
         return retval
 
 
@@ -175,6 +257,20 @@ class _ComponentProcess(DSProcess):
     @property
     def component(self) -> DSAgent:
         return self._component
+
+    def _mark_started(self, add_timeout_cond: bool) -> None:
+        super()._mark_started(add_timeout_cond)
+        self._component._set_state('running', reason='process_start')
+
+    def finish(self, value: EventType) -> EventType:
+        retval = super().finish(value)
+        self._component._set_state('finished', reason='process_finish', value=value)
+        return retval
+
+    def fail(self, exc: Exception) -> Exception:
+        retval = super().fail(exc)
+        self._component._set_state('failed', reason='process_fail', exc=repr(exc))
+        return retval
 
 
 class PCGenerator(DSAgent):

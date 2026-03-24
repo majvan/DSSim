@@ -102,6 +102,41 @@ class TestDSAgentSalabimStyleHelpers(unittest.TestCase):
         sim.run(10)
         self.assertEqual(log, [(True, 1)])
 
+    def test4_tx_changed_emits_compact_agent_timeline(self):
+        sim = DSSimulation()
+        transitions = []
+
+        class Agent(DSAgent):
+            def process(self):
+                yield from self.hold(1)
+                event = yield from self.passivate()
+                return event
+
+        agent = Agent(sim=sim)
+        agent.tx_changed.add_subscriber(
+            sim.callback(lambda event: transitions.append((sim.time, event['change_type'], event['state'], event['reason']))),
+            agent.tx_changed.Phase.PRE,
+        )
+
+        def kicker():
+            yield from sim.gwait(2)
+            agent.activate('wake')
+
+        sim.schedule(0, kicker())
+        sim.run(10)
+
+        self.assertEqual(
+            transitions,
+            [
+                (0, 'state', 'running', 'process_start'),
+                (1, 'action', 'running', 'hold'),
+                (2, 'action', 'running', 'activate'),
+                (2, 'action', 'running', 'passivate'),
+                (2, 'state', 'finished', 'process_finish'),
+            ],
+        )
+        self.assertEqual(agent.state, 'finished')
+
 
 class TestDSAgentContainerHelpers(unittest.TestCase):
     def test1_enter_and_gpop(self):
@@ -129,6 +164,36 @@ class TestDSAgentContainerHelpers(unittest.TestCase):
         self.assertIs(got[0][1], producer)
         self.assertEqual(len(c), 0)
 
+    def test2_tx_changed_emits_container_action_events(self):
+        sim = DSSimulation()
+        c = sim.container(capacity=2)
+        actions = []
+
+        class Agent(DSAgent):
+            def process(self):
+                self.enter_nowait(c)
+                _ = self.pop_nowait(c)
+                self.enter_nowait(c)
+                self.leave(c)
+
+        agent = Agent(sim=sim)
+        agent.tx_changed.add_subscriber(
+            sim.callback(lambda event: actions.append((event['change_type'], event['reason'], event.get('details', {}).get('success')))),
+            agent.tx_changed.Phase.PRE,
+        )
+        sim.run(10)
+
+        action_events = [(reason, success) for change_type, reason, success in actions if change_type == 'action']
+        self.assertEqual(
+            action_events,
+            [
+                ('enter_nowait', True),
+                ('pop_nowait', True),
+                ('enter_nowait', True),
+                ('leave', True),
+            ],
+        )
+
 
 class TestDSAgentResourceHelpers(unittest.TestCase):
     def test1_gget_put_nowait(self):
@@ -153,6 +218,38 @@ class TestDSAgentResourceHelpers(unittest.TestCase):
         sim.run(10)
 
         self.assertEqual(log, [('got', 1, 3), ('put', 1, 3)])
+
+    def test2_tx_changed_emits_resource_action_events(self):
+        sim = DSSimulation()
+        r = sim.resource(amount=0, capacity=2)
+        actions = []
+
+        class Worker(DSAgent):
+            def process(self):
+                _ = yield from self.gget(r, timeout=5)
+                self.put_nowait(r)
+
+        worker = Worker(sim=sim)
+        worker.tx_changed.add_subscriber(
+            sim.callback(lambda event: actions.append((event['change_type'], event['reason'], event.get('details', {}).get('success')))),
+            worker.tx_changed.Phase.PRE,
+        )
+
+        def feeder():
+            yield from sim.gwait(2)
+            r.put_nowait()
+
+        sim.schedule(0, feeder())
+        sim.run(10)
+
+        action_events = [(reason, success) for change_type, reason, success in actions if change_type == 'action']
+        self.assertEqual(
+            action_events,
+            [
+                ('gget', True),
+                ('put_nowait', True),
+            ],
+        )
 
 
 if __name__ == '__main__':
