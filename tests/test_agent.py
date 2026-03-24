@@ -15,8 +15,9 @@
 Tests for DSAgent.
 '''
 import unittest
+from io import StringIO
 
-from dssim import DSAgent, DSProcessComponent, DSSimulation
+from dssim import DSAgent, DSProcessComponent, DSSimulation, AgentHistoryProbe, AgentStatsProbe, AgentActivityProbe
 
 
 class TestDSAgentLifecycle(unittest.TestCase):
@@ -250,6 +251,176 @@ class TestDSAgentResourceHelpers(unittest.TestCase):
                 ('put_nowait', True),
             ],
         )
+
+
+class TestDSAgentHistoryProbe(unittest.TestCase):
+    def test1_add_history_probe_and_capture_events(self):
+        sim = DSSimulation()
+
+        class Agent(DSAgent):
+            def process(self):
+                yield from self.hold(1)
+                self.activate('wake')
+                yield from self.passivate()
+                return 'done'
+
+        agent = Agent(sim=sim)
+        probe = agent.add_history_probe()
+        self.assertIsInstance(probe, AgentHistoryProbe)
+        self.assertEqual(probe.name, f'{agent.name}.history_probe')
+
+        sim.run(10)
+        history = probe.history()
+        reasons = [event.get('reason') for event in history]
+        self.assertIn('process_start', reasons)
+        self.assertIn('hold', reasons)
+        self.assertIn('activate', reasons)
+        self.assertIn('passivate', reasons)
+        self.assertIn('process_finish', reasons)
+
+    def test2_format_and_dump_history(self):
+        sim = DSSimulation()
+
+        class Agent(DSAgent):
+            def process(self):
+                yield from self.hold(1)
+                return 'done'
+
+        agent = Agent(sim=sim)
+        probe = agent.add_history_probe(max_events=10)
+        sim.run(10)
+
+        text = probe.format_history()
+        self.assertIn('Agent history:', text)
+        self.assertIn('process_start', text)
+        self.assertIn('hold', text)
+        self.assertIn('process_finish', text)
+
+        buf = StringIO()
+        dumped = probe.dump_history(file=buf)
+        self.assertEqual(dumped, text)
+        self.assertEqual(buf.getvalue(), text + '\n')
+
+
+class TestDSAgentStatsProbe(unittest.TestCase):
+    def test1_add_stats_probe_name(self):
+        sim = DSSimulation()
+
+        class Agent(DSAgent):
+            def process(self):
+                yield from self.hold(1)
+                return 'done'
+
+        agent = Agent(name='a0', sim=sim)
+        probe = agent.add_stats_probe()
+        self.assertIsInstance(probe, AgentStatsProbe)
+        self.assertEqual(probe.name, 'a0.stats_probe')
+        probe2 = agent.add_stats_probe(name='ops')
+        self.assertEqual(probe2.name, 'a0.ops')
+
+    def test2_stats_probe_counts_and_state_time(self):
+        sim = DSSimulation()
+
+        class Agent(DSAgent):
+            def process(self):
+                yield from self.hold(1)
+                self.activate('wake')
+                yield from self.passivate()
+                return 'done'
+
+        agent = Agent(sim=sim)
+        probe = agent.add_stats_probe()
+        sim.run(10)
+
+        stats = probe.stats()
+        self.assertEqual(stats['event_count'], 5)
+        self.assertEqual(stats['state_event_count'], 2)
+        self.assertEqual(stats['action_event_count'], 3)
+        self.assertEqual(stats['current_state'], 'finished')
+        self.assertEqual(stats['reason_counts'].get('process_start', 0), 1)
+        self.assertEqual(stats['reason_counts'].get('hold', 0), 1)
+        self.assertEqual(stats['reason_counts'].get('activate', 0), 1)
+        self.assertEqual(stats['reason_counts'].get('passivate', 0), 1)
+        self.assertEqual(stats['reason_counts'].get('process_finish', 0), 1)
+        self.assertAlmostEqual(stats['duration'], 10.0, places=6)
+        self.assertAlmostEqual(stats['state_time'].get('running', 0.0), 1.0, places=6)
+        self.assertAlmostEqual(stats['state_time'].get('finished', 0.0), 9.0, places=6)
+
+
+class TestDSAgentActivityProbe(unittest.TestCase):
+    def test1_time_attributed_per_activity(self):
+        sim = DSSimulation()
+
+        class Agent(DSAgent):
+            def process(self):
+                yield from self.hold(2)        # active/holding 2 units
+                yield from self.gwait(3)        # waiting 3 units (timeout)
+                yield from self.passivate()     # passive until activated at t=8
+                return 'done'
+
+        agent = Agent(sim=sim)
+        probe = agent.add_activity_probe()
+        self.assertIsInstance(probe, AgentActivityProbe)
+        self.assertEqual(probe.name, f'{agent.name}.activity_probe')
+
+        def kicker():
+            yield from sim.gwait(8)
+            agent.activate('wake')
+
+        sim.schedule(0, kicker())
+        sim.run(20)
+
+        s = probe.stats()
+        self.assertAlmostEqual(s['time_by_activity']['hold'], 2.0, places=6)
+        self.assertAlmostEqual(s['time_by_activity']['gwait'], 3.0, places=6)
+        self.assertAlmostEqual(s['time_by_activity']['passivate'], 3.0, places=6)
+        self.assertAlmostEqual(s['pending_time'], 0.0, places=6)
+        # The sum of attributed activity time equals the active lifetime (t=0..8).
+        self.assertAlmostEqual(sum(s['time_by_activity'].values()), 8.0, places=6)
+        self.assertEqual(s['count_by_activity'].get('activate'), 1)
+        self.assertAlmostEqual(probe.time_in('passivate'), 3.0, places=6)
+
+    def test2_time_waiting_for_specific_resource(self):
+        sim = DSSimulation()
+        r = sim.resource(amount=0, capacity=1)
+
+        class Worker(DSAgent):
+            def process(self):
+                yield from self.gget(r, timeout=float('inf'))   # blocks until t=4
+
+        worker = Worker(sim=sim)
+        probe = worker.add_activity_probe()
+
+        def feeder():
+            yield from sim.gwait(4)
+            r.put_nowait()
+
+        sim.schedule(0, feeder())
+        sim.run(20)
+
+        s = probe.stats()
+        rname = r.name
+        self.assertAlmostEqual(s['time_by_resource'][rname], 4.0, places=6)
+        self.assertAlmostEqual(s['time_by_activity']['gget'], 4.0, places=6)
+        self.assertAlmostEqual(probe.time_waiting_for(r), 4.0, places=6)
+        self.assertAlmostEqual(probe.time_waiting_for(rname), 4.0, places=6)
+
+    def test3_immediate_acquire_costs_zero_time(self):
+        sim = DSSimulation()
+        r = sim.resource(amount=1, capacity=1)
+
+        class Worker(DSAgent):
+            def process(self):
+                yield from self.gget(r, timeout=5)   # available immediately
+                yield from self.hold(2)
+
+        worker = Worker(sim=sim)
+        probe = worker.add_activity_probe()
+        sim.run(20)
+
+        s = probe.stats()
+        self.assertEqual(s['time_by_resource'].get(r.name, 0.0), 0.0)
+        self.assertAlmostEqual(s['time_by_activity']['hold'], 2.0, places=6)
 
 
 if __name__ == '__main__':
