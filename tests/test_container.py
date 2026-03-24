@@ -462,7 +462,26 @@ class TestContainerSignalRouting(unittest.TestCase):
         self.sim.run(10)
         self.assertEqual(results, [('put', 3)])
 
-    def test5_no_spurious_signal_when_no_getters(self):
+    def test5_putter_woken_by_remove(self):
+        '''remove() fires tx_changed and wakes a blocked putter.'''
+        results = []
+
+        def producer():
+            c.put_nowait('fill')
+            _ = yield from c.gput(float('inf'), 'second')
+            results.append(('put', self.sim.time))
+
+        def consumer():
+            yield from self.sim.gwait(3)
+            c.remove('fill')
+
+        c = self._make(capacity=1)
+        self.sim.schedule(0, producer())
+        self.sim.schedule(0, consumer())
+        self.sim.run(10)
+        self.assertEqual(results, [('put', 3)])
+
+    def test6_no_spurious_signal_when_no_getters(self):
         '''put_nowait with no waiters does not schedule unnecessary events.
         Verified indirectly: simulation stays idle after run with no consumers.'''
         c = self._make()
@@ -471,7 +490,7 @@ class TestContainerSignalRouting(unittest.TestCase):
         c.put_nowait('Y')
         self.assertEqual(len(c), 2)
 
-    def test6_multiple_any_getters_each_get_one_item(self):
+    def test7_multiple_any_getters_each_get_one_item(self):
         '''Multiple any-getters each wake up and consume one item.'''
         results = []
 
