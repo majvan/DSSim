@@ -558,8 +558,3 @@ class Reactor(sim.Component):
     python projects/chemical_reactor.py
     ```
 
-    Regenerate the charts:
-
-    ```
-    python benchmarks/gen_reactor_charts.py
-    ```
