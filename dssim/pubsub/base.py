@@ -41,7 +41,7 @@ TestObject = object()
 class ICondition:
     ''' An interface for a condition checkable classes '''
     @abstractmethod
-    def check(self, event: EventType) -> Tuple[bool, Any]:
+    def cond_check(self, event: EventType) -> Tuple[bool, Any]:
         raise NotImplementedError("The ICondition is an interface. Use derived class.")
 
 
@@ -49,7 +49,7 @@ class CallableConditionMixin:
     ''' Mixin that makes an ICondition subclass usable as a plain callable returning bool. '''
     def __call__(self, event: EventType) -> bool:
         # check() returns (signaled, value), we extract only the signaled info
-        return self.check(event)[0]
+        return self.cond_check(event)[0]
 
 
 class StackedCond(ICondition):
@@ -68,7 +68,7 @@ class StackedCond(ICondition):
         ''' Removes last condition from the stack '''
         return self.conds.pop()
 
-    def check(self, event: EventType) -> Tuple[bool, EventType]:
+    def cond_check(self, event: EventType) -> Tuple[bool, EventType]:
         ''' Checks the stack.
         The event is passed to all the conditions on the stack till it finds the first one
         which passes.
@@ -87,7 +87,7 @@ class StackedCond(ICondition):
             # not fall through to the callable branch below.
             is_icond = isinstance(cond, ICondition)
             if is_icond:
-                signaled, event = cond.check(retval)
+                signaled, event = cond.cond_check(retval)
             elif callable(cond) and cond(retval):  # plain lambda / function
                 signaled, event = True, retval
             elif cond == retval:  # exact event match (e.g. None timeout sentinel)
@@ -134,8 +134,8 @@ class DSTransferableCondition(ICondition):
         self.transfer = transfer
         self.value = None
 
-    def check(self, value):
-        signaled, retval = self.cond.check(value)
+    def cond_check(self, value):
+        signaled, retval = self.cond.cond_check(value)
         if signaled:
             retval = self.transfer(retval)
             self.value = retval

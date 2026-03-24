@@ -61,7 +61,7 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
             self.policy_params = policy_params
             self.value: NumericType = 0
 
-        def check(self, event: EventType) -> tuple[bool, NumericType]:
+        def cond_check(self, event: EventType) -> tuple[bool, NumericType]:
             got = self.resource._try_take_n_nowait(self.amount, owner=self.owner, **self.policy_params)
             if got > 0:
                 self.value = got

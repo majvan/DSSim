@@ -43,8 +43,8 @@ class _ConditionProxy(ICondition, CallableConditionMixin):
     def __init__(self, cond: ICondition) -> None:
         self._cond = cond
 
-    def check(self, event: EventType) -> Tuple[bool, EventType]:
-        return self._cond.check(event)
+    def cond_check(self, event: EventType) -> Tuple[bool, EventType]:
+        return self._cond.cond_check(event)
 
     def cond_value(self) -> EventType:
         getter = getattr(self._cond, 'cond_value', None)
@@ -93,7 +93,7 @@ class _FilterWaitMixin:
         # when we actually need to block.
         if not self.is_attached():
             self.attach()
-        signaled, event = self.check(TestObject)
+        signaled, event = self.cond_check(TestObject)
         if signaled:
             self._detach_on_precheck_hit()
             return event
@@ -107,7 +107,7 @@ class _FilterWaitMixin:
         # when we actually need to block.
         if not self.is_attached():
             self.attach()
-        signaled, event = self.check(TestObject)
+        signaled, event = self.cond_check(TestObject)
         if signaled:
             self._detach_on_precheck_hit()
             return event
@@ -295,7 +295,7 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
         if self.cond == event:
             return True, event
         if self._cond_is_icond:
-            signaled, value = self.cond.check(event)
+            signaled, value = self.cond.cond_check(event)
             if not signaled:
                 return False, None
             cond_value = getattr(self.cond, 'cond_value', None)
@@ -339,7 +339,7 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
         """Receive endpoint event, update state, emit wakeup, notify parent circuits."""
         token = self.sim.num_events
         was_signaled = self.signaled
-        signaled, value = self.check(event, token=token)
+        signaled, value = self.cond_check(event, token=token)
         if signaled and (self.pulse or self.reevaluate or not was_signaled):
             self._emit_match(value)
         for circuit in tuple(self._listeners):
@@ -385,7 +385,7 @@ class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
         """Return current persistent signaled state."""
         return self.signaled
 
-    def check(self, event: EventType, token: Optional[int] = None) -> Tuple[bool, EventType]:
+    def cond_check(self, event: EventType, token: Optional[int] = None) -> Tuple[bool, EventType]:
         """Evaluate this filter for event (or probe with TestObject)."""
         if self.signaled and not self.reevaluate:
             return True, self.cond_value()
@@ -664,7 +664,7 @@ class DSCircuit(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
         """Read child state for direct drive evaluation or deferred token-based flush."""
         if drive_event is not None:
             if isinstance(signal, ICondition):
-                return signal.check(drive_event)
+                return signal.cond_check(drive_event)
             signaled = signal.finished()
             if not signaled:
                 return False, None
@@ -771,7 +771,7 @@ class DSCircuit(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):
         """Expose wait endpoint used by observe_pre/wait infrastructure."""
         return {self._finish_tx}
 
-    def check(self, event: EventType) -> Tuple[bool, EventType]:
+    def cond_check(self, event: EventType) -> Tuple[bool, EventType]:
         """Evaluate/probe this circuit and return (signaled, payload)."""
         if event is TestObject:
             if self.signaled:

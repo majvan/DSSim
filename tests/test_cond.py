@@ -289,14 +289,14 @@ class TestDSFilterApplicableLegacy(unittest.TestCase):
         sim = DSSimulation()
         fa = _f(lambda e: e == "UP", sigtype=_f.SignalType.REEVALUATE, sim=sim)
 
-        signaled, value = fa.check(TestObject)
+        signaled, value = fa.cond_check(TestObject)
         self.assertFalse(signaled)
         self.assertIsNone(value)
         self.assertFalse(fa.signaled)
 
-        fa.check("UP")
+        fa.cond_check("UP")
         self.assertTrue(fa.signaled)
-        signaled, value = fa.check(TestObject)
+        signaled, value = fa.cond_check(TestObject)
         self.assertTrue(signaled)
         self.assertEqual(value, "UP")
         self.assertTrue(fa.signaled)
@@ -444,7 +444,7 @@ class TestDSFilterApplicableLegacy(unittest.TestCase):
     def test25_cond_gwait_waits_without_precheck(self):
         sim = DSSimulation()
         flt = _f("ready", sim=sim)
-        flt.check("ready")
+        flt.cond_check("ready")
         out = []
 
         def waiter():
@@ -461,7 +461,7 @@ class TestDSFilterApplicableLegacy(unittest.TestCase):
     def test26_cond_wait_waits_without_precheck(self):
         sim = DSSimulation()
         flt = _f("ready", sim=sim)
-        flt.check("ready")
+        flt.cond_check("ready")
         out = []
 
         async def waiter():
@@ -478,7 +478,7 @@ class TestDSFilterApplicableLegacy(unittest.TestCase):
     def test27_precheck_probe_evaluates_unsignaled_callable(self):
         sim = DSSimulation()
         flt = _f(lambda _e: True, sim=sim)
-        signaled, value = flt.check(TestObject)
+        signaled, value = flt.cond_check(TestObject)
         self.assertTrue(signaled)
         self.assertIs(value, TestObject)
         self.assertTrue(flt.signaled)
@@ -486,7 +486,7 @@ class TestDSFilterApplicableLegacy(unittest.TestCase):
     def test28_cond_check_and_gwait_fastpath_when_signaled(self):
         sim = DSSimulation()
         flt = _f("ready", sim=sim)
-        flt.check("ready")
+        flt.cond_check("ready")
         out = []
 
         def waiter():
@@ -501,7 +501,7 @@ class TestDSFilterApplicableLegacy(unittest.TestCase):
     def test29_cond_check_and_wait_fastpath_when_signaled(self):
         sim = DSSimulation()
         flt = _f("ready", sim=sim)
-        flt.check("ready")
+        flt.cond_check("ready")
         out = []
 
         async def waiter():
@@ -633,7 +633,7 @@ class TestDSCircuitApplicableLegacy(unittest.TestCase):
         f_credits(1)
         self.assertFalse(c.signaled)
 
-        signaled, value = c.check(TestObject)
+        signaled, value = c.cond_check(TestObject)
         self.assertTrue(signaled)
         self.assertEqual(value, {f_link: "UP", f_credits: 1})
         self.assertTrue(c.signaled)
@@ -644,13 +644,13 @@ class TestDSCircuitApplicableLegacy(unittest.TestCase):
         f_b = _f(lambda e: isinstance(e, dict) and bool(e.get("b")), sigtype=_f.SignalType.REEVALUATE, sim=sim)
         c = f_a & f_b
 
-        signaled, payload = c.check({"a": True, "b": True})
+        signaled, payload = c.cond_check({"a": True, "b": True})
         self.assertTrue(signaled)
         self.assertEqual(set(payload.keys()), {f_a, f_b})
 
         # Mutate one child out-of-band. check_and_wait() now prefers current
         # circuit signaled state as a fast-path.
-        f_b.check({"a": True, "b": False})
+        f_b.cond_check({"a": True, "b": False})
         self.assertTrue(c.signaled)
 
         out = []

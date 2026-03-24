@@ -239,7 +239,7 @@ class TestConditionChecking(unittest.TestCase):
         meta = waitable.meta = Mock()
         cond = meta.cond = Mock()
         cond.push, cond.pop = Mock(), Mock()
-        cond.check = Mock(return_value=(True, 'return event'))
+        cond.cond_check = Mock(return_value=(True, 'return event'))
         cond.cond_value = lambda: 'condition value result'
         waitable._starter.send(None)  # kick the process
         cond.push.assert_has_calls([call(None), call('condition'),])
@@ -268,7 +268,7 @@ class TestConditionChecking(unittest.TestCase):
             ('def', 'def', (True, 'def')),
         ):
             stack.push(cond)
-            retval = stack.check(event)
+            retval = stack.cond_check(event)
             self.assertEqual(retval, expected_result)
             stack.pop()
             self.assertTrue(len(stack.conds) == 0)
@@ -293,7 +293,7 @@ class TestConditionChecking(unittest.TestCase):
             ('def', 'def', (True, 'def')),
         ):
             stack.push(cond)
-            retval = stack.check(event)
+            retval = stack.cond_check(event)
             self.assertEqual(retval, expected_result)
             stack.pop()
             self.assertTrue(len(stack.conds) == 1)
@@ -305,9 +305,9 @@ class TestConditionChecking(unittest.TestCase):
         p._starter.send(None)  # initialize the generator before replacing meta
         p.meta = SomeObj()
         p.meta.cond = MagicMock()
-        p.meta.cond.check = Mock(return_value=(True, 'abc'))
+        p.meta.cond.cond_check = Mock(return_value=(True, 'abc'))
         retval = sim.send_object(p, 'test')
-        p.meta.cond.check.assert_called_once()
+        p.meta.cond.cond_check.assert_called_once()
         self.assertEqual(retval, True)
 
 

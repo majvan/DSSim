@@ -91,7 +91,7 @@ class TestSim(unittest.TestCase):
         ''' sim.run() dispatches scheduled events to a mock ISubscriber. '''
         self.sim = DSSimulation()
         consumer = Mock()
-        consumer.meta.cond.check = lambda e:(True, e)  # Accept any event
+        consumer.meta.cond.cond_check = lambda e:(True, e)  # Accept any event
         consumer.send = Mock()
         consumer.get_cond = lambda: consumer.meta.cond
         consumer.try_send = lambda e: consumer.send(e)
@@ -121,7 +121,7 @@ class TestSim(unittest.TestCase):
         ''' run() dispatches via simulation send_object path, not consumer.try_send. '''
         self.sim = DSSimulation()
         consumer = Mock()
-        consumer.meta.cond.check = lambda e: (True, e)
+        consumer.meta.cond.cond_check = lambda e: (True, e)
         consumer.get_cond = lambda: consumer.meta.cond
         consumer.send = Mock()
         consumer.try_send = Mock(side_effect=AssertionError('run() should not call consumer.try_send'))
@@ -135,14 +135,14 @@ class TestSim(unittest.TestCase):
         ''' run() in post-check mode directly calls consumer.send(). '''
         self.sim = DSSimulation()
         consumer = Mock()
-        consumer.meta.cond.check = Mock(return_value=(False, 'ignored'))
+        consumer.meta.cond.cond_check = Mock(return_value=(False, 'ignored'))
         consumer.get_cond = lambda: consumer.meta.cond
         consumer.send = Mock()
         consumer.try_send = Mock(side_effect=AssertionError('run() should not call consumer.try_send'))
         self.sim.schedule_event(1, 'hello', consumer)
         retval = self.sim.run()
         self.assertEqual(retval, (1, 1))
-        consumer.meta.cond.check.assert_not_called()
+        consumer.meta.cond.cond_check.assert_not_called()
         consumer.send.assert_called_once_with('hello')
         consumer.try_send.assert_not_called()
 

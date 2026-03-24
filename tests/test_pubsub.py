@@ -128,9 +128,9 @@ class TestConsumer(unittest.TestCase):
         consumer = DSCondCallback(lambda e: True, sim=sim)
         consumer.meta = SomeObj2()
         consumer.meta.cond = MagicMock()
-        consumer.meta.cond.check = Mock(return_value=(False, 'abc'))
+        consumer.meta.cond.cond_check = Mock(return_value=(False, 'abc'))
         consumer.send(None)
-        consumer.meta.cond.check.assert_called_once()
+        consumer.meta.cond.cond_check.assert_called_once()
         sim.send_object.assert_not_called()
 
     def test2_try_send_dispatches_after_cond_passes(self):
@@ -147,10 +147,10 @@ class TestConsumer(unittest.TestCase):
         consumer = DSCondCallback(lambda e: True, sim=sim)
         consumer.meta = SomeObj2()
         consumer.meta.cond = MagicMock()
-        consumer.meta.cond.check = Mock(side_effect=called_check_condition)
+        consumer.meta.cond.cond_check = Mock(side_effect=called_check_condition)
         sim.send_object = Mock(side_effect=called_send_object)
         consumer.send(None)
-        consumer.meta.cond.check.assert_called_once()
+        consumer.meta.cond.cond_check.assert_called_once()
         sim.send_object.assert_not_called()
         self.assertEqual(call_order, [call('check_condition', None)])
 
@@ -253,12 +253,12 @@ class TestProducer(unittest.TestCase):
         c0 = Mock()
         c0.send = Mock(return_value=False)
         c0.meta.cond = Mock()
-        c0.meta.cond.check = Mock(return_value=(True, None))
+        c0.meta.cond.cond_check = Mock(return_value=(True, None))
         c0.get_cond = lambda: c0.meta.cond
         c1 = Mock()
         c1.send = Mock(return_value=False)
         c1.meta.cond = Mock()
-        c1.meta.cond.check = Mock(return_value=(True, None))
+        c1.meta.cond.cond_check = Mock(return_value=(True, None))
         c1.get_cond = lambda: c0.meta.cond
         p.subs[DSPub.Phase.PRE].d = {}
         p.subs[DSPub.Phase.CONSUME].d = {c0: 1}

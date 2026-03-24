@@ -170,7 +170,7 @@ class DSProcess(DSFuture, SignalMixin):
         '''Steady-state send path after bootstrap has completed.'''
         conds = self.get_cond()
         if conds.conds:
-            signaled, event = conds.check(event)
+            signaled, event = conds.cond_check(event)
             if not signaled:
                 return False
         self.value = self.generator.send(event)
@@ -253,7 +253,7 @@ class DSProcess(DSFuture, SignalMixin):
         conds = self.meta.cond  # capture ref: sim.cleanup() replaces self.meta.cond
         conds.push(cond)
         try:
-            signaled, event = conds.check(TestObject)
+            signaled, event = conds.cond_check(TestObject)
             if not signaled:
                 event = yield from self.sim._gwait_for_event(timeout, val)
             else:
@@ -267,7 +267,7 @@ class DSProcess(DSFuture, SignalMixin):
         conds = self.meta.cond  # capture ref: sim.cleanup() replaces self.meta.cond
         conds.push(cond)
         try:
-            signaled, event = conds.check(TestObject)
+            signaled, event = conds.cond_check(TestObject)
             if not signaled:
                 event = await self.sim._wait_for_event(timeout, val)
             else:

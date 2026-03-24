@@ -146,7 +146,7 @@ class DSCondCallback(DSCondSub):
     @TrackEvent
     def send(self, event: EventType):
         conds = self.meta.cond
-        signaled, event = conds.check(event)
+        signaled, event = conds.cond_check(event)
         if not signaled:
             return False
         retval = self.forward_method(event)
@@ -159,7 +159,7 @@ class DSKWCondCallback(DSCondCallback):
     @TrackEvent
     def send(self, event: dict) -> EventType:
         conds = self.meta.cond
-        signaled, event = conds.check(event)
+        signaled, event = conds.cond_check(event)
         if not signaled:
             return False
         retval = self.forward_method(**event)
