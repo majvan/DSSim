@@ -124,6 +124,7 @@ class DSContainer(DSStatefulComponent, SignalMixin):
         retval = self._pop_element(element)
         if retval is not None:
             self.size -= 1
+            self._fire_changed()
 
     def get_nowait(self) -> Optional[EventType]:
         ''' Get any first object from the container immediately. Returns None if empty. '''
