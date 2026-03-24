@@ -248,32 +248,41 @@ class DSProcess(DSFuture, SignalMixin):
         '''Async sleep variant; ignores non-exception events until timeout.'''
         return await self.wait(timeout=timeout, cond=AlwaysFalse, val=val)
 
-    def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
-        ''' Pre-check cond before waiting; return immediately if already satisfied. '''
+    def check(self, cond: CondType = AlwaysFalse) -> tuple[bool, EventType]:
+        '''Pre-check condition without blocking.
+
+        Returns:
+            (True, event) when the condition is already satisfied.
+            (False, None) otherwise.
+        '''
+        if isinstance(cond, DSFuture):
+            if cond.finished():
+                if cond.exc is not None:
+                    raise cond.exc
+                return True, cond
+            return False, None
         conds = self.meta.cond  # capture ref: sim.cleanup() replaces self.meta.cond
         conds.push(cond)
         try:
-            signaled, event = conds.cond_check(TestObject)
-            if not signaled:
-                event = yield from self.sim._gwait_for_event(timeout, val)
-            else:
-                event = conds.cond_value()
+            signaled, _event = conds.cond_check(TestObject)
+            if signaled:
+                return True, conds.cond_value()
+            return False, None
         finally:
             conds.pop()
+
+    def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+        ''' Pre-check cond before waiting; return immediately if already satisfied. '''
+        signaled, event = self.check(cond)
+        if not signaled:
+            event = yield from self.gwait(timeout=timeout, cond=cond, val=val)
         return event
 
     async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> EventType:
         ''' Async variant of check_and_gwait. '''
-        conds = self.meta.cond  # capture ref: sim.cleanup() replaces self.meta.cond
-        conds.push(cond)
-        try:
-            signaled, event = conds.cond_check(TestObject)
-            if not signaled:
-                event = await self.sim._wait_for_event(timeout, val)
-            else:
-                event = conds.cond_value()
-        finally:
-            conds.pop()
+        signaled, event = self.check(cond)
+        if not signaled:
+            event = await self.wait(timeout=timeout, cond=cond, val=val)
         return event
 
     def schedule(self: DSProcessType, time: Optional[TimeType] = 0) -> DSProcess:
@@ -427,8 +436,15 @@ class SimProcessMixin:
         retval = yield from self.pid.gwait(timeout, cond, val)
         return retval
 
+    def check(self: Any, cond: CondType = AlwaysFalse) -> tuple[bool, EventType]:
+        '''Pre-check condition for the currently running process without blocking.'''
+        return self.pid.check(cond)
+
     def check_and_gwait(self: Any, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
-        retval = yield from self.pid.check_and_gwait(timeout, cond, val)
+        signaled, event = self.pid.check(cond)
+        if signaled:
+            return event
+        retval = yield from self.pid.gwait(timeout, cond, val)
         return retval
 
     async def wait(self: Any, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, val: EventRetType = True) -> EventType:
@@ -440,7 +456,10 @@ class SimProcessMixin:
         return retval
 
     async def check_and_wait(self: Any, timeout: TimeType = float('inf'), cond: CondType = AlwaysFalse, val: EventRetType = True) -> EventType:
-        retval = await self.pid.check_and_wait(timeout, cond, val)
+        signaled, event = self.pid.check(cond)
+        if signaled:
+            return event
+        retval = await self.pid.wait(timeout, cond, val)
         return retval
 
     def gsleep(self: Any, timeout: TimeType = float('inf'), val: EventRetType = True) -> Generator[EventType, EventType, EventType]:

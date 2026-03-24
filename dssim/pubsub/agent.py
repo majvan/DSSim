@@ -130,6 +130,10 @@ class DSAgent(DSComponent, AgentContainerMixin, AgentResourceMixin):
     def signal(self, event: EventType) -> None:
         self._scheduled_process.signal(event)
 
+    def check(self, cond: CondType = AlwaysTrue) -> tuple[bool, EventType]:
+        '''Pre-check an incoming-event condition for this agent process without blocking.'''
+        return self.sim.check(cond=cond)
+
     async def wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue) -> EventType:
         try:
             retval = await self.sim.wait(timeout, cond=cond)

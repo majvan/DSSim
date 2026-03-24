@@ -113,6 +113,9 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
                 return True, got
             return False, None
 
+        def check(self) -> tuple[bool, Optional[EventType]]:
+            return self.cond_check(TestObject)
+
         def cond_value(self) -> Optional[EventType]:
             return self.value
 
@@ -131,14 +134,14 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
                 return await self.queue.sim.wait(timeout=timeout, cond=self, val=val)
 
         def check_and_gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
-            signaled, event = self.cond_check(TestObject)
+            signaled, event = self.check()
             if signaled:
                 return event
             with self.queue.sim.consume(*self.get_eps(), **policy_params):
                 return (yield from self.queue.sim.gwait(timeout=timeout, cond=self, val=val))
 
         async def check_and_wait(self, timeout: TimeType = float('inf'), val: EventRetType = True, **policy_params: Any) -> EventType:
-            signaled, event = self.cond_check(TestObject)
+            signaled, event = self.check()
             if signaled:
                 return event
             with self.queue.sim.consume(*self.get_eps(), **policy_params):
@@ -159,6 +162,9 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
                 return True, put
             return False, None
 
+        def check(self) -> tuple[bool, Optional[tuple]]:
+            return self.cond_check(TestObject)
+
         def cond_value(self) -> Optional[tuple]:
             return self.value
 
@@ -177,14 +183,14 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
                 return await self.queue.sim.wait(timeout=timeout, cond=self, val=val)
 
         def check_and_gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
-            signaled, event = self.cond_check(TestObject)
+            signaled, event = self.check()
             if signaled:
                 return event
             with self.queue.sim.consume(*self.get_eps(), **policy_params):
                 return (yield from self.queue.sim.gwait(timeout=timeout, cond=self, val=val))
 
         async def check_and_wait(self, timeout: TimeType = float('inf'), val: EventRetType = True, **policy_params: Any) -> EventType:
-            signaled, event = self.cond_check(TestObject)
+            signaled, event = self.check()
             if signaled:
                 return event
             with self.queue.sim.consume(*self.get_eps(), **policy_params):
@@ -204,6 +210,9 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
                 return True, event
             return False, None
 
+        def check(self) -> tuple[bool, Optional[EventType]]:
+            return self.cond_check(TestObject)
+
         def cond_value(self) -> Optional[EventType]:
             return self.value
 
@@ -222,14 +231,14 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
                 return await self.queue.sim.wait(timeout=timeout, cond=self, val=val)
 
         def check_and_gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
-            signaled, event = self.cond_check(TestObject)
+            signaled, event = self.check()
             if signaled:
                 return event
             with self.queue.sim.observe_pre(*self.get_eps(), **policy_params):
                 return (yield from self.queue.sim.gwait(timeout=timeout, cond=self, val=val))
 
         async def check_and_wait(self, timeout: TimeType = float('inf'), val: EventRetType = True, **policy_params: Any) -> EventType:
-            signaled, event = self.cond_check(TestObject)
+            signaled, event = self.check()
             if signaled:
                 return event
             with self.queue.sim.observe_pre(*self.get_eps(), **policy_params):
@@ -582,6 +591,14 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
 
     # ---- DSStatefulComponent overrides ---------------------------------------
 
+    def check(self, cond: CondType = AlwaysTrue) -> tuple[bool, Optional[EventType]]:
+        checker = getattr(cond, 'cond_check', None)
+        if callable(checker):
+            return checker(TestObject)
+        if callable(cond):
+            return (True, None) if cond(None) else (False, None)
+        return (True, None) if cond is None else (False, None)
+
     def gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         tx = self._get_tx_endpoint(cond)
         with self.sim.consume(tx, **policy_params):
@@ -596,16 +613,18 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
 
     def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         tx = self._get_tx_endpoint(cond)
-        if cond(None):
-            return None
+        signaled, event = self.check(cond)
+        if signaled:
+            return event
         with self.sim.consume(tx, **policy_params):
             retval = yield from self.sim.gwait(timeout, cond=cond)
         return retval
 
     async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, **policy_params: Any) -> EventType:
         tx = self._get_tx_endpoint(cond)
-        if cond(None):
-            return None
+        signaled, event = self.check(cond)
+        if signaled:
+            return event
         with self.sim.consume(tx, **policy_params):
             retval = await self.sim.wait(timeout, cond=cond)
         return retval

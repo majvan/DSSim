@@ -23,7 +23,7 @@ from dssim.pubsub.cond import DSFilter
 from dssim.pubsub.components.base import DSStatefulComponent
 from dssim.pubsub.components.resource_probes import ResourceProbeMixin
 from dssim.pubsub.pubsub import DSPub, NotifierPriority, NotifierRoundRobin
-from dssim.pubsub.base import ICondition, CallableConditionMixin
+from dssim.pubsub.base import ICondition, CallableConditionMixin, TestObject
 
 
 if TYPE_CHECKING:
@@ -67,6 +67,9 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
                 self.value = got
                 return True, got
             return False, 0
+
+        def check(self) -> tuple[bool, NumericType]:
+            return self.cond_check(TestObject)
 
         def cond_value(self) -> NumericType:
             return self.value

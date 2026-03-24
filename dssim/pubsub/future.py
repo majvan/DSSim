@@ -92,27 +92,25 @@ class DSFuture(DSCondSub, SignalMixin, IFuture):
             raise self.exc
         return retval
 
-    def check_and_gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
-        if self.finished():
-            if self.exc is not None:
-                raise self.exc
-            return self
-        with self.sim.observe_pre(self):
-            retval = yield from self.sim.check_and_gwait(timeout=timeout, cond=self, val=val)
+    def check(self) -> tuple[bool, EventType]:
+        '''Pre-check future completion without blocking.'''
+        if not self.finished():
+            return False, None
         if self.exc is not None:
             raise self.exc
-        return retval
+        return True, self
+
+    def check_and_gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
+        signaled, event = self.check()
+        if signaled:
+            return event
+        return (yield from self.gwait(timeout=timeout, val=val))
 
     async def check_and_wait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> EventType:
-        if self.finished():
-            if self.exc is not None:
-                raise self.exc
-            return self
-        with self.sim.observe_pre(self):
-            retval = await self.sim.check_and_wait(timeout=timeout, cond=self, val=val)
-        if self.exc is not None:
-            raise self.exc
-        return retval
+        signaled, event = self.check()
+        if signaled:
+            return event
+        return await self.wait(timeout=timeout, val=val)
 
     def finish(self, value: EventType) -> EventType:
         self.value = value

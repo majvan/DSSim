@@ -16,7 +16,7 @@ The file implements the DSContainer simulation component.
 '''
 from typing import Any, List, Dict, Iterator, Optional, Generator, TYPE_CHECKING
 from dssim.base import TimeType, EventType, SignalMixin
-from dssim.pubsub.base import CondType, DSAbortException, AlwaysTrue
+from dssim.pubsub.base import CondType, DSAbortException, AlwaysTrue, TestObject
 from dssim.pubsub.components.base import DSStatefulComponent
 
 if TYPE_CHECKING:
@@ -285,6 +285,14 @@ class DSContainer(DSStatefulComponent, SignalMixin):
 
     # ---- DSStatefulComponent overrides ---------------------------------------
 
+    def check(self, cond: CondType = AlwaysTrue) -> tuple[bool, Optional[EventType]]:
+        checker = getattr(cond, 'cond_check', None)
+        if callable(checker):
+            return checker(TestObject)
+        if callable(cond):
+            return (True, None) if cond(None) else (False, None)
+        return (True, None) if cond is None else (False, None)
+
     def gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
         tx = self._get_tx_endpoint(cond)
         with self.sim.consume(tx, **policy_params):
@@ -298,17 +306,19 @@ class DSContainer(DSStatefulComponent, SignalMixin):
         return retval
 
     def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, **policy_params: Any) -> Generator[EventType, EventType, EventType]:
+        signaled, event = self.check(cond)
+        if signaled:
+            return event
         tx = self._get_tx_endpoint(cond)
-        if cond(None):
-            return None
         with self.sim.consume(tx, **policy_params):
             retval = yield from self.sim.gwait(timeout, cond=cond)
         return retval
 
     async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = AlwaysTrue, **policy_params: Any) -> EventType:
+        signaled, event = self.check(cond)
+        if signaled:
+            return event
         tx = self._get_tx_endpoint(cond)
-        if cond(None):
-            return None
         with self.sim.consume(tx, **policy_params):
             retval = await self.sim.wait(timeout, cond=cond)
         return retval

@@ -71,6 +71,15 @@ class _FilterWaitMixin:
     def is_attached(self) -> bool:
         raise NotImplementedError
 
+    def check(self) -> Tuple[bool, EventType]:
+        """Pre-check signal state without blocking."""
+        if not self.is_attached():
+            self.attach()
+        signaled, event = self.cond_check(TestObject)
+        if signaled:
+            self._detach_on_precheck_hit()
+        return signaled, event
+
     def gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
         # Self-contained gated wait: subscribe to condition endpoints while blocked.
         if not self.is_attached():
@@ -91,29 +100,18 @@ class _FilterWaitMixin:
     def check_and_gwait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> Generator[EventType, EventType, EventType]:
         # Pre-check first (without endpoint registration). Register producers only
         # when we actually need to block.
-        if not self.is_attached():
-            self.attach()
-        signaled, event = self.cond_check(TestObject)
+        signaled, event = self.check()
         if signaled:
-            self._detach_on_precheck_hit()
             return event
-        cond = _ConditionProxy(self)
-        with self.sim.observe_pre(self):
-            retval = yield from self.sim.gwait(timeout=timeout, cond=cond, val=val)
-        return retval
+        return (yield from self.gwait(timeout=timeout, val=val))
 
     async def check_and_wait(self, timeout: TimeType = float('inf'), val: EventRetType = True) -> EventType:
         # Pre-check first (without endpoint registration). Register producers only
         # when we actually need to block.
-        if not self.is_attached():
-            self.attach()
-        signaled, event = self.cond_check(TestObject)
+        signaled, event = self.check()
         if signaled:
-            self._detach_on_precheck_hit()
             return event
-        cond = _ConditionProxy(self)
-        with self.sim.observe_pre(self):
-            return await self.sim.wait(timeout=timeout, cond=cond, val=val)
+        return await self.wait(timeout=timeout, val=val)
 
 
 class DSFilter(_FilterWaitMixin, DSFuture, ICondition, CallableConditionMixin):

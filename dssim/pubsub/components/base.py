@@ -30,6 +30,9 @@ class DSStatefulComponent(DSComponent):
 
     @staticmethod
     def _precheck_cond(cond: CondType) -> tuple[bool, EventType]:
+        checker = getattr(cond, 'cond_check', None)
+        if callable(checker):
+            return checker(TestObject)
         checker = getattr(cond, 'check', None)
         if callable(checker):
             return checker(TestObject)
@@ -38,10 +41,14 @@ class DSStatefulComponent(DSComponent):
         if cond == TestObject:
             return True, TestObject
         return False, None
+
+    def check(self, cond: CondType = lambda e:True) -> tuple[bool, EventType]:
+        '''Pre-check condition against current component state without waiting.'''
+        return self._precheck_cond(cond)
     
     def check_and_gwait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> EventType:
         ''' Wait for change in the state and returns when the condition is met '''
-        signaled, event = self._precheck_cond(cond)
+        signaled, event = self.check(cond)
         if signaled:
             return event
         with self.sim.consume(self.tx_changed, **policy_params):
@@ -50,7 +57,7 @@ class DSStatefulComponent(DSComponent):
 
     async def check_and_wait(self, timeout: TimeType = float('inf'), cond: CondType = lambda e:True, **policy_params: Any) -> EventType:
         ''' Wait for change in the state and returns when the condition is met '''
-        signaled, event = self._precheck_cond(cond)
+        signaled, event = self.check(cond)
         if signaled:
             return event
         with self.sim.consume(self.tx_changed, **policy_params):
