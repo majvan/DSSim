@@ -1,5 +1,6 @@
 from dssim.lite.components.litequeue import DSLiteQueue, SimLiteQueueMixin
 from dssim.lite.components.literesource import (
+    DSLiteResourcePreempted,
     DSLitePriorityResource,
     DSLiteResource,
     DSLiteUnitResource,

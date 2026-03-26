@@ -20,7 +20,7 @@ Demonstrates:
 - manual acquire/release flow without context (still preempted)
 '''
 from dssim import DSSimulation, LiteLayer2
-from dssim.lite import DSResourcePreempted
+from dssim.lite import DSLiteResourcePreempted
 
 
 def t(value):
@@ -41,9 +41,9 @@ def run_with_autorelease_context():
                 yield from sim.gsleep(10)
                 log.append(('finish', 'low', t(sim.time)))
                 return
-            except DSResourcePreempted as exc:
+            except DSLiteResourcePreempted as exc:
                 print(
-                    f'{sim.time} low caught DSResourcePreempted: '
+                    f'{sim.time} low caught DSLiteResourcePreempted: '
                     f'resource={exc.resource}, by={exc.by}, owner={exc.owner}, '
                     f'priority={exc.priority}, amount={exc.amount}'
                 )
@@ -94,9 +94,9 @@ def run_without_context_manual_release():
             log.append(('finish', 'low', t(sim.time)))
             machine.put_nowait()
             return
-        except DSResourcePreempted as exc:
+        except DSLiteResourcePreempted as exc:
             print(
-                f'{sim.time} low caught DSResourcePreempted: '
+                f'{sim.time} low caught DSLiteResourcePreempted: '
                 f'resource={exc.resource}, by={exc.by}, owner={exc.owner}, '
                 f'priority={exc.priority}, amount={exc.amount}'
             )

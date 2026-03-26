@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 _DISPATCH = object()
 
 
-class DSResourcePreempted(Exception):
+class DSLiteResourcePreempted(Exception):
     '''Raised when a resource holder is preempted by a higher-priority requester.'''
 
     def __init__(self, resource: Any, by: Any, owner: Any, priority: int, amount: Any) -> None:
@@ -462,7 +462,7 @@ class DSLitePriorityResource(DSLiteResource):
 
     Lower numeric priority value is served first. Same priority preserves FIFO.
     '''
-    Preempted = DSResourcePreempted
+    Preempted = DSLiteResourcePreempted
 
     def __init__(self, *args: Any, preemptive: bool = False, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -473,7 +473,7 @@ class DSLitePriorityResource(DSLiteResource):
         self._preemption = DSPriorityPreemption(self._priority)
         # DSResource-specific exception subtype allows clear nested catches:
         # except r1.Preempted / except r0.Preempted.
-        self.Preempted = type(f'Preempted_{id(self):x}', (DSResourcePreempted,), {'__module__': __name__})
+        self.Preempted = type(f'Preempted_{id(self):x}', (DSLiteResourcePreempted,), {'__module__': __name__})
 
     class _HoldContext:
         def __init__(self, resource: "DSLitePriorityResource") -> None:

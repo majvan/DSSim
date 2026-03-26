@@ -17,7 +17,7 @@ Tests for DSLiteResource / DSLitePriorityResource (LiteLayer2-only components).
 import unittest
 
 from dssim.simulation import DSSimulation, LiteLayer2
-from dssim.lite import DSResourcePreempted
+from dssim.lite import DSLiteResourcePreempted
 from dssim.lite.components.literesource import DSLiteResource, DSLiteUnitResource, DSLitePriorityResource
 
 
@@ -217,7 +217,7 @@ class TestLitePriorityResource(unittest.TestCase):
                 yield from sim.gwait(10)
                 out.append(('low_no_preempt', sim.time))
                 r.put_nowait()
-            except DSResourcePreempted as exc:
+            except DSLiteResourcePreempted as exc:
                 out.append(('low_preempted', sim.time, exc.amount))
                 got2 = yield from r.gget(priority=5, preempt=False)
                 self.assertEqual(got2, 1)
@@ -286,8 +286,8 @@ class TestLitePriorityResource(unittest.TestCase):
         out = []
 
         self.assertIsNot(r0.Preempted, r1.Preempted)
-        self.assertTrue(issubclass(r0.Preempted, DSResourcePreempted))
-        self.assertTrue(issubclass(r1.Preempted, DSResourcePreempted))
+        self.assertTrue(issubclass(r0.Preempted, DSLiteResourcePreempted))
+        self.assertTrue(issubclass(r1.Preempted, DSLiteResourcePreempted))
 
         def nested_owner():
             try:

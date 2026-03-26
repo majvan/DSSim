@@ -5,7 +5,7 @@
 # Uses DSLitePriorityResource (priority + optional preemption) available in
 # dssim.lite.components.literesource via sim.priority_resource(...).
 from dssim import DSSimulation, LiteLayer2
-from dssim.lite import DSResourcePreempted
+from dssim.lite import DSLiteResourcePreempted
 
 
 NON_PREEMPTIVE_JOBS = [
@@ -68,7 +68,7 @@ def run_lite_preemptive():
                     yield from sim.gsleep(remaining)
                     remaining = 0
                     log.append(('finish', name, tstamp(sim.time)))
-                except DSResourcePreempted:
+                except DSLiteResourcePreempted:
                     remaining -= sim.time - start
                     log.append(('preempted', name, tstamp(sim.time), tstamp(remaining)))
 

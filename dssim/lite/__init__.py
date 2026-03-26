@@ -1,7 +1,7 @@
 from dssim.lite.pubsub import DSLiteCallback, DSLitePub, DSLiteSub, SimLitePubsubMixin
 from dssim.lite.components.litequeue import DSLiteQueue, SimLiteQueueMixin
 from dssim.lite.components.literesource import (
-    DSResourcePreempted,
+    DSLiteResourcePreempted,
     DSLitePriorityResource,
     DSLiteResource,
     DSLiteUnitResource,
@@ -15,7 +15,7 @@ from dssim.lite.components.litetime import (
 )
 
 __all__ = [
-    'DSResourcePreempted',
+    'DSLiteResourcePreempted',
     'DSLiteCallback',
     'DSLitePub',
     'DSLiteSub',
