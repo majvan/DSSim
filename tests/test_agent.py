@@ -17,7 +17,7 @@ Tests for DSAgent.
 import unittest
 from io import StringIO
 
-from dssim import DSAgent, DSProcessComponent, DSSimulation, AgentHistoryProbe, AgentStatsProbe, AgentActivityProbe
+from dssim import DSAgent, DSSimulation, AgentHistoryProbe, AgentStatsProbe, AgentActivityProbe
 
 
 class TestDSAgentLifecycle(unittest.TestCase):
@@ -44,9 +44,6 @@ class TestDSAgentLifecycle(unittest.TestCase):
         self.assertEqual(log, [('start', 0), ('event', 'ping', 2)])
         self.assertTrue(agent._scheduled_process.finished())
         self.assertEqual(agent._scheduled_process.value, 'done')
-
-    def test2_process_component_alias(self):
-        self.assertIs(DSProcessComponent, DSAgent)
 
 
 class TestDSAgentSalabimStyleHelpers(unittest.TestCase):

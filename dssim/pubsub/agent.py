@@ -281,8 +281,3 @@ class PCGenerator(DSAgent):
         while True:
             obj = self.cls()  # create new instance of the class
             await self.sim.sleep(self.wait_method(obj))
-
-
-# Backward-compatibility alias; DSAgent is the preferred name.
-DSProcessComponent = DSAgent
-      
