@@ -148,7 +148,7 @@ Each Layer 2 profile has its own Layer 4 agent:
 
 ### Layer 5 — Shim Layers (PubSub only)
 
-Compatibility adapters for SimPy, salabim, and asyncio. Shims sit above the PubSub stack and translate the foreign framework's API into DSSim calls. Migrated code and native DSSim code share the same event loop without modification. See [Chapter 9](09-shims.md).
+Compatibility adapters for SimPy, salabim, and asyncio. Shims sit above the PubSub stack and translate the foreign framework's API into DSSim calls. Migrated code and native DSSim code share the same event loop without modification. See [Chapter 10](10-shims.md).
 
 ---
 

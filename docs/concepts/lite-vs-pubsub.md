@@ -15,6 +15,7 @@ Use PubSub when you need:
 - Endpoint routing
 - Conditional waits with filters/circuits
 - Rich process/future integration
+- Agents (`DSAgent`) with lifecycle state, container/resource helpers, and probes (PubSub-only)
 
 ## Practical Rule
 

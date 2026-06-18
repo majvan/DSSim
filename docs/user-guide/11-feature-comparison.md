@@ -1,6 +1,6 @@
-# Chapter 10: Feature Comparison
+# Chapter 11: Feature Comparison
 
-## 10.1 DSSim vs Other DES Frameworks
+## 11.1 DSSim vs Other DES Frameworks
 
 The table below compares DSSim's own API with SimPy and salabim on key dimensions.
 
@@ -146,10 +146,10 @@ The table below compares DSSim's own API with SimPy and salabim on key dimension
 
 ---
 
-## 10.2 Key Takeaways
+## 11.2 Key Takeaways
 
 - DSSim PubSubLayer2 is the most feature-rich profile: condition filtering eliminates spurious wakeups, and the 4-phase pubsub system has no equivalent in SimPy or salabim.
 - Both DSSim profiles accept any Python object as an event — no wrapping or base class required. `None` is the universal timeout sentinel across all blocking APIs.
 - LiteLayer2 is closer to SimPy in scope, trading routing features for throughput. Both DSSim profiles support interruptible processes (`process.abort()`); structured interruptible context handling (`sim.interruptible(cond)`) is PubSubLayer2-only. SimPy supports process interruption imperatively but has no structured context equivalent.
 - All profiles share the same timeout-everywhere convention; SimPy requires explicit `Event` wiring for equivalent behavior.
-- For migration paths from SimPy or salabim, see [Chapter 9](09-shims.md).
+- For migration paths from SimPy or salabim, see [Chapter 10](10-shims.md).

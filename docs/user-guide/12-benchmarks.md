@@ -1,6 +1,6 @@
-# Chapter 11: Benchmarks and Performance
+# Chapter 12: Benchmarks and Performance
 
-## 11.1 Overview
+## 12.1 Overview
 
 DSSim ships a benchmark suite under `benchmarks/`. Each script isolates a specific aspect of simulation throughput.
 
@@ -31,7 +31,7 @@ Absolute numbers will vary by machine. The relative ordering has been stable acr
 
 ---
 
-## 11.2 Simulator Core Throughput
+## 12.2 Simulator Core Throughput
 
 `bench_simulator` measures how fast the engine processes events in six scenarios, from simple timed callbacks to routed fan-out across multiple workers.
 
@@ -71,7 +71,7 @@ Key observations:
 
 ---
 
-## 11.3 Queue Throughput
+## 12.3 Queue Throughput
 
 `bench_queue` compares `DSQueue` (PubSubLayer2) and `DSLiteQueue` (LiteLayer2) against SimPy `Store` on five producer/consumer patterns.
 
@@ -93,7 +93,7 @@ Key observations:
 
 ---
 
-## 11.4 Priority Queue Throughput
+## 12.4 Priority Queue Throughput
 
 `bench_queue_priority` benchmarks `DSQueue` and `DSLiteQueue` used as priority queues against SimPy's `PriorityStore`.
 
@@ -114,7 +114,7 @@ Key observations:
 
 ---
 
-## 11.5 Resource Throughput
+## 12.5 Resource Throughput
 
 `bench_resource` benchmarks `DSResource` and `DSLiteResource` (variable-amount) against SimPy's `Container`. Priority/preemption scenarios have no `Container` equivalent, so SimPy rows are skipped there.
 
@@ -138,7 +138,7 @@ Key observations:
 
 ---
 
-## 11.6 Unit Resource Throughput
+## 12.6 Unit Resource Throughput
 
 `bench_resource_unit` benchmarks `DSUnitResource` and `DSLiteUnitResource` (unit-only, 1-token operations) against SimPy's `Resource`, `PriorityResource`, and `PreemptiveResource`.
 
@@ -162,7 +162,7 @@ Key observations:
 
 ---
 
-## 11.7 Generator vs. Coroutine
+## 12.7 Generator vs. Coroutine
 
 `bench_generator_vs_coroutine` confirms that the choice between generator syntax (`yield`) and coroutine syntax (`async def / await`) has negligible throughput impact for timed workloads, with a larger gap on zero-time burst.
 
@@ -175,7 +175,7 @@ Choose based on readability. For timed workloads the cost difference is ~5–9% 
 
 ---
 
-## 11.8 Real Example: Crossroad Grid Simulation
+## 12.8 Real Example: Crossroad Grid Simulation
 
 `bench_crossroad` benchmarks a complete, domain-level simulation rather than a microbenchmark: a 2×2 grid of traffic-light-controlled intersections running for 1 simulated hour, each junction dispatching vehicles across four arms. The same model is implemented five ways:
 
@@ -231,7 +231,7 @@ Key observations:
 
 ---
 
-## 11.9 Guidelines for Performance-Sensitive Models
+## 12.9 Guidelines for Performance-Sensitive Models
 
 1. **Use LiteLayer2** when you do not need pubsub routing, condition filtering, or circuit composition.
 2. **Prefer `DSLiteUnitResource`** when all resource operations are 1-unit (mutex, semaphore, token-pool) — it eliminates per-request `_Waiter` allocation and uses a simpler dispatch loop, outperforming SimPy `Resource` by up to 8× uncontended and 1.6× under contention.

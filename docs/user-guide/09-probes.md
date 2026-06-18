@@ -1,6 +1,6 @@
-# Chapter 8: Probes, Tracing, and Debugging
+# Chapter 9: Probes, Tracing, and Debugging
 
-## 8.1 What Are Probes?
+## 9.1 What Are Probes?
 
 !!! note "PubSubLayer2 only"
     Probes, PRE observers, and event tracing all rely on PubSubLayer2's publisher/subscriber tier infrastructure. `DSLiteQueue`, `DSLiteResource`, and other Lite components have no probe API and no subscription tiers.
@@ -11,9 +11,9 @@ Probes are decoupled from component core logic: `DSQueue` and `DSResource` do no
 
 ---
 
-## 8.2 Queue Probes
+## 9.2 Queue Probes
 
-### 8.2.1 Built-in Statistics Probe
+### 9.2.1 Built-in Statistics Probe
 
 `QueueStatsProbe` tracks occupancy and throughput for a `DSQueue`:
 
@@ -38,7 +38,7 @@ print(f"total puts:     {s['put_count']}")
 print(f"total gets:     {s['get_count']}")
 ```
 
-### 8.2.2 Statistics Fields
+### 9.2.2 Statistics Fields
 
 The `stats()` dict contains:
 
@@ -54,7 +54,7 @@ The `stats()` dict contains:
 | `get_count` | int | Total number of successful get operations |
 | `current_len` | int | Queue length at time of `stats()` call |
 
-### 8.2.3 Operations Probe
+### 9.2.3 Operations Probe
 
 `QueueOpsProbe` tracks every API-level operation attempt — puts, gets, pops, removes, and setitem calls — together with their outcomes (success, failure, blocked, timeout) and transferred item counts. It complements `QueueStatsProbe` when you need to know *why* items are moving (or not).
 
@@ -107,7 +107,7 @@ print(f"max batch:    put {s['max_put_batch']}  get {s['max_get_batch']}")
 | `max_put_batch` | int | Largest single put transfer |
 | `max_get_batch` | int | Largest single get transfer |
 
-### 8.2.4 Latency Probe
+### 9.2.4 Latency Probe
 
 `QueueLatencyProbe` measures two kinds of time:
 
@@ -158,7 +158,7 @@ If the probe is attached to a queue that already contains items, those items are
 | `get_wait_time_min` | float | Shortest get wait |
 | `get_wait_time_max` | float | Longest get wait |
 
-### 8.2.5 Resetting and Detaching
+### 9.2.5 Resetting and Detaching
 
 ```python
 probe.reset()    # clear accumulated statistics; start fresh from now
@@ -169,7 +169,7 @@ q.remove_probe(probe)  # detach via the queue's API (also calls close())
 
 ---
 
-## 8.3 Resource Probes
+## 9.3 Resource Probes
 
 `ResourceStatsProbe` works identically to `QueueStatsProbe` but tracks resource `amount` instead of queue length:
 
@@ -193,7 +193,7 @@ print(f"preempt count:    {s['preempt_count']}")
 print(f"preempted amount: {s['preempted_amount']:.2f}")
 ```
 
-### 8.3.1 Resource Statistics Fields
+### 9.3.1 Resource Statistics Fields
 
 | Field | Type | Description |
 |---|---|---|
@@ -211,7 +211,7 @@ print(f"preempted amount: {s['preempted_amount']:.2f}")
 | `preempted_amount` | float | Total amount reclaimed by preemption |
 | `current_amount` | float | Amount at time of `stats()` call |
 
-### 8.3.2 Flow Probe
+### 9.3.2 Flow Probe
 
 `ResourceFlowProbe` tracks transferred amounts and rates — how much is being put in and taken out over time. It focuses on successful transfers only and computes throughput rates.
 
@@ -251,7 +251,7 @@ print(f"get rate:   {s['get_rate']:.2f} units/s")
 | `unexpected_nfull_count` | int | `tx_nfull` events with no amount decrease (diagnostic) |
 | `current_amount` | float | Resource amount at last observation |
 
-### 8.3.3 Latency Probe
+### 9.3.3 Latency Probe
 
 `ResourceLatencyProbe` measures how long blocked `gput` and `gget` calls wait before they can proceed. It only records operations that actually blocked — non-blocking calls are invisible to this probe.
 
@@ -289,7 +289,7 @@ print(f"timeouts:   get {s['get_wait_timeout_count']}  put {s['put_wait_timeout_
 
 ---
 
-## 8.4 Custom Probes
+## 9.4 Custom Probes
 
 The built-in probes cover queues and resources. For anything else — custom components, cross-component metrics, or specialised logging — you can write your own probe.
 
@@ -323,7 +323,7 @@ The same pattern works for any component — attach to whichever publisher endpo
 
 ---
 
-## 8.5 Event-Level Probing with PRE Observers
+## 9.5 Event-Level Probing with PRE Observers
 
 For anything beyond built-in statistics, attach a `PRE` phase subscriber directly to any publisher endpoint:
 
@@ -348,7 +348,7 @@ This approach gives access to the raw event stream at any endpoint. PRE observer
 
 ---
 
-## 8.6 Time-Series Logging
+## 9.6 Time-Series Logging
 
 If you want a time series of queue length or resource amount sampled at regular intervals, drive it with a `DSTimer`:
 
@@ -374,7 +374,7 @@ print(series[:5])
 
 ---
 
-## 8.7 Event Tracing with `DSTrackableEvent`
+## 9.7 Event Tracing with `DSTrackableEvent`
 
 Probes observe *components*. Sometimes you need to trace an *event itself* — to answer "which components handled this specific event, and in what order?"
 
@@ -441,7 +441,7 @@ Every subscriber and publisher node whose `send()` was called with this event is
 
 ---
 
-## 8.8 Key Takeaways
+## 9.8 Key Takeaways
 
 - Probes are attached via `add_probe()` or the factory methods (`add_stats_probe()`, `add_ops_probe()`, `add_latency_probe()`, `add_flow_probe()`) and detached via `remove_probe()`.
 - **Queue probes:** `QueueStatsProbe` (occupancy, throughput), `QueueOpsProbe` (per-operation success/fail/blocked/timeout counts), `QueueLatencyProbe` (item stay time, blocked wait time).

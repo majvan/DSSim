@@ -65,7 +65,7 @@ In SimPy, timeouts require explicit `Event` wiring; in salabim they are supporte
 
 DSSim's event interface is an open Python protocol, not a closed framework. Any component that implements `send(event)` is a valid subscriber. This means your simulated component can connect directly to a component written by someone else — or to code migrated from another DES framework — without any bridging layer.
 
-Neither SimPy nor salabim define an open subscriber protocol: their components are tied to the framework's internal event objects and cannot be wired directly to foreign code. DSSim ships parity shims for SimPy, salabim, and asyncio that let migrated code and native DSSim code share the same event loop without modification. See [Chapter 9](09-shims.md).
+Neither SimPy nor salabim define an open subscriber protocol: their components are tied to the framework's internal event objects and cannot be wired directly to foreign code. DSSim ships parity shims for SimPy, salabim, and asyncio that let migrated code and native DSSim code share the same event loop without modification. See [Chapter 10](10-shims.md).
 
 ### Performance
 
@@ -75,7 +75,7 @@ Uniquely, DSSim offers two routing profiles selectable at construction time. You
 
 LiteLayer2 is not just fast relative to PubSubLayer2 — benchmarks show it outperforms SimPy and salabim even when the feature set is comparable. The name "Lite" refers to its stripped-down routing machinery, not to any reduction in correctness or capability. (Some would argue it deserves the name *Light-speed layer* instead.)
 
-Even PubSubLayer2, despite carrying full tier routing, condition filtering, and circuit machinery, benchmarks at speeds comparable to SimPy — so you pay no meaningful performance penalty for the richer feature set. See [Chapter 11](11-benchmarks.md) for benchmark methodology and relative trade-off guidelines.
+Even PubSubLayer2, despite carrying full tier routing, condition filtering, and circuit machinery, benchmarks at speeds comparable to SimPy — so you pay no meaningful performance penalty for the richer feature set. See [Chapter 12](12-benchmarks.md) for benchmark methodology and relative trade-off guidelines.
 
 The benchmark suite is included in the repository. Anyone can run it on their own hardware — absolute numbers will vary, but the relative ordering between layers and frameworks has been consistent across environments.
 

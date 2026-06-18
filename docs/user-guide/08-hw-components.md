@@ -1,6 +1,6 @@
-# Chapter 7: Basic HW Components
+# Chapter 8: Basic HW Components
 
-## 7.1 The DSComponent Concept
+## 8.1 The DSComponent Concept
 
 `DSComponent` is the base class for everything in DSSim that has an identity and belongs to a simulation. That means queues, resources, publishers, processes, agents, and every hardware model component all inherit from it.
 
@@ -51,7 +51,7 @@ This endpoint-to-process-to-endpoint pattern is the standard building block for 
 
 ---
 
-## 7.2 Building a Custom Component
+## 8.2 Building a Custom Component
 
 Here is a minimal component that receives events on an input callback, delays them, and forwards them on an output publisher:
 
@@ -93,7 +93,7 @@ t=3: forwarded {'msg': 'world'}
 
 ---
 
-## 7.3 Adding a Process to a Component
+## 8.3 Adding a Process to a Component
 
 Some components need richer internal behavior than a single callback. A component process lets you write wait logic inside the component:
 
@@ -123,7 +123,7 @@ class Arbiter(DSComponent):
 
 ---
 
-## 7.4 DSStatefulComponent
+## 8.4 DSStatefulComponent
 
 `DSStatefulComponent` extends `DSComponent` with a `tx_changed` publisher. Subclass it when your component maintains observable state:
 
@@ -155,11 +155,11 @@ async def watcher(counter):
 
 ---
 
-## 7.5 Built-in HW Components
+## 8.5 Built-in HW Components
 
 DSSim includes two ready-made hardware models under `dssim.pubsub.components`.
 
-### 7.5.1 Timer
+### 8.5.1 Timer
 
 `DSTimer` is a periodic clock with start/stop/pause/resume control. See [Section 6.6](06-components.md#66-timer-and-state) for the full API.
 
@@ -178,7 +178,7 @@ clk.start(clk.period, clk.counter)
 sim.run(until=1e-3)
 ```
 
-### 7.5.2 UART
+### 8.5.2 UART
 
 A noisy UART line model is provided in `dssim.pubsub.components.hw.uart`:
 
@@ -194,7 +194,7 @@ The model introduces random bit errors based on a configurable probability. You 
 
 ---
 
-## 7.6 Example: A Complete Producer-Processor Chain
+## 8.6 Example: A Complete Producer-Processor Chain
 
 The following ties together the concepts from this chapter into a small hardware-style pipeline:
 
@@ -235,7 +235,7 @@ sim.run(until=20)
 
 ---
 
-## 7.7 Key Takeaways
+## 8.7 Key Takeaways
 
 - `DSComponent` is the base for all named simulation objects; pass `name=` and `sim=` at construction.
 - Hardware-style models have input endpoints (callbacks/subscribers), optional internal processes, and output endpoints (publishers).

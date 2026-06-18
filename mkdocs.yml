@@ -66,11 +66,12 @@ nav:
       - 4. Condition Filtering: user-guide/04-condition-filtering.md
       - 5. Processes: user-guide/05-processes.md
       - 6. Basic Generic Components: user-guide/06-components.md
-      - 7. HW Components: user-guide/07-hw-components.md
-      - 8. Probes, Tracing, and Debugging: user-guide/08-probes.md
-      - 9. Shim Layers: user-guide/09-shims.md
-      - 10. Feature Comparison: user-guide/10-feature-comparison.md
-      - 11. Benchmarks: user-guide/11-benchmarks.md
+      - 7. Agents: user-guide/07-agents.md
+      - 8. HW Components: user-guide/08-hw-components.md
+      - 9. Probes, Tracing, and Debugging: user-guide/09-probes.md
+      - 10. Shim Layers: user-guide/10-shims.md
+      - 11. Feature Comparison: user-guide/11-feature-comparison.md
+      - 12. Benchmarks: user-guide/12-benchmarks.md
   - Getting Started:
       - Install: getting-started/install.md
       - First Simulation: getting-started/first-sim.md

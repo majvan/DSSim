@@ -1,6 +1,6 @@
-# Chapter 9: Shim Layers for Other Frameworks
+# Chapter 10: Shim Layers for Other Frameworks
 
-## 9.1 Overview
+## 10.1 Overview
 
 DSSim provides thin compatibility shims so that code written for other DES frameworks can run on top of DSSim with minimal changes. These shims are API-compatibility layers — they expose familiar class and function names while delegating the actual simulation work to DSSim's engine.
 
@@ -16,9 +16,9 @@ Three shims are available:
 
 ---
 
-## 9.2 SimPy Shim
+## 10.2 SimPy Shim
 
-### 9.2.1 Importing
+### 10.2.1 Importing
 
 ```python
 from dssim.pubsub.parity.simpy import (
@@ -37,7 +37,7 @@ from dssim.pubsub.parity.simpy import (
 )
 ```
 
-### 9.2.2 Basic SimPy patterns
+### 10.2.2 Basic SimPy patterns
 
 The shim mirrors the SimPy 4 API surface:
 
@@ -72,7 +72,7 @@ Key mapped items:
 | `FilterStore` | shim `FilterStore` |
 | `PriorityStore` | shim `PriorityStore` |
 
-### 9.2.3 Process interruption
+### 10.2.3 Process interruption
 
 SimPy's interrupt pattern is supported:
 
@@ -93,7 +93,7 @@ env.process(disruptor(env, p))
 env.run()
 ```
 
-### 9.2.4 AnyOf / AllOf
+### 10.2.4 AnyOf / AllOf
 
 ```python
 def waiter(env, e1, e2):
@@ -105,7 +105,7 @@ def waiter(env, e1, e2):
 
 ---
 
-## 9.3 salabim Shim
+## 10.3 salabim Shim
 
 The salabim shim exposes salabim-style names on top of DSSim components:
 
@@ -140,7 +140,7 @@ Inside `Component.process()`, use DSSim waits directly (`await self.sim.sleep(..
 
 ---
 
-## 9.4 asyncio Shim
+## 10.4 asyncio Shim
 
 The asyncio shim lets you run DSSim processes as if they were `asyncio` coroutines. It is useful when porting code that uses `asyncio`'s event loop conventions, or when testing async logic without a real event loop:
 
@@ -176,7 +176,7 @@ The `DSAsyncSimulation` also supports `create_task`, `create_future`, and `async
 
 ---
 
-## 9.5 Migration Notes
+## 10.5 Migration Notes
 
 ### From SimPy
 
@@ -191,7 +191,7 @@ The `DSAsyncSimulation` also supports `create_task`, `create_future`, and `async
 1. Replace `import salabim` with `import dssim.pubsub.parity.salabim as salabim`.
 2. Keep component structure, but rewrite wait/control calls to DSSim primitives (`sim.sleep`, `sim.wait`, explicit signaling) inside `process()`.
 3. Constructor-style names (`Store`, `queue`, `resource`, `state`) are available in the shim module.
-4. `Monitor` / statistics collection: use DSSim probes instead (see [Chapter 8](08-probes.md)).
+4. `Monitor` / statistics collection: use DSSim probes instead (see [Chapter 9](09-probes.md)).
 
 ### Migrating to Native DSSim
 
@@ -206,11 +206,11 @@ After the shim is working, the next step is replacing shim classes with DSSim na
 
 ---
 
-## 9.6 Key Takeaways
+## 10.6 Key Takeaways
 
 - Three shims let SimPy, salabim, and asyncio code run on DSSim with minimal changes.
 - The SimPy shim covers `Environment`, `Event`, `Process`, `AnyOf`/`AllOf`, and the main resource/store types.
 - The salabim shim maps `Component` to `DSAgent` and `Environment` to `DSSimulation`.
 - The asyncio shim wraps `DSSimulation` with event-loop-like methods and maps `Task`/`Future`/`Timeout`.
 - Shims are a migration starting point; native DSSim APIs give access to pubsub, condition filtering, and probes that shims do not expose.
-- For a side-by-side capability comparison with SimPy and salabim, see [Chapter 10](10-feature-comparison.md).
+- For a side-by-side capability comparison with SimPy and salabim, see [Chapter 11](11-feature-comparison.md).

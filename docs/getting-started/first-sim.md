@@ -139,4 +139,4 @@ Key points:
 | Use condition filtering, filters, and circuits | [Chapter 4: Condition Filtering](../user-guide/04-condition-filtering.md) |
 | Write full process-oriented models | [Chapter 5: Processes](../user-guide/05-processes.md) |
 | Use Queue, Container, Resource | [Chapter 6: Components](../user-guide/06-components.md) |
-| Port code from SimPy or salabim | [Chapter 9: Shim Layers](../user-guide/09-shims.md) |
+| Port code from SimPy or salabim | [Chapter 10: Shim Layers](../user-guide/10-shims.md) |

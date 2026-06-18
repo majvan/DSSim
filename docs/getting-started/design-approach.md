@@ -108,7 +108,7 @@ assert output_events[0].payload == bytes([0x01, 0x02])
     If a test fails and the output is not what you expect, add PRE-phase observers
     on intermediate internal publishers to see the step-by-step event flow inside
     the component. Remove or disable them once the component is verified. See
-    [Chapter 8](../user-guide/08-probes.md) for the full probing API.
+    [Chapter 9](../user-guide/09-probes.md) for the full probing API.
 
 Collect these component-level tests into a test suite. Each component should have its own test module with a small simulation that exercises its normal paths, boundary conditions, and timeout handling. Running the suite after every change confirms that individual components remain correct as the rest of the model grows.
 
