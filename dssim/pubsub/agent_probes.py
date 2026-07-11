@@ -354,21 +354,21 @@ class AgentActivityProbe(DSSub):
         return self.stats()
 
 
-class _ContainerOpsWatch:
-    '''PRE-phase tx_ops subscriber binding one container to an AgentQueueingProbe.
+class _TargetOpsWatch:
+    '''PRE-phase tx_ops subscriber binding one component to an agent probe.
 
-    The tx_ops event does not carry a reference to its emitting container, so the
-    probe subscribes one watch per container to restore that context.
+    A tx_ops event does not carry a reference to its emitting component, so a
+    probe subscribes one watch per component to restore that context.
     '''
 
     supports_direct_send = True
 
-    def __init__(self, probe: 'AgentQueueingProbe', container: Any) -> None:
+    def __init__(self, probe: Any, target: Any) -> None:
         self.probe = probe
-        self.container = container
+        self.target = target
 
     def send(self, event: Any) -> None:
-        self.probe._on_container_op(self.container, event)
+        self.probe._on_target_op(self.target, event)
         return None
 
 
@@ -392,7 +392,7 @@ class AgentQueueingProbe(DSSub):
         super().__init__(name=name, sim=sim)
         self.enabled = enabled
         self._agent: Optional['DSAgent'] = None
-        self._watches: Dict[int, _ContainerOpsWatch] = {}
+        self._watches: Dict[int, _TargetOpsWatch] = {}
         self._entries: Dict[int, Deque[float]] = {}
         self.reset()
 
@@ -411,7 +411,7 @@ class AgentQueueingProbe(DSSub):
 
     def _release_watches(self) -> None:
         for watch in self._watches.values():
-            watch.container.tx_ops.remove_subscriber(watch, DSPub.Phase.PRE)
+            watch.target.tx_ops.remove_subscriber(watch, DSPub.Phase.PRE)
         self._watches = {}
         self._entries = {}
 
@@ -450,7 +450,7 @@ class AgentQueueingProbe(DSSub):
         self._entries.pop(key, None)
         watch = self._watches.pop(key, None)
         if watch is not None:
-            watch.container.tx_ops.remove_subscriber(watch, DSPub.Phase.PRE)
+            watch.target.tx_ops.remove_subscriber(watch, DSPub.Phase.PRE)
 
     def _track_entry(self, container: Any, now: float) -> None:
         tx_ops = getattr(container, 'tx_ops', None)
@@ -459,7 +459,7 @@ class AgentQueueingProbe(DSSub):
             return
         key = id(container)
         if key not in self._watches:
-            watch = _ContainerOpsWatch(self, container)
+            watch = _TargetOpsWatch(self, container)
             tx_ops.add_subscriber(watch, DSPub.Phase.PRE)
             self._watches[key] = watch
         # A consumer waiting on the container may have taken the agent in the same
@@ -495,7 +495,7 @@ class AgentQueueingProbe(DSSub):
         self._track_entry(container, now)
         return None
 
-    def _on_container_op(self, container: Any, event: Any) -> None:
+    def _on_target_op(self, container: Any, event: Any) -> None:
         if not self.enabled or self._agent is None:
             return
         if not isinstance(event, dict) or event.get('kind') != 'queue_op':
@@ -525,7 +525,7 @@ class AgentQueueingProbe(DSSub):
     def stats(self) -> Dict[str, Any]:
         now = float(self._agent.sim.time) if self._agent is not None else self._start_time
         currently_queued = {
-            self._target_name(watch.container): len(self._entries[key])
+            self._target_name(watch.target): len(self._entries[key])
             for key, watch in self._watches.items() if self._entries.get(key)
         }
         return {
@@ -559,8 +559,10 @@ class AgentResourceProbe(DSSub):
     time-weighted average amount held over the observation window.
 
     Amounts reclaimed by preemption (DSPriorityResource with ``preempt=True``)
-    bypass the agent's put APIs and are not observed; the balance of a preempted
-    holder stays overstated by the reclaimed amount.
+    bypass the holder's put APIs; to keep the balance honest the probe also
+    subscribes to the ``tx_ops`` of every resource the agent touched and books
+    ``preempt`` ops targeting this agent's process as ``preempted_total``,
+    reducing the balance at the moment of the reclaim.
     '''
 
     GET_REASONS = frozenset({'get', 'gget', 'get_n', 'gget_n'})
@@ -570,6 +572,7 @@ class AgentResourceProbe(DSSub):
         super().__init__(name=name, sim=sim)
         self.enabled = enabled
         self._agent: Optional['DSAgent'] = None
+        self._watches: Dict[int, _TargetOpsWatch] = {}
         self.reset()
 
     def attach(self, agent: 'DSAgent') -> None:
@@ -581,10 +584,27 @@ class AgentResourceProbe(DSSub):
         agent = self._agent
         if agent is None:
             return
+        self._release_watches()
         agent.tx_changed.remove_subscriber(self, DSPub.Phase.PRE)
         self._agent = None
 
+    def _release_watches(self) -> None:
+        for watch in self._watches.values():
+            watch.target.tx_ops.remove_subscriber(watch, DSPub.Phase.PRE)
+        self._watches = {}
+
+    def _ensure_watch(self, resource: Any) -> None:
+        tx_ops = getattr(resource, 'tx_ops', None)
+        if tx_ops is None:
+            return
+        key = id(resource)
+        if key not in self._watches:
+            watch = _TargetOpsWatch(self, resource)
+            tx_ops.add_subscriber(watch, DSPub.Phase.PRE)
+            self._watches[key] = watch
+
     def reset(self) -> None:
+        self._release_watches()
         now = float(self._agent.sim.time) if self._agent is not None else 0.0
         self._start_time = now
         self._records: Dict[str, Dict[str, Any]] = {}
@@ -607,6 +627,8 @@ class AgentResourceProbe(DSSub):
                 'put_count': 0,
                 'failed_get_count': 0,
                 'failed_put_count': 0,
+                'preempt_count': 0,
+                'preempted_total': 0.0,
             }
             self._records[rname] = rec
         return rec
@@ -633,6 +655,7 @@ class AgentResourceProbe(DSSub):
         resource = details.get('resource')
         if resource is None:
             return None
+        self._ensure_watch(resource)
         now = float(event.get('time', self._agent.sim.time))
         rec = self._record(self._target_name(resource), now)
         self._advance(rec, now)
@@ -655,6 +678,26 @@ class AgentResourceProbe(DSSub):
             else:
                 rec['failed_put_count'] += 1
         return None
+
+    def _on_target_op(self, resource: Any, event: Any) -> None:
+        if not self.enabled or self._agent is None:
+            return
+        if not isinstance(event, dict) or event.get('kind') != 'resource_op':
+            return
+        if event.get('op') != 'preempt':
+            return
+        # The op reports the victim as the owner process registered at acquire time.
+        owner = event.get('owner')
+        agent = self._agent
+        if owner is not getattr(agent, '_scheduled_process', None) and getattr(owner, 'component', None) is not agent:
+            return
+        now = float(event.get('time', agent.sim.time))
+        rec = self._record(self._target_name(resource), now)
+        self._advance(rec, now)
+        taken = float(event.get('moved') or 0.0)
+        rec['preempt_count'] += 1
+        rec['preempted_total'] += taken
+        rec['balance'] -= taken
 
     def _resource_stats(self, rec: Dict[str, Any], now: float) -> Dict[str, Any]:
         integral = rec['balance_integral'] + rec['balance'] * max(0.0, now - rec['last_time'])

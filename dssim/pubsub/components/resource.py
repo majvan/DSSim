@@ -115,25 +115,26 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
         timeout: bool = False,
         wait_time: float = 0.0,
         api: str = '',
+        **extra: Any,
     ) -> None:
         if self.tx_ops.has_subscribers():
-            self.sim.signal(
-                {
-                    'kind': 'resource_op',
-                    'op': op,
-                    'api': api or op,
-                    'requested': float(requested),
-                    'moved': float(moved),
-                    'success': success,
-                    'blocked': blocked,
-                    'timeout': timeout,
-                    'wait_time': wait_time,
-                    'time': float(self.sim.time),
-                    'amount': float(self.amount),
-                    'capacity': float(self.capacity),
-                },
-                self.tx_ops,
-            )
+            event = {
+                'kind': 'resource_op',
+                'op': op,
+                'api': api or op,
+                'requested': float(requested),
+                'moved': float(moved),
+                'success': success,
+                'blocked': blocked,
+                'timeout': timeout,
+                'wait_time': wait_time,
+                'time': float(self.sim.time),
+                'amount': float(self.amount),
+                'capacity': float(self.capacity),
+            }
+            if extra:
+                event.update(extra)
+            self.sim.signal(event, self.tx_ops)
 
     # ------------------------------------------------------------------
     # Nowait operations
@@ -540,6 +541,10 @@ class DSPriorityResource(DSResource):
         def on_preempted(owner: Any, holder_prio: int, taken: NumericType) -> None:
             self.preempt_count += 1
             self.preempted_amount += taken
+            self._fire_ops(
+                'preempt', requested=taken, moved=taken, success=True, api='preempt',
+                owner=owner, by=requester, priority=holder_prio,
+            )
             self.sim.signal(self.Preempted(self, requester, owner, holder_prio, taken), owner)
 
         return self._preemption.reclaim_from_victims(

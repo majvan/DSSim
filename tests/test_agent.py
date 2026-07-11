@@ -606,6 +606,44 @@ class TestDSAgentResourceProbe(unittest.TestCase):
         self.assertEqual(rs['get_count'], 0)
         self.assertEqual(rs['put_count'], 1)
 
+    def test5_preemption_corrects_balance(self):
+        from dssim.pubsub.components.resource import DSResourcePreempted
+        sim = DSSimulation()
+        r = sim.priority_resource(amount=1, capacity=1, name='res')
+
+        class Victim(DSAgent):
+            async def process(self):
+                await self.get(r, priority=5, preempt=True)   # holds 1 from t=0
+                try:
+                    await self.sim.sleep(100)
+                    self.put_nowait(r)
+                except DSResourcePreempted:
+                    pass                                       # preempted at t=3
+
+        class Preemptor(DSAgent):
+            async def process(self):
+                await self.sim.sleep(3)
+                await self.get(r, priority=1, preempt=True)
+                await self.sim.sleep(2)
+                self.put_nowait(r)
+
+        victim = Victim(sim=sim)
+        Preemptor(sim=sim)
+        probe = victim.add_resource_probe()
+        sim.run(20)
+
+        rs = probe.stats()['by_resource'][r.name]
+        self.assertAlmostEqual(rs['acquired_total'], 1.0, places=6)
+        self.assertAlmostEqual(rs['released_total'], 0.0, places=6)
+        self.assertEqual(rs['preempt_count'], 1)
+        self.assertAlmostEqual(rs['preempted_total'], 1.0, places=6)
+        # Balance corrected at the reclaim: not overstated after preemption.
+        self.assertAlmostEqual(rs['balance'], 0.0, places=6)
+        self.assertAlmostEqual(probe.amount_held(r), 0.0, places=6)
+        # Held 1 unit only from t=0 to the preemption at t=3.
+        self.assertAlmostEqual(rs['balance_integral'], 3.0, places=6)
+        self.assertEqual(r.preempt_count, 1)
+
     def test4_failed_get_is_counted_not_accounted(self):
         sim = DSSimulation()
         r = sim.resource(amount=0, capacity=1)
