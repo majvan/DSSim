@@ -17,7 +17,7 @@ Tests for DSAgent.
 import unittest
 from io import StringIO
 
-from dssim import DSAgent, DSSimulation, AgentHistoryProbe, AgentStatsProbe, AgentActivityProbe
+from dssim import DSAgent, DSSimulation, AgentHistoryProbe, AgentStatsProbe, AgentActivityProbe, AgentQueueingProbe, AgentResourceProbe
 
 
 class TestDSAgentLifecycle(unittest.TestCase):
@@ -418,6 +418,212 @@ class TestDSAgentActivityProbe(unittest.TestCase):
         s = probe.stats()
         self.assertEqual(s['time_by_resource'].get(r.name, 0.0), 0.0)
         self.assertAlmostEqual(s['time_by_activity']['hold'], 2.0, places=6)
+
+
+class TestDSAgentQueueingProbe(unittest.TestCase):
+    def test1_externally_taken_agent_reports_true_queue_time(self):
+        # Agent enters at t=0, a server takes it out at t=7 and activates it at t=10.
+        # The queueing probe must report 7 (time in queue), even though the agent's
+        # own wait ends only at t=10.
+        sim = DSSimulation()
+        queue = sim.queue()
+
+        class Customer(DSAgent):
+            async def process(self):
+                await self.enter(queue)
+                await self.wait()
+
+        class Server(DSAgent):
+            async def process(self):
+                await self.sim.sleep(7)
+                item = await queue.get()
+                await self.sim.sleep(3)
+                item.activate('done')
+
+        customer = Customer(sim=sim)
+        Server(sim=sim)
+        qprobe = customer.add_queueing_probe()
+        self.assertIsInstance(qprobe, AgentQueueingProbe)
+        self.assertEqual(qprobe.name, f'{customer.name}.queueing_probe')
+        aprobe = customer.add_activity_probe()
+        sim.run(20)
+
+        s = qprobe.stats()
+        self.assertEqual(s['stay_count'], 1)
+        self.assertAlmostEqual(s['stay_time_total'], 7.0, places=6)
+        self.assertAlmostEqual(s['time_by_container'][queue.name], 7.0, places=6)
+        self.assertAlmostEqual(qprobe.time_in_queue(queue), 7.0, places=6)
+        self.assertAlmostEqual(qprobe.time_in_queue(queue.name), 7.0, places=6)
+        self.assertEqual(s['currently_queued'], {})
+        self.assertEqual(s['unobservable_enter_count'], 0)
+        self.assertEqual(s['untracked_exit_count'], 0)
+        # The activity probe keeps its own (different) semantics: wait until activated.
+        self.assertAlmostEqual(aprobe.time_in('wait'), 10.0, places=6)
+        # The probe unsubscribed from the queue's tx_ops after the exit.
+        self.assertFalse(queue.tx_ops.has_subscribers())
+
+    def test2_voluntary_leave_closes_the_stay(self):
+        sim = DSSimulation()
+        queue = sim.queue()
+
+        class Impatient(DSAgent):
+            async def process(self):
+                await self.enter(queue)
+                await self.wait(timeout=5)      # renege at t=5
+                self.leave(queue)
+
+        agent = Impatient(sim=sim)
+        qprobe = agent.add_queueing_probe()
+        sim.run(20)
+
+        s = qprobe.stats()
+        self.assertEqual(s['stay_count'], 1)
+        self.assertAlmostEqual(s['stay_time_total'], 5.0, places=6)
+        self.assertEqual(s['currently_queued'], {})
+        self.assertEqual(len(queue), 0)
+
+    def test3_consumer_already_waiting_records_zero_stay(self):
+        # A getter blocked on the empty queue may take the agent in the same instant
+        # it enters; the stay must be recorded as 0, not leak as pending forever.
+        sim = DSSimulation()
+        queue = sim.queue()
+        taken = []
+
+        def consumer():
+            item = yield from queue.gget()
+            taken.append(item)
+
+        class Customer(DSAgent):
+            async def process(self):
+                await self.sim.sleep(3)
+                await self.enter(queue)
+                await self.wait(timeout=1)
+
+        customer = Customer(sim=sim)
+        qprobe = customer.add_queueing_probe()
+        sim.schedule(0, consumer())
+        sim.run(20)
+
+        self.assertEqual(taken, [customer])
+        s = qprobe.stats()
+        self.assertEqual(s['stay_count'], 1)
+        self.assertAlmostEqual(s['stay_time_total'], 0.0, places=6)
+        self.assertEqual(s['currently_queued'], {})
+        self.assertEqual(s['untracked_exit_count'], 0)
+        self.assertFalse(queue.tx_ops.has_subscribers())
+
+    def test4_still_queued_at_end_is_pending_not_counted(self):
+        sim = DSSimulation()
+        queue = sim.queue()
+
+        class Customer(DSAgent):
+            async def process(self):
+                await self.enter(queue)
+                await self.wait(timeout=2)
+
+        customer = Customer(sim=sim)
+        qprobe = customer.add_queueing_probe()
+        sim.run(20)
+
+        s = qprobe.stats()
+        self.assertEqual(s['stay_count'], 0)
+        self.assertEqual(s['currently_queued'], {queue.name: 1})
+        self.assertEqual(len(queue), 1)
+
+
+class TestDSAgentResourceProbe(unittest.TestCase):
+    def test1_acquire_hold_release_accounting(self):
+        sim = DSSimulation()
+        r = sim.resource(amount=2, capacity=10, name='tank')
+
+        class Worker(DSAgent):
+            def process(self):
+                yield from self.gget_n(r, amount=2)   # take 2 at t=0
+                yield from self.hold(5)
+                yield from self.gput_n(r, amount=2)   # return 2 at t=5
+
+        worker = Worker(sim=sim)
+        probe = worker.add_resource_probe()
+        self.assertIsInstance(probe, AgentResourceProbe)
+        self.assertEqual(probe.name, f'{worker.name}.resource_probe')
+        sim.run(10)
+
+        s = probe.stats()
+        rs = s['by_resource'][r.name]
+        self.assertAlmostEqual(rs['acquired_total'], 2.0, places=6)
+        self.assertAlmostEqual(rs['released_total'], 2.0, places=6)
+        self.assertAlmostEqual(rs['balance'], 0.0, places=6)
+        self.assertAlmostEqual(rs['balance_max'], 2.0, places=6)
+        # Held 2 units for 5 time units -> integral 10, avg over t=0..10 -> 1.0
+        self.assertAlmostEqual(rs['balance_integral'], 10.0, places=6)
+        self.assertAlmostEqual(rs['avg_held'], 1.0, places=6)
+        self.assertEqual(rs['get_count'], 1)
+        self.assertEqual(rs['put_count'], 1)
+        self.assertAlmostEqual(probe.amount_held(r), 0.0, places=6)
+        self.assertAlmostEqual(probe.amount_acquired(r), 2.0, places=6)
+        self.assertAlmostEqual(probe.avg_held(r), 1.0, places=6)
+
+    def test2_blocked_get_accounts_from_acquisition_time(self):
+        sim = DSSimulation()
+        r = sim.resource(amount=0, capacity=1)
+
+        class Worker(DSAgent):
+            def process(self):
+                yield from self.gget(r)               # blocks until t=4
+
+        worker = Worker(sim=sim)
+        probe = worker.add_resource_probe()
+
+        def feeder():
+            yield from sim.gwait(4)
+            r.put_nowait()
+
+        sim.schedule(0, feeder())
+        sim.run(10)
+
+        rs = probe.stats()['by_resource'][r.name]
+        self.assertAlmostEqual(rs['acquired_total'], 1.0, places=6)
+        self.assertAlmostEqual(rs['balance'], 1.0, places=6)
+        # Held 1 unit from t=4 to end of observation at t=10.
+        self.assertAlmostEqual(rs['balance_integral'], 6.0, places=6)
+
+    def test3_net_producer_has_negative_balance(self):
+        sim = DSSimulation()
+        r = sim.resource(amount=0, capacity=10)
+
+        class Producer(DSAgent):
+            def process(self):
+                yield from self.hold(1)
+                self.put_n_nowait(r, 3)               # produce 3 at t=1
+
+        producer = Producer(sim=sim)
+        probe = producer.add_resource_probe()
+        sim.run(10)
+
+        rs = probe.stats()['by_resource'][r.name]
+        self.assertAlmostEqual(rs['released_total'], 3.0, places=6)
+        self.assertAlmostEqual(rs['balance'], -3.0, places=6)
+        self.assertEqual(rs['get_count'], 0)
+        self.assertEqual(rs['put_count'], 1)
+
+    def test4_failed_get_is_counted_not_accounted(self):
+        sim = DSSimulation()
+        r = sim.resource(amount=0, capacity=1)
+
+        class Worker(DSAgent):
+            def process(self):
+                yield from self.gget(r, timeout=3)    # times out at t=3
+
+        worker = Worker(sim=sim)
+        probe = worker.add_resource_probe()
+        sim.run(10)
+
+        rs = probe.stats()['by_resource'][r.name]
+        self.assertEqual(rs['failed_get_count'], 1)
+        self.assertEqual(rs['get_count'], 0)
+        self.assertAlmostEqual(rs['acquired_total'], 0.0, places=6)
+        self.assertAlmostEqual(rs['balance'], 0.0, places=6)
+        self.assertAlmostEqual(rs['balance_integral'], 0.0, places=6)
 
 
 if __name__ == '__main__':

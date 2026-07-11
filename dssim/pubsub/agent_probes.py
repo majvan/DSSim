@@ -354,6 +354,353 @@ class AgentActivityProbe(DSSub):
         return self.stats()
 
 
+class _ContainerOpsWatch:
+    '''PRE-phase tx_ops subscriber binding one container to an AgentQueueingProbe.
+
+    The tx_ops event does not carry a reference to its emitting container, so the
+    probe subscribes one watch per container to restore that context.
+    '''
+
+    supports_direct_send = True
+
+    def __init__(self, probe: 'AgentQueueingProbe', container: Any) -> None:
+        self.probe = probe
+        self.container = container
+
+    def send(self, event: Any) -> None:
+        self.probe._on_container_op(self.container, event)
+        return None
+
+
+class AgentQueueingProbe(DSSub):
+    '''Measure the true time an agent spends inside containers it entered.
+
+    Observes ``agent.tx_changed`` for successful ``enter``/``genter``/``enter_nowait``
+    events; each carries the container in its details. The probe then subscribes to
+    that container's ``tx_ops`` publisher and closes the interval when the agent
+    appears in ``items_out`` of any removal operation (``get``/``pop``/``remove``/
+    ``setitem``) — including removals performed by other processes, which the agent
+    itself never observes. Containers stay agent-agnostic; only containers exposing
+    ``tx_ops`` (e.g. DSQueue) are observable — entries into others are counted in
+    ``unobservable_enter_count``.
+
+    Entries made by third parties (someone else putting this agent into a queue)
+    are not tracked; their removals are counted in ``untracked_exit_count``.
+    '''
+
+    def __init__(self, enabled: bool = True, name: str = 'queueing_probe', sim: Optional['DSSimulation'] = None) -> None:
+        super().__init__(name=name, sim=sim)
+        self.enabled = enabled
+        self._agent: Optional['DSAgent'] = None
+        self._watches: Dict[int, _ContainerOpsWatch] = {}
+        self._entries: Dict[int, Deque[float]] = {}
+        self.reset()
+
+    def attach(self, agent: 'DSAgent') -> None:
+        self._agent = agent
+        agent.tx_changed.add_subscriber(self, DSPub.Phase.PRE)
+        self.reset()
+
+    def close(self) -> None:
+        agent = self._agent
+        if agent is None:
+            return
+        self._release_watches()
+        agent.tx_changed.remove_subscriber(self, DSPub.Phase.PRE)
+        self._agent = None
+
+    def _release_watches(self) -> None:
+        for watch in self._watches.values():
+            watch.container.tx_ops.remove_subscriber(watch, DSPub.Phase.PRE)
+        self._watches = {}
+        self._entries = {}
+
+    def reset(self) -> None:
+        self._release_watches()
+        now = float(self._agent.sim.time) if self._agent is not None else 0.0
+        self._start_time = now
+
+        self.stay_count = 0
+        self.stay_time_total = 0.0
+        self.stay_time_min = float('inf')
+        self.stay_time_max = 0.0
+        self.time_by_container: Dict[str, float] = {}
+        self.count_by_container: Dict[str, int] = {}
+        self.unobservable_enter_count = 0
+        self.untracked_exit_count = 0
+
+    @staticmethod
+    def _target_name(target: Any) -> str:
+        return getattr(target, 'name', None) or repr(target)
+
+    def _account_stay(self, container: Any, value: float) -> None:
+        self.stay_count += 1
+        self.stay_time_total += value
+        if value < self.stay_time_min:
+            self.stay_time_min = value
+        if value > self.stay_time_max:
+            self.stay_time_max = value
+        cname = self._target_name(container)
+        self.time_by_container[cname] = self.time_by_container.get(cname, 0.0) + value
+        self.count_by_container[cname] = self.count_by_container.get(cname, 0) + 1
+
+    def _maybe_release(self, key: int) -> None:
+        if self._entries.get(key):
+            return
+        self._entries.pop(key, None)
+        watch = self._watches.pop(key, None)
+        if watch is not None:
+            watch.container.tx_ops.remove_subscriber(watch, DSPub.Phase.PRE)
+
+    def _track_entry(self, container: Any, now: float) -> None:
+        tx_ops = getattr(container, 'tx_ops', None)
+        if tx_ops is None:
+            self.unobservable_enter_count += 1
+            return
+        key = id(container)
+        if key not in self._watches:
+            watch = _ContainerOpsWatch(self, container)
+            tx_ops.add_subscriber(watch, DSPub.Phase.PRE)
+            self._watches[key] = watch
+        # A consumer waiting on the container may have taken the agent in the same
+        # instant, before this 'enter' event was dispatched (event delivery is
+        # deferred through the now-queue); the exit op is then unobservable, but the
+        # stay provably started and ended at the same simulation time.
+        try:
+            still_inside = self._agent in container
+        except TypeError:
+            still_inside = True
+        if still_inside:
+            self._entries.setdefault(key, deque()).append(now)
+        else:
+            self._account_stay(container, 0.0)
+            self._maybe_release(key)
+
+    def send(self, event: Any) -> None:
+        if not self.enabled or self._agent is None:
+            return None
+        if not isinstance(event, dict) or event.get('kind') != 'agent_state':
+            return None
+        if event.get('change_type') == 'state':
+            return None
+        if event.get('reason') not in ('enter', 'genter', 'enter_nowait'):
+            return None
+        details = event.get('details') or {}
+        if not details.get('success'):
+            return None
+        container = details.get('container')
+        if container is None:
+            return None
+        now = float(event.get('time', self._agent.sim.time))
+        self._track_entry(container, now)
+        return None
+
+    def _on_container_op(self, container: Any, event: Any) -> None:
+        if not self.enabled or self._agent is None:
+            return
+        if not isinstance(event, dict) or event.get('kind') != 'queue_op':
+            return
+        agent = self._agent
+        exits = sum(1 for item in event.get('items_out', ()) if item is agent)
+        if exits == 0:
+            return
+        now = float(event.get('time', agent.sim.time))
+        key = id(container)
+        entries = self._entries.get(key)
+        for _ in range(exits):
+            if entries:
+                t_in = entries.popleft()
+                self._account_stay(container, now - t_in)
+            else:
+                self.untracked_exit_count += 1
+        self._maybe_release(key)
+
+    def time_in_queue(self, container: Any = None) -> float:
+        '''Total completed stay time, overall or for a specific container (or its name).'''
+        if container is None:
+            return self.stay_time_total
+        name = container if isinstance(container, str) else self._target_name(container)
+        return self.time_by_container.get(name, 0.0)
+
+    def stats(self) -> Dict[str, Any]:
+        now = float(self._agent.sim.time) if self._agent is not None else self._start_time
+        currently_queued = {
+            self._target_name(watch.container): len(self._entries[key])
+            for key, watch in self._watches.items() if self._entries.get(key)
+        }
+        return {
+            'start_time': self._start_time,
+            'end_time': now,
+            'duration': now - self._start_time,
+            'stay_count': self.stay_count,
+            'stay_time_total': self.stay_time_total,
+            'stay_time_avg': self.stay_time_total / self.stay_count if self.stay_count > 0 else 0.0,
+            'stay_time_min': self.stay_time_min if self.stay_count > 0 else 0.0,
+            'stay_time_max': self.stay_time_max,
+            'time_by_container': dict(self.time_by_container),
+            'count_by_container': dict(self.count_by_container),
+            'currently_queued': currently_queued,
+            'unobservable_enter_count': self.unobservable_enter_count,
+            'untracked_exit_count': self.untracked_exit_count,
+        }
+
+    def get_statistics(self) -> Dict[str, Any]:
+        return self.stats()
+
+
+class AgentResourceProbe(DSSub):
+    '''Account the resource amounts an agent spends and holds.
+
+    Observes ``agent.tx_changed`` only: the ``get*``/``put*`` action events from
+    AgentResourceMixin carry the resource, the amount moved and the success flag.
+    Per resource the probe tracks acquired/released totals, the running balance
+    (acquired - released; negative means the agent is a net producer), the peak
+    balance, and the time integral of the balance — so ``avg_held`` is the
+    time-weighted average amount held over the observation window.
+
+    Amounts reclaimed by preemption (DSPriorityResource with ``preempt=True``)
+    bypass the agent's put APIs and are not observed; the balance of a preempted
+    holder stays overstated by the reclaimed amount.
+    '''
+
+    GET_REASONS = frozenset({'get', 'gget', 'get_n', 'gget_n'})
+    PUT_REASONS = frozenset({'put', 'gput', 'put_n', 'gput_n', 'put_nowait', 'put_n_nowait'})
+
+    def __init__(self, enabled: bool = True, name: str = 'resource_probe', sim: Optional['DSSimulation'] = None) -> None:
+        super().__init__(name=name, sim=sim)
+        self.enabled = enabled
+        self._agent: Optional['DSAgent'] = None
+        self.reset()
+
+    def attach(self, agent: 'DSAgent') -> None:
+        self._agent = agent
+        agent.tx_changed.add_subscriber(self, DSPub.Phase.PRE)
+        self.reset()
+
+    def close(self) -> None:
+        agent = self._agent
+        if agent is None:
+            return
+        agent.tx_changed.remove_subscriber(self, DSPub.Phase.PRE)
+        self._agent = None
+
+    def reset(self) -> None:
+        now = float(self._agent.sim.time) if self._agent is not None else 0.0
+        self._start_time = now
+        self._records: Dict[str, Dict[str, Any]] = {}
+
+    @staticmethod
+    def _target_name(target: Any) -> str:
+        return getattr(target, 'name', None) or repr(target)
+
+    def _record(self, rname: str, now: float) -> Dict[str, Any]:
+        rec = self._records.get(rname)
+        if rec is None:
+            rec = {
+                'acquired_total': 0.0,
+                'released_total': 0.0,
+                'balance': 0.0,
+                'balance_max': 0.0,
+                'balance_integral': 0.0,
+                'last_time': now,
+                'get_count': 0,
+                'put_count': 0,
+                'failed_get_count': 0,
+                'failed_put_count': 0,
+            }
+            self._records[rname] = rec
+        return rec
+
+    @staticmethod
+    def _advance(rec: Dict[str, Any], now: float) -> None:
+        dt = now - rec['last_time']
+        if dt > 0:
+            rec['balance_integral'] += rec['balance'] * dt
+            rec['last_time'] = now
+
+    def send(self, event: Any) -> None:
+        if not self.enabled or self._agent is None:
+            return None
+        if not isinstance(event, dict) or event.get('kind') != 'agent_state':
+            return None
+        if event.get('change_type') == 'state':
+            return None
+        reason = event.get('reason')
+        is_get = reason in self.GET_REASONS
+        if not is_get and reason not in self.PUT_REASONS:
+            return None
+        details = event.get('details') or {}
+        resource = details.get('resource')
+        if resource is None:
+            return None
+        now = float(event.get('time', self._agent.sim.time))
+        rec = self._record(self._target_name(resource), now)
+        self._advance(rec, now)
+        amount = float(details.get('amount') or 0.0)
+        success = bool(details.get('success'))
+        if is_get:
+            if success:
+                rec['get_count'] += 1
+                rec['acquired_total'] += amount
+                rec['balance'] += amount
+                if rec['balance'] > rec['balance_max']:
+                    rec['balance_max'] = rec['balance']
+            else:
+                rec['failed_get_count'] += 1
+        else:
+            if success:
+                rec['put_count'] += 1
+                rec['released_total'] += amount
+                rec['balance'] -= amount
+            else:
+                rec['failed_put_count'] += 1
+        return None
+
+    def _resource_stats(self, rec: Dict[str, Any], now: float) -> Dict[str, Any]:
+        integral = rec['balance_integral'] + rec['balance'] * max(0.0, now - rec['last_time'])
+        duration = now - self._start_time
+        result = {k: v for k, v in rec.items() if k != 'last_time'}
+        result['balance_integral'] = integral
+        result['avg_held'] = integral / duration if duration > 0 else 0.0
+        return result
+
+    def amount_held(self, resource: Any) -> float:
+        '''Current balance (acquired - released) for `resource` (or its name).'''
+        name = resource if isinstance(resource, str) else self._target_name(resource)
+        rec = self._records.get(name)
+        return rec['balance'] if rec is not None else 0.0
+
+    def amount_acquired(self, resource: Any) -> float:
+        '''Total amount successfully acquired from `resource` (or its name).'''
+        name = resource if isinstance(resource, str) else self._target_name(resource)
+        rec = self._records.get(name)
+        return rec['acquired_total'] if rec is not None else 0.0
+
+    def avg_held(self, resource: Any) -> float:
+        '''Time-weighted average balance of `resource` over the observation window.'''
+        name = resource if isinstance(resource, str) else self._target_name(resource)
+        rec = self._records.get(name)
+        if rec is None:
+            return 0.0
+        now = float(self._agent.sim.time) if self._agent is not None else rec['last_time']
+        return self._resource_stats(rec, now)['avg_held']
+
+    def stats(self) -> Dict[str, Any]:
+        now = float(self._agent.sim.time) if self._agent is not None else self._start_time
+        by_resource = {rname: self._resource_stats(rec, now) for rname, rec in self._records.items()}
+        return {
+            'start_time': self._start_time,
+            'end_time': now,
+            'duration': now - self._start_time,
+            'by_resource': by_resource,
+            'acquired_total': sum(r['acquired_total'] for r in by_resource.values()),
+            'released_total': sum(r['released_total'] for r in by_resource.values()),
+        }
+
+    def get_statistics(self) -> Dict[str, Any]:
+        return self.stats()
+
+
 class AgentProbeMixin:
     '''DSAgent probe extension mixin.
 
@@ -406,6 +753,22 @@ class AgentProbeMixin:
 
     def add_activity_probe(self, enabled: bool = True, name: str = 'activity_probe') -> AgentActivityProbe:
         probe = AgentActivityProbe(
+            enabled=enabled,
+            name=f'{self.name}.{name}',
+            sim=self.sim,
+        )
+        return self.add_probe(probe)
+
+    def add_queueing_probe(self, enabled: bool = True, name: str = 'queueing_probe') -> AgentQueueingProbe:
+        probe = AgentQueueingProbe(
+            enabled=enabled,
+            name=f'{self.name}.{name}',
+            sim=self.sim,
+        )
+        return self.add_probe(probe)
+
+    def add_resource_probe(self, enabled: bool = True, name: str = 'resource_probe') -> AgentResourceProbe:
+        probe = AgentResourceProbe(
             enabled=enabled,
             name=f'{self.name}.{name}',
             sim=self.sim,
