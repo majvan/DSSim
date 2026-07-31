@@ -40,6 +40,8 @@ TestObject = object()
 
 class ICondition:
     ''' An interface for a condition checkable classes '''
+    __slots__ = ()
+
     @abstractmethod
     def check(self, event: EventType) -> Tuple[bool, Any]:
         raise NotImplementedError("The ICondition is an interface. Use derived class.")
@@ -47,9 +49,62 @@ class ICondition:
 
 class CallableConditionMixin:
     ''' Mixin that makes an ICondition subclass usable as a plain callable returning bool. '''
+    __slots__ = ()
+
     def __call__(self, event: EventType) -> bool:
         # check() returns (signaled, value), we extract only the signaled info
         return self.check(event)[0]
+
+
+class ITwoPhaseCondition(ICondition):
+    ''' A side-effecting condition split into a pure guard and a commit.
+
+    guard() only tests whether the operation could succeed now and, if so,
+    claims the resource (bumping the channel's reserved-counters so sibling
+    guards in the same pass see the claim). The circuit evaluator guards all
+    branches first (pure pass), selects which branches fire (one for OR, all
+    for AND), and only then commits the selected claims via commit_reserved() -
+    releasing the rest via release_reserved(). This gives exactly-one semantics
+    for OR and all-or-nothing for AND, which a check()-only condition cannot
+    provide because check() commits at every evaluated branch.
+
+    A claim lives only inside one synchronous circuit evaluation pass: it is
+    either committed or released before the pass returns. Nothing else runs in
+    between, so no persistence or timeout handling is needed. Because of that,
+    a claim needs no identity of its own - the claimed size is derivable from
+    the condition's fields, so guard() returns a plain bool and no per-claim
+    object is ever allocated. A condition guarded k times in one pass (e.g.
+    the same cond under two AND branches) owes exactly k commit_reserved() /
+    release_reserved() calls, which the evaluator's plan guarantees.
+    '''
+    __slots__ = ()
+
+    def guard(self, event: EventType) -> bool:
+        ''' Pure test: claim the resource and return True when the operation
+        could succeed now, else False. Must not mutate observable state (only
+        internal reserved-counters, so that sibling guards in the same pass
+        see the claim). Every successful guard() must be balanced by exactly
+        one commit_reserved() or release_reserved() before the evaluation
+        pass returns. '''
+        raise NotImplementedError("The ITwoPhaseCondition is an interface. Use derived class.")
+
+    def commit_reserved(self) -> Any:
+        ''' Perform the operation claimed by the latest guard() and return
+        its value. '''
+        raise NotImplementedError("The ITwoPhaseCondition is an interface. Use derived class.")
+
+    def release_reserved(self) -> None:
+        ''' Drop the claim taken by the latest guard() without performing
+        the operation. '''
+        raise NotImplementedError("The ITwoPhaseCondition is an interface. Use derived class.")
+
+    def check(self, event: EventType) -> Tuple[bool, Any]:
+        ''' Single-phase compatibility: guard and commit immediately.
+        Used when the condition stands alone (direct queue waits, a lone
+        filter) where there is no arbitration to defer to. '''
+        if not self.guard(event):
+            return False, None
+        return True, self.commit_reserved()
 
 
 class StackedCond(ICondition):

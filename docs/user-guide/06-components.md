@@ -159,6 +159,13 @@ f1 = sim.filter(policy=q1.policy_for_get())
 result = yield from (f0 | f1).check_and_gwait(20)
 ```
 
+Inside circuits, queue (and plain resource) policies evaluate with
+**two-phase** semantics — the OR above dequeues from *exactly one* queue, and
+an AND of policies commits *all-or-nothing*. See
+[Chapter 4a](04a-two-phase-conditions.md) for the mechanism, the OR selectors
+(overflow chain / round robin), and the packaged one-of-N routers
+(`DSPutRouter` / `DSGetRouter`).
+
 **`policy_for_get` vs `policy_for_observe`:** `policy_for_get` *consumes* (dequeues) on success. `policy_for_observe` only *observes* — it does not remove items.
 
 **`cond` parameter types differ:** `policy_for_get(cond=...)` takes an *item predicate* (`cond(item) -> bool`). `policy_for_observe(cond=...)` takes a *queue predicate* (`cond(queue) -> bool`).

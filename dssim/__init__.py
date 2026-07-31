@@ -17,7 +17,7 @@ The aggregation of class interfaces needed for developing a dssim application.
 __version__ = '1.3.0'
 
 from dssim.base import DSComponent
-from dssim.pubsub.base import DSAbortException
+from dssim.pubsub.base import DSAbortException, ITwoPhaseCondition
 from dssim.pubsub import DSCallback, DSCondCallback, DSKWCallback, DSKWCondCallback, DSCondSub, DSSub, DSPub, DSTrackableEvent, DSTransformation
 from dssim.pubsub import NotifierDict, NotifierRoundRobin, NotifierPriority
 from dssim.pubsub.future import DSFuture
@@ -34,6 +34,7 @@ from dssim.base_components import DSBaseOrder, DSLifoOrder, DSKeyOrder, DSBasePr
 from dssim.lite.process import DSLiteProcess
 from dssim.lite.agent import DSLiteAgent, PCLiteGenerator
 from dssim.pubsub.components.queue import DSQueue
+from dssim.pubsub.components.router import DSPutRouter, DSGetRouter
 from dssim.lite.components.litetime import DSLiteDelay, DSLiteLimiter, DSLiteTimer
 from dssim.lite.components.literesource import DSLiteResource, DSLiteUnitResource, DSLitePriorityResource
 from dssim.pubsub.components.resource import DSResource, DSUnitResource, DSPriorityResource, DSResourcePreempted, DSMutex

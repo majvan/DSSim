@@ -64,6 +64,7 @@ nav:
       - 2. Core Design Concepts: user-guide/02-core-concepts.md
       - 3. Publisher-Subscriber Principle: user-guide/03-pubsub-layer2.md
       - 4. Condition Filtering: user-guide/04-condition-filtering.md
+      - 4a. Two-Phase Conditions: user-guide/04a-two-phase-conditions.md
       - 5. Processes: user-guide/05-processes.md
       - 6. Basic Generic Components: user-guide/06-components.md
       - 7. Agents: user-guide/07-agents.md

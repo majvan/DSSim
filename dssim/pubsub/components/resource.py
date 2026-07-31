@@ -23,7 +23,7 @@ from dssim.pubsub.cond import DSFilter
 from dssim.pubsub.components.base import DSStatefulComponent
 from dssim.pubsub.components.resource_probes import ResourceProbeMixin
 from dssim.pubsub.pubsub import DSPub, NotifierPriority, NotifierRoundRobin
-from dssim.pubsub.base import ICondition, CallableConditionMixin
+from dssim.pubsub.base import ICondition, CallableConditionMixin, ITwoPhaseCondition
 
 
 if TYPE_CHECKING:
@@ -78,6 +78,94 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
         def __str__(self) -> str:
             return f'{self.resource}.policy_for_get(amount={self.amount}, policy={self.policy_params})'
 
+    class _TwoPhaseGetCond(ITwoPhaseCondition, CallableConditionMixin):
+        '''Two-phase acquire: guard() claims *amount* units, commit() takes them.
+        Only used for plain amount semantics (no priority/preempt/ownership) -
+        see policy_for_get. check() (inherited) commits immediately standalone.'''
+        __slots__ = ('resource', 'amount', 'value')
+
+        def __init__(self, resource: "DSResource", amount: NumericType = 1) -> None:
+            self.resource = resource
+            self.amount = amount
+            self.value: NumericType = 0
+
+        def guard(self, event: EventType) -> bool:
+            resource = self.resource
+            if resource.amount - resource._reserved_out >= self.amount > 0:
+                resource._reserved_out += self.amount
+                return True
+            return False
+
+        def commit_reserved(self) -> NumericType:
+            resource = self.resource
+            assert resource._reserved_out >= self.amount, 'Claim already committed or released.'
+            resource._reserved_out -= self.amount
+            got = resource.get_n_nowait(self.amount)
+            if got <= 0:
+                raise RuntimeError(f'{resource}: reserved get failed - claim accounting is broken.')
+            self.value = got
+            return got
+
+        def release_reserved(self) -> None:
+            resource = self.resource
+            assert resource._reserved_out >= self.amount, 'Claim already committed or released.'
+            resource._reserved_out -= self.amount
+
+        def cond_value(self) -> NumericType:
+            return self.value
+
+        def get_eps(self):
+            return {self.resource.tx_nempty}
+
+        def __str__(self) -> str:
+            return f'{self.resource}.policy_for_get(amount={self.amount})'
+
+    class _TwoPhasePutCond(ITwoPhaseCondition, CallableConditionMixin):
+        '''Two-phase deposit: guard() claims capacity headroom, commit() deposits.'''
+        __slots__ = ('resource', 'amount', 'value')
+
+        def __init__(self, resource: "DSResource", amount: NumericType = 1) -> None:
+            self.resource = resource
+            self.amount = amount
+            self.value: NumericType = 0
+
+        def guard(self, event: EventType) -> bool:
+            resource = self.resource
+            if resource.amount + resource._reserved_in + self.amount <= resource.capacity and self.amount > 0:
+                resource._reserved_in += self.amount
+                return True
+            return False
+
+        def commit_reserved(self) -> NumericType:
+            resource = self.resource
+            assert resource._reserved_in >= self.amount, 'Claim already committed or released.'
+            resource._reserved_in -= self.amount
+            put = resource.put_n_nowait(self.amount)
+            if put <= 0:
+                raise RuntimeError(f'{resource}: reserved put failed - claim accounting is broken.')
+            self.value = put
+            return put
+
+        def release_reserved(self) -> None:
+            resource = self.resource
+            assert resource._reserved_in >= self.amount, 'Claim already committed or released.'
+            resource._reserved_in -= self.amount
+
+        def load(self, amount: NumericType) -> "DSResource._TwoPhasePutCond":
+            '''Rebind the amount for the next attempt (loop reuse of one circuit).'''
+            self.amount = amount
+            self.value = 0
+            return self
+
+        def cond_value(self) -> NumericType:
+            return self.value
+
+        def get_eps(self):
+            return {self.resource.tx_nfull}
+
+        def __str__(self) -> str:
+            return f'{self.resource}.policy_for_put(amount={self.amount})'
+
     def __init__(
         self,
         amount: NumericType = 0,
@@ -94,6 +182,12 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
         '''
         super().__init__(*args, **kwargs)
         self._resource = _ResourceBookkeeper(amount=amount, capacity=capacity, owner=self)
+        # Transient claims held by two-phase circuit evaluation (see ITwoPhaseCondition).
+        # Non-zero only inside one synchronous evaluation pass; guards read them so
+        # sibling branches see each other's claims. put_n_nowait/get_n_nowait stay
+        # reservation-unaware: commits only ever move the amounts their guards claimed.
+        self._reserved_in: NumericType = 0    # capacity headroom claimed by put reservations
+        self._reserved_out: NumericType = 0   # pool units claimed by get reservations
         self.tx_nempty = nempty_ep if nempty_ep is not None else self.sim.publisher(name=self.name + '.tx_nempty')
         self.tx_nfull = nfull_ep if nfull_ep is not None else self.sim.publisher(name=self.name + '.tx_nfull')
         self.tx_ops = ops_ep if ops_ep is not None else self.sim.publisher(name=self.name + '.tx_ops')
@@ -139,18 +233,51 @@ class DSResource(ResourceProbeMixin, DSStatefulComponent):
     # Nowait operations
     # ------------------------------------------------------------------
 
+    def _plain_amount_semantics(self) -> bool:
+        '''True when this resource uses the base amount-only take/put paths.
+
+        Priority/preemptive/ownership-tracking subclasses override them with
+        acquisition that is inherently effectful (preemption reclaims from
+        victims), which a pure guard cannot express - those keep classical
+        one-pass conditions.'''
+        cls = type(self)
+        return (cls._try_take_n_nowait is DSResource._try_take_n_nowait
+                and cls.get_n_nowait is DSResource.get_n_nowait
+                and cls.put_n_nowait is DSResource.put_n_nowait)
+
     def policy_for_get(self, amount: NumericType = 1, **policy_params: Any) -> dict[str, Any]:
         '''Return DSFilter policy dict for acquire-on-check behavior.
 
         Typical usage:
             f = sim.filter(resource.policy_for_get(amount=1, priority=prio, preempt=True))
             got = yield from f.check_and_gwait(10)
+
+        For a plain resource with no policy params the condition is two-phase
+        (guard + commit), so it composes into circuits with exactly-one OR and
+        all-or-nothing AND semantics. Priority/preempt acquisition keeps the
+        classical one-pass condition.
         '''
-        cond_obj = self._GetCond(self, amount, owner=self.sim.pid, **policy_params)
+        if not policy_params and self._plain_amount_semantics():
+            cond_obj: ICondition = self._TwoPhaseGetCond(self, amount)
+        else:
+            cond_obj = self._GetCond(self, amount, owner=self.sim.pid, **policy_params)
         return {
             'cond': cond_obj,
             'sigtype': DSFilter.SignalType.LATCH,
             'eps': {self.tx_nempty: {'tier': self.tx_nempty.Phase.CONSUME, 'params': dict(policy_params)}},
+            'one_shot': True,
+        }
+
+    def policy_for_put(self, amount: NumericType = 1) -> dict[str, Any]:
+        '''Return DSFilter policy dict for deposit-on-check behavior with
+        capacity back-pressure (two-phase; plain resources only).'''
+        if not self._plain_amount_semantics():
+            raise ValueError(f'{self}: policy_for_put requires plain amount semantics.')
+        cond_obj = self._TwoPhasePutCond(self, amount)
+        return {
+            'cond': cond_obj,
+            'sigtype': DSFilter.SignalType.LATCH,
+            'eps': {self.tx_nfull: {'tier': self.tx_nfull.Phase.CONSUME, 'params': {}}},
             'one_shot': True,
         }
 

@@ -9,6 +9,7 @@ This guide is a structured, chapter-based walkthrough of DSSim.
 - [Chapter 2: Core Design Concepts](02-core-concepts.md)
 - [Chapter 3: Publisher-Subscriber Principle](03-pubsub-layer2.md)
 - [Chapter 4: Condition Filtering](04-condition-filtering.md)
+- [Chapter 4a: Two-Phase Conditions (guard + commit)](04a-two-phase-conditions.md)
 - [Chapter 5: Processes](05-processes.md)
 - [Chapter 6: Basic Generic Components (Queue, Container, Resource)](06-components.md)
 - [Chapter 7: Agents (DSAgent)](07-agents.md)
@@ -26,6 +27,7 @@ This guide is a structured, chapter-based walkthrough of DSSim.
 | Understand the layer stack | [Chapter 2](02-core-concepts.md) |
 | Learn the publisher-subscriber principle and subscription context managers | [Chapter 3](03-pubsub-layer2.md) |
 | Understand condition filtering and circuits | [Chapter 4](04-condition-filtering.md) |
+| Compose queue/resource operations into circuits; route one-of-N with routers | [Chapter 4a](04a-two-phase-conditions.md) |
 | Write processes with wait / sleep | [Chapter 5](05-processes.md) |
 | Use Queue, Container, Resource | [Chapter 6](06-components.md) |
 | Model active entities with a process and state | [Chapter 7](07-agents.md) |

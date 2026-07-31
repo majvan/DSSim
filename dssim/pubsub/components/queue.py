@@ -16,7 +16,7 @@ The file implements the DSQueue simulation component.
 '''
 from typing import Any, List, Iterator, Optional, Generator, TYPE_CHECKING, Callable, Dict
 from dssim.base import NumericType, TimeType, EventType, EventRetType, SignalMixin
-from dssim.pubsub.base import CondType, DSAbortException, AlwaysTrue, ICondition, CallableConditionMixin, TestObject
+from dssim.pubsub.base import CondType, DSAbortException, AlwaysTrue, ICondition, CallableConditionMixin, TestObject, ITwoPhaseCondition
 from dssim.pubsub.cond import DSFilter
 from dssim.pubsub.components.base import DSStatefulComponent
 from dssim.pubsub.components.queue_probes import QueueProbeMixin
@@ -63,6 +63,13 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
         # for dedicated operational probes.
         self.tx_ops    = ops_ep    if ops_ep    is not None else self.sim.publisher(name=self.name + '.tx_ops')
         self.LAMBDA1 = lambda _: len(self._buffer) >= 1
+        # Transient claims held by two-phase circuit evaluation (see ITwoPhaseCondition).
+        # Non-zero only inside one synchronous evaluation pass; guards read them so
+        # sibling branches see each other's claims. put_nowait/get_nowait stay
+        # reservation-unaware: commits run in guard order, so a commit only ever
+        # consumes the capacity/items its own guard claimed.
+        self._reserved_in = 0    # slots claimed by pending put reservations
+        self._reserved_out = 0   # items claimed from the buffer head by pending get reservations
 
     # ---- send (SignalMixin interface) ---------------------------------------
 
@@ -94,8 +101,10 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
                 self.tx_ops,
             )
 
-    class _GetCond(ICondition, CallableConditionMixin):
-        '''Condition helper that tries immediate dequeue on check().'''
+    class _GetCond(ITwoPhaseCondition, CallableConditionMixin):
+        '''Two-phase dequeue condition: guard() claims items, commit() dequeues.
+        check() (inherited) commits immediately for standalone use.'''
+        __slots__ = ('queue', 'amount', 'cond', 'value')
 
         def __init__(self, queue: "DSQueue", amount: int = 1, cond: CondType = AlwaysTrue) -> None:
             self.queue = queue
@@ -103,15 +112,37 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
             self.cond = cond
             self.value: Optional[EventType] = None
 
-        def check(self, event: EventType) -> tuple[bool, Optional[EventType]]:
+        def guard(self, event: EventType) -> bool:
+            queue = self.queue
+            # Items already claimed by sibling guards occupy the buffer head;
+            # this claim starts right after them - same head-only cond rule
+            # as get_nowait, just shifted past the reserved run.
+            start = queue._reserved_out
+            if len(queue._buffer) - start >= self.amount and self.cond(queue._buffer[start]):
+                queue._reserved_out += self.amount
+                return True
+            return False
+
+        def commit_reserved(self) -> Optional[EventType]:
+            # Positional: outstanding get claims always form a contiguous run
+            # from the buffer head, and commits run in guard order, so at
+            # commit time this claim's items are exactly the head items.
+            queue = self.queue
+            assert queue._reserved_out >= self.amount, 'Claim already committed or released.'
+            queue._reserved_out -= self.amount
             if self.amount == 1:
-                got = self.queue.get_nowait(cond=self.cond)
+                got = queue.get_nowait(cond=self.cond)
             else:
-                got = self.queue.get_n_nowait(amount=self.amount, cond=self.cond)
-            if got is not None:
-                self.value = got
-                return True, got
-            return False, None
+                got = queue.get_n_nowait(amount=self.amount, cond=self.cond)
+            if got is None:
+                raise RuntimeError(f'{queue}: reserved get failed - claim accounting is broken.')
+            self.value = got
+            return got
+
+        def release_reserved(self) -> None:
+            queue = self.queue
+            assert queue._reserved_out >= self.amount, 'Claim already committed or released.'
+            queue._reserved_out -= self.amount
 
         def cond_value(self) -> Optional[EventType]:
             return self.value
@@ -144,20 +175,48 @@ class DSQueue(QueueProbeMixin, DSStatefulComponent, SignalMixin):
             with self.queue.sim.consume(*self.get_eps(), **policy_params):
                 return await self.queue.sim.wait(timeout=timeout, cond=self, val=val)
 
-    class _PutCond(ICondition, CallableConditionMixin):
-        '''Condition helper that tries immediate enqueue on check().'''
+    class _PutCond(ITwoPhaseCondition, CallableConditionMixin):
+        '''Two-phase enqueue condition: guard() claims free slots, commit() enqueues.
+        check() (inherited) commits immediately for standalone use.'''
+        __slots__ = ('queue', 'obj', 'value')
 
         def __init__(self, queue: "DSQueue", obj: tuple[EventType, ...]) -> None:
             self.queue = queue
             self.obj = obj
             self.value: Optional[tuple] = None
 
-        def check(self, event: EventType) -> tuple[bool, Optional[tuple]]:
-            put = self.queue.put_nowait(*self.obj)
-            if put is not None:
-                self.value = put
-                return True, put
-            return False, None
+        def guard(self, event: EventType) -> bool:
+            queue = self.queue
+            n = len(self.obj)
+            if len(queue._buffer) + queue._reserved_in + n <= queue.capacity:
+                queue._reserved_in += n
+                return True
+            return False
+
+        def commit_reserved(self) -> Optional[tuple]:
+            queue = self.queue
+            n = len(self.obj)
+            assert queue._reserved_in >= n, 'Claim already committed or released.'
+            queue._reserved_in -= n
+            put = queue.put_nowait(*self.obj)
+            if put is None:
+                raise RuntimeError(f'{queue}: reserved put failed - claim accounting is broken.')
+            self.value = put
+            return put
+
+        def release_reserved(self) -> None:
+            queue = self.queue
+            n = len(self.obj)
+            assert queue._reserved_in >= n, 'Claim already committed or released.'
+            queue._reserved_in -= n
+
+        def load(self, *obj: EventType) -> "DSQueue._PutCond":
+            '''Rebind the item(s) for the next attempt (loop reuse of one circuit).'''
+            if len(obj) == 0:
+                raise ValueError('load requires at least one object.')
+            self.obj = obj
+            self.value = None
+            return self
 
         def cond_value(self) -> Optional[tuple]:
             return self.value
